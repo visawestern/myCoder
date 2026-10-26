@@ -8,6 +8,7 @@ struct StorageSettingsView: View {
     // alert, which crashed / ran the wrong action (P2).
     @State private var showDeleteOlderConfirmation = false
     @State private var showDeleteArchivedConfirmation = false
+    @State private var showRemoveOrphansConfirmation = false
     @State private var showResetConfirmation = false
     @State private var pendingResetScope: StorageResetScope = .appCacheOnly
     @State private var archiveDays: Double = 7
@@ -229,6 +230,16 @@ struct StorageSettingsView: View {
             } message: {
                 Text(L.t(AppLocalizationKey.locThisWillPermanentlyDeleteAllArchivedChatsAndThe))
             }
+            .alert(L.t(AppLocalizationKey.locAlertRemoveOrphanedRecords), isPresented: $showRemoveOrphansConfirmation) {
+                Button(L.t(AppLocalizationKey.locCancel), role: .cancel) {}
+                Button(L.t(AppLocalizationKey.locRemoveOrphanedRecords), role: .destructive) {
+                    mutateProjects { ProjectRegistryLogic.removingOrphaned($0) }
+                    refreshStats()
+                }
+            } message: {
+                Text(L.t(AppLocalizationKey.locRemoveOrphanedRecordsMessage)
+                    .replacingOccurrences(of: "{0}", with: "\(orphanedCount)"))
+            }
             .alert(resetAlertTitle, isPresented: $showResetConfirmation) {
                 Button(L.t(AppLocalizationKey.locCancel), role: .cancel) {}
                 Button(L.t(AppLocalizationKey.locResetButton), role: .destructive) {
@@ -340,6 +351,10 @@ struct StorageSettingsView: View {
     
     private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
 
+    private var orphanedCount: Int {
+        ProjectRegistryLogic.orphaned(projectEntries).count
+    }
+
     private var projectsAdminSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -362,6 +377,13 @@ struct StorageSettingsView: View {
                 }
                 .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
                 .help(L.t(AppLocalizationKey.locBulkArchiveHelp))
+                if orphanedCount > 0 {
+                    Button(L.t(AppLocalizationKey.locRemoveOrphanedRecords)) {
+                        showRemoveOrphansConfirmation = true
+                    }
+                    .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.warning)
+                    .help(L.t(AppLocalizationKey.locRemoveOrphanedRecordsHelp))
+                }
             }
             // Quota warning (plan Раздел 8 п.50): inform, never block.
             if deletionInProgress {

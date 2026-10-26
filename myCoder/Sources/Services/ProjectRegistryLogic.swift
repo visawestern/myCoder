@@ -126,6 +126,12 @@ enum ProjectRegistryLogic {
         projects.filter { !fileManager.fileExists(atPath: $0.path) }
     }
 
+    /// Drop registry records whose folder no longer exists. Used by the
+    /// Storage panel's bulk cleanup; project data on disk is untouched.
+    static func removingOrphaned(_ projects: [ProjectRegistryEntry], fileManager: FileManager = .default) -> [ProjectRegistryEntry] {
+        projects.filter { fileManager.fileExists(atPath: $0.path) }
+    }
+
     /// Re-link an orphaned project to its new location (plan Блок 3 п.31:
     /// "Найти новый путь"). The id is re-derived from the normalized absolute
     /// path; settings (archive status) are preserved; the name is refreshed

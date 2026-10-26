@@ -427,7 +427,7 @@ class AppState: ObservableObject {
     @MainActor
     func refreshProjectRegistry() {
         projectRegistryEntries = ProjectRegistryLogic.load(
-            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+            homeDirectory: registryHomeDirectory
         )
     }
     
@@ -464,10 +464,19 @@ class AppState: ObservableObject {
     /// swift-testing runtime classes.
     private static let isRunningTests: Bool = TestRunDetector.isRunningTests
 
+    /// Root for the project registry only. Tests get a per-instance temp home
+    /// so `addWorkspace` cannot append temp sidebar projects to the real
+    /// `~/.mycoder/projects.json` (test pollution, verified live).
+    let registryHomeDirectory: URL
+
     // MiMo Serve connection manager (now optional)
     @Published var serverConnectionManager: MimoServeConnectionManager?
 
     init(host: String = "127.0.0.1", port: Int = 4096, defaults: UserDefaults = .standard) {
+        self.registryHomeDirectory = Self.isRunningTests
+            ? FileManager.default.temporaryDirectory
+                .appendingPathComponent("mycoder-test-home-\(UUID().uuidString)", isDirectory: true)
+            : FileManager.default.homeDirectoryForCurrentUser
         let initialHost = Self.isRunningTests
             ? host
             : (defaults.string(forKey: ServerProviderCatalogStore.hostKey)
@@ -546,7 +555,7 @@ class AppState: ObservableObject {
         // could leave multiple rows per canonical path (UUID pileup, Блок 1 п.4).
         // Idempotent — a clean registry is untouched.
         ProjectRegistryLogic.deduplicateRegistry(
-            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+            homeDirectory: registryHomeDirectory
         )
 
         // Initialize database and perform migrations
@@ -3039,7 +3048,7 @@ class AppState: ObservableObject {
 
         // Round 14 (п.11/п.32): registering here fixes the orphaned registry —
         // without it the storage panel stayed empty in real use.
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = registryHomeDirectory
         let entries = ProjectRegistryLogic.load(homeDirectory: home)
         let updated = ProjectRegistryLogic.registerProject(path: normalized, name: workspace.name, into: entries)
         if updated != entries {

@@ -62,6 +62,19 @@ struct ProjectRegistryLogicTests {
         #expect(orphans.first?.path == "/definitely/missing/path")
     }
 
+    @Test func removingOrphanedKeepsOnlyExistingFolders() throws {
+        let home = try makeTempHome()
+        let realDir = home.appendingPathComponent("real")
+        try FileManager.default.createDirectory(at: realDir, withIntermediateDirectories: true)
+        let projects = [
+            ProjectRegistryEntry(path: realDir.path),
+            ProjectRegistryEntry(path: "/definitely/missing/path")
+        ]
+        let cleaned = ProjectRegistryLogic.removingOrphaned(projects)
+        #expect(cleaned.count == 1)
+        #expect(cleaned.first?.path == realDir.path)
+    }
+
     @Test func relinkRebindsOrphanToExistingPath() {
         // Plan Раздел 8 п.31: an orphaned project (folder moved/renamed) can be
         // re-linked to its new location — the record must keep its settings.

@@ -52,6 +52,28 @@ struct NewChatSidebarVisibilityTests {
     }
 
     @MainActor
+    @Test func addWorkspaceUsesIsolatedRegistryHomeDuringTests() throws {
+        let projectPath = try makeTempProjectDir()
+        defer {
+            try? FileManager.default.removeItem(atPath: projectPath)
+            ProjectDatabaseManager.evictProject(projectPath: projectPath)
+        }
+
+        let appState = AppState()
+        appState.clearInMemoryState()
+        let workspace = appState.addWorkspace(path: projectPath)
+
+        // Regression: tests used to write temp sidebar projects into the real
+        // ~/.mycoder/projects.json. The registry root must be sandboxed.
+        #expect(appState.registryHomeDirectory.path.hasPrefix(
+            FileManager.default.temporaryDirectory.path
+        ))
+        let entries = ProjectRegistryLogic.load(homeDirectory: appState.registryHomeDirectory)
+        #expect(entries.contains { $0.id == workspace.id })
+        #expect(entries.contains { $0.path == ChatSession.normalizedPath(projectPath) })
+    }
+
+    @MainActor
     @Test func upsertedChatIsListedUnderItsProject() throws {
         let projectPath = try makeTempProjectDir()
         defer {
