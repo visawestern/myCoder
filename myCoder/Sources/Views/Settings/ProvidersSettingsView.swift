@@ -303,12 +303,14 @@ struct LocalProviderRow: View {
                 .buttonStyle(HandCursorButtonStyle())
                 .disabled(refreshing)
                 .help(L.t(AppLocalizationKey.locRefreshModels))
-                Button(action: onToggle) {
-                    Text(config.isEnabled ? L.t(AppLocalizationKey.locEnabled) : L.t(AppLocalizationKey.locDisabled))
-                        .interfaceFont(size: 11, weight: .medium)
-                        .foregroundColor(config.isEnabled ? Color.mimo.success : Color.mimo.textMuted)
-                }
-                .buttonStyle(HandCursorButtonStyle())
+                Toggle("", isOn: Binding(
+                    get: { config.isEnabled },
+                    set: { _ in onToggle() }
+                ))
+                .labelsHidden()
+                .toggleStyle(.dotSized)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
                 .help(config.isEnabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
                 Button(action: onRemove) {
                     Image(systemName: "trash")
@@ -561,11 +563,19 @@ struct ProviderRowView: View {
                     .foregroundColor(Color.mimo.textPrimary)
                 
                 Spacer()
-                
-                Circle()
-                    .fill(option.isConnected ? Color.mimo.success : Color.mimo.textMuted)
-                    .frame(width: 8, height: 8)
-                
+
+                Toggle("", isOn: Binding(
+                    get: { appState.isProviderEnabled(option.id) },
+                    set: { appState.setProviderEnabled(option.id, isEnabled: $0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.dotSized)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+                .help(appState.isProviderEnabled(option.id)
+                    ? L.t(AppLocalizationKey.locDisable)
+                    : L.t(AppLocalizationKey.locEnable))
+
                 Button(action: {
                     if option.isCustom,
                        let custom = appState.customProviders.first(where: { $0.id == option.id }) {
@@ -629,8 +639,16 @@ struct ModelParameterSpoiler: View {
         VStack(alignment: .leading, spacing: 8) {
             if let meta = meta {
                 VStack(alignment: .leading, spacing: 6) {
-                    ParameterRow(label: L.t(AppLocalizationKey.locParamContext), value: "\(meta.limit?.context.map { "\($0/1000)k" } ?? "—")")
-                    ParameterRow(label: L.t(AppLocalizationKey.locParamOutput), value: "\(meta.limit?.output.map { "\($0)" } ?? "—")")
+                    ParameterRow(
+                        label: L.t(AppLocalizationKey.locParamContext),
+                        value: ModelCapabilityLogic.contextLabel(
+                            for: ContextWindowCatalog.limit(for: modelID, reported: meta.limit?.context)
+                        )
+                    )
+                    ParameterRow(
+                        label: L.t(AppLocalizationKey.locParamOutput),
+                        value: "\(ContextWindowCatalog.outputLimit(for: modelID, reported: meta.limit?.output))"
+                    )
                     ParameterRow(label: L.t(AppLocalizationKey.locParamReasoning), value: meta.capabilities?.reasoning == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
                     ParameterRow(label: L.t(AppLocalizationKey.locParamTools), value: meta.capabilities?.toolcall != false ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
                     ParameterRow(label: L.t(AppLocalizationKey.locParamPlan), value: meta.capabilities?.plan == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))

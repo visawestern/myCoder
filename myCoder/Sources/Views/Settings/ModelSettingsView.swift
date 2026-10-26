@@ -72,6 +72,8 @@ struct ModelSettingsProviderColumns: View {
     @State private var parameterError: String?
     @State private var modelSearchQuery: String = ""
     @State private var modelSortOrder: ModelSortOrder = .name
+    /// Collapsed model families in the provider model list.
+    @State private var collapsedModelFamilies: Set<String> = []
     @State private var providerNameDraft: String = ""
     @State private var localRefreshMessage: String?
     @State private var providerPendingDelete: ProviderOption?
@@ -111,26 +113,11 @@ struct ModelSettingsProviderColumns: View {
     }
 
     private func isProviderEnabled(_ option: ProviderOption) -> Bool {
-        if let custom = customProvider(for: option.id) { return custom.isEnabled }
-        if let local = localProvider(for: option.id) { return local.isEnabled }
-        return true
-    }
-
-    private func isToggleableProvider(_ option: ProviderOption) -> Bool {
-        customProvider(for: option.id) != nil || localProvider(for: option.id) != nil
+        appState.isProviderEnabled(option.id)
     }
 
     private func setProviderEnabled(_ option: ProviderOption, enabled: Bool) {
-        if customProvider(for: option.id) != nil {
-            appState.setCustomProviderEnabled(option.id, isEnabled: enabled)
-            return
-        }
-        guard localProvider(for: option.id) != nil else { return }
-        LocalProviderLogic.setEnabled(id: option.id, isEnabled: enabled)
-        if !enabled, appState.selectedProviderID == option.id {
-            appState.selectProvider("")
-        }
-        appState.validateAndReconcileSelections()
+        appState.setProviderEnabled(option.id, isEnabled: enabled)
     }
 
     private func isRenameableProvider(_ option: ProviderOption) -> Bool {
@@ -255,8 +242,9 @@ struct ModelSettingsProviderColumns: View {
         DisabledModelStore.isDisabled(providerID: providerID, modelID: modelID)
     }
 
-    private func toggleModelDisabled(_ modelID: String, providerID: String) {
-        let disabled = !isModelDisabled(modelID, providerID: providerID)
+    private func toggleModelDisabled(_ modelID: String, providerID: String, enabled: Bool? = nil) {
+        let disabled = enabled.map { !$0 } ?? !isModelDisabled(modelID, providerID: providerID)
+        guard disabled != isModelDisabled(modelID, providerID: providerID) else { return }
         DisabledModelStore.setDisabled(disabled, providerID: providerID, modelID: modelID)
         disabledRevision &+= 1
         guard disabled,
@@ -456,23 +444,19 @@ struct ModelSettingsProviderColumns: View {
     private func providerOptionRow(_ option: ProviderOption) -> some View {
         let enabled = isProviderEnabled(option)
         let isSelected = detailProviderID == option.id
-        let toggleable = isToggleableProvider(option)
 
         return HStack(spacing: 8) {
-            if toggleable {
-                Toggle("", isOn: Binding(
-                    get: { isProviderEnabled(option) },
-                    set: { setProviderEnabled(option, enabled: $0) }
-                ))
-                .labelsHidden()
-                .toggleStyle(VuexySwitchStyle(width: 40, height: 24))
-                .help(enabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
-            } else {
-                Circle()
-                    .fill(option.isConnected ? Color.mimo.success : Color.mimo.textMuted)
-                    .frame(width: 7, height: 7)
-                    .frame(width: 18)
-            }
+            // One control for every provider row — the switch is the size of
+            // the old status dot (user directive: no dots, one switch).
+            Toggle("", isOn: Binding(
+                get: { isProviderEnabled(option) },
+                set: { setProviderEnabled(option, enabled: $0) }
+            ))
+            .labelsHidden()
+            .toggleStyle(.dotSized)
+            .frame(width: 22, height: 18)
+            .contentShape(Rectangle())
+            .help(enabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
 
             Button(action: { selectProvider(option) }) {
                 Text(option.name)
@@ -483,12 +467,6 @@ struct ModelSettingsProviderColumns: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
-
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .interfaceFont(size: 10, weight: .semibold)
-                    .foregroundColor(Color.mimo.brand)
-            }
 
             if isMutableProvider(option) {
                 Menu {
@@ -622,13 +600,11 @@ struct ModelSettingsProviderColumns: View {
             }
 
             HStack(spacing: 6) {
-                Circle()
-                    .fill(option.isConnected ? Color.mimo.success : Color.mimo.warning)
-                    .frame(width: 8, height: 8)
+                // Status is expressed by the text colour — no status dot.
                 Text(option.isConnected ? L.t(AppLocalizationKey.locConnected) : L.t(AppLocalizationKey.locDisconnected))
                     .interfaceFont(size: 12)
-                    .foregroundColor(Color.mimo.textSecondary)
-                if isToggleableProvider(option), !isProviderEnabled(option) {
+                    .foregroundColor(option.isConnected ? Color.mimo.success : Color.mimo.warning)
+                if !isProviderEnabled(option) {
                     Text(L.t(AppLocalizationKey.locDisabled))
                         .interfaceFont(size: 9, weight: .medium)
                         .foregroundColor(Color.mimo.warning)
@@ -636,20 +612,15 @@ struct ModelSettingsProviderColumns: View {
             }
 
             if appState.selectedProviderID == option.id, !appState.selectedModel.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .interfaceFont(size: 10)
-                        .foregroundColor(Color.mimo.brand)
-                    Text(appState.selectedModel)
-                        .interfaceFont(size: 11, weight: .medium)
-                        .foregroundColor(Color.mimo.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.mimo.brand.opacity(0.08))
-                .clipShape(Capsule())
+                Text(appState.selectedModel)
+                    .interfaceFont(size: 11, weight: .medium)
+                    .foregroundColor(Color.mimo.brand)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.mimo.brand.opacity(0.08))
+                    .clipShape(Capsule())
             }
         }
     }
@@ -1042,7 +1013,7 @@ struct ModelSettingsProviderColumns: View {
             let providerID = detailProviderID.isEmpty ? appState.selectedProviderID : detailProviderID
             let allModels = models(for: providerID)
             let filteredModels = visibleModelIDs(allModels, providerID: providerID)
-            let displayModels = filteredModels
+            let familyGroups = ModelGroupingLogic.groupedByFamily(filteredModels)
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
@@ -1086,8 +1057,17 @@ struct ModelSettingsProviderColumns: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
-                        ForEach(displayModels, id: \.self) { modelID in
-                            compactModelCard(modelID: modelID, providerID: providerID, prefix: nil)
+                        // Models are grouped by their common family
+                        // (codegemma-1.1-7b + codegemma-7b → "codegemma").
+                        ForEach(familyGroups, id: \.family) { group in
+                            if group.models.count > 1 {
+                                modelFamilyHeader(family: group.family, count: group.models.count)
+                            }
+                            if !collapsedModelFamilies.contains(group.family) {
+                                ForEach(group.models, id: \.self) { modelID in
+                                    compactModelCard(modelID: modelID, providerID: providerID, prefix: nil)
+                                }
+                            }
                         }
                     }
                 }
@@ -1181,6 +1161,41 @@ struct ModelSettingsProviderColumns: View {
                 return left == right ? lhs < rhs : left && !right
             }
         }
+    }
+
+    /// Header of a model family (e.g. "codegemma · 2 models"). Clicking it
+    /// folds the family away so long lists stay readable.
+    private func modelFamilyHeader(family: String, count: Int) -> some View {
+        let isCollapsed = collapsedModelFamilies.contains(family)
+        return Button {
+            if isCollapsed {
+                collapsedModelFamilies.remove(family)
+            } else {
+                collapsedModelFamilies.insert(family)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.right")
+                    .interfaceFont(size: 8, weight: .bold)
+                    .foregroundColor(Color.mimo.textMuted)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                Text(family)
+                    .interfaceFont(size: 11, weight: .semibold)
+                    .foregroundColor(Color.mimo.textSecondary)
+                Text("\(count)")
+                    .interfaceFont(size: 9, weight: .medium)
+                    .foregroundColor(Color.mimo.textMuted)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.mimo.surface)
+                    .clipShape(Capsule())
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(HandCursorButtonStyle())
     }
 
     @ViewBuilder
@@ -1279,20 +1294,31 @@ struct ModelSettingsProviderColumns: View {
         let shortName = Self.splitModelID(modelID).name
         let isDisabled = isModelDisabled(modelID, providerID: providerID)
         let isCustomModel = customProvider(for: providerID) != nil
+        // Context window: provider metadata when known, otherwise the
+        // configured default (200k) so the user always sees a number.
+        let contextTokens = ModelCapabilityLogic.effectiveContextWindow(
+            for: modelID,
+            in: appState.serverProviders,
+            providerID: providerID.isEmpty ? nil : providerID
+        )
 
         return HStack(spacing: 6) {
-            // Selection indicator
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.brand)
-                    .frame(width: 14)
-            } else {
-                Circle()
-                    .fill(Color.mimo.border)
-                    .frame(width: 6, height: 6)
-                    .padding(.horizontal, 4)
-            }
+            // Every model row carries the same dot-sized switch (on = enabled).
+            // Selection is expressed by the row highlight and the name colour,
+            // so there is no dot and no extra checkmark.
+            Toggle("", isOn: Binding(
+                get: { !isModelDisabled(modelID, providerID: providerID) },
+                set: { isEnabled in
+                    toggleModelDisabled(modelID, providerID: providerID, enabled: isEnabled)
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(.dotSized)
+            .frame(width: 22, height: 18)
+            .contentShape(Rectangle())
+            .help(isDisabled
+                ? L.t("Enable model")
+                : L.t("Disable model"))
 
             // Model name
             Text(shortName)
@@ -1330,12 +1356,12 @@ struct ModelSettingsProviderColumns: View {
                     .background(Color.mimo.cyan.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             }
-            if let context = meta?.limit?.context {
-                Text("\(context / 1000)k")
-                    .interfaceFont(size: 9)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .lineLimit(1)
-            }
+            // Context window: provider metadata when known, otherwise the
+            // configured default (200k) so the user always sees a number.
+            Text(ModelCapabilityLogic.contextLabel(for: contextTokens))
+                .interfaceFont(size: 9)
+                .foregroundColor(Color.mimo.textMuted)
+                .lineLimit(1)
 
             if meta?.cost != nil {
                 Text("$")
@@ -1397,8 +1423,8 @@ struct ModelSettingsProviderColumns: View {
                         Model: \(meta.id)
                         Name: \(meta.name ?? "—")
                         Provider: \(meta.providerID ?? providerID)
-                        Context: \(meta.limit?.context.map { "\($0/1000)k" } ?? "—")
-                        Output: \(meta.limit?.output.map { "\($0)" } ?? "—")
+                        Context: \(ModelCapabilityLogic.contextLabel(for: contextTokens))
+                        Output: \(ContextWindowCatalog.outputLimit(for: modelID, reported: meta.limit?.output))
                         Reasoning: \(meta.capabilities?.reasoning == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
                         Tools: \(meta.capabilities?.toolcall != false ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
                         Plan: \(meta.capabilities?.plan == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
@@ -1516,13 +1542,17 @@ struct CustomProviderCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 
                 Spacer()
-                
-                if provider.isEnabled {
-                    Circle().fill(Color.mimo.success).frame(width: 8, height: 8)
-                } else {
-                    Circle().fill(Color.mimo.textMuted).frame(width: 8, height: 8)
-                }
-                
+
+                Toggle("", isOn: Binding(
+                    get: { provider.isEnabled },
+                    set: { appState.setProviderEnabled(provider.id, isEnabled: $0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.dotSized)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+                .help(provider.isEnabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
+
                 Button(action: {
                     appState.removeCustomProvider(provider)
                 }) {

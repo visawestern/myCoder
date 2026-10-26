@@ -98,10 +98,16 @@ enum ContextUsageLogic {
 }
 
 /// Maps a model id to its context window. `reported` (from a live provider
-/// catalog) always wins; otherwise common families are recognized, and the
-/// fallback is a conservative 128k.
+/// catalog) always wins; otherwise an explicit window in the model id wins,
+/// then the well-known windows of a family, and finally the configured
+/// default (user directive: 200k context / 32k output when the provider
+/// reports no metadata).
 enum ContextWindowCatalog {
-    static let fallbackLimit = 128_000
+    /// Default context window when nothing is known about the model.
+    static let fallbackLimit = 200_000
+
+    /// Default output limit when nothing is known about the model.
+    static let fallbackOutputLimit = 32_000
 
     static func limit(for modelID: String, reported: Int? = nil) -> Int {
         if let reported, reported > 0 { return reported }
@@ -109,34 +115,41 @@ enum ContextWindowCatalog {
 
         if let suffix = explicitWindow(in: id) { return suffix }
 
+        // Documented windows — not guesses: these families have a fixed,
+        // publicly known context size.
         if id.contains("gemini") { return 1_000_000 }
         if id.contains("claude") { return 200_000 }
         if id.contains("gpt-4.1") || id.contains("gpt-4o") || id.contains("gpt-4") { return 128_000 }
-        if id.contains("o1") || id.contains("o3") || id.contains("o4") { return 200_000 }
-        if id.contains("deepseek") { return 128_000 }
-        if id.contains("qwen") { return 128_000 }
-        if id.contains("llama") { return 128_000 }
-        if id.contains("mistral") || id.contains("mixtral") { return 32_768 }
         return fallbackLimit
     }
 
+    /// Output limit of a model: reported metadata wins, otherwise the default.
+    static func outputLimit(for modelID: String, reported: Int? = nil) -> Int {
+        if let reported, reported > 0 { return reported }
+        let id = modelID.lowercased()
+        if let suffix = explicitOutputWindow(in: id) { return suffix }
+        return fallbackOutputLimit
+    }
+
     /// Matches suffixes like `:32k`, `-128k`, `_1m`. Must run before family
-    /// checks so `qwen2.5-coder:32k` does not inherit the generic 128k.
+    /// checks so `qwen2.5-coder:32k` does not inherit the generic default.
     private static func explicitWindow(in id: String) -> Int? {
-        let pattern = #"[:@\-_](\d{1,4})k\b"#
-        let millionPattern = #"[:@\-_](\d{1,2})m\b"#
-        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-           let match = regex.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)),
-           let range = Range(match.range(at: 1), in: id),
-           let value = Int(id[range]) {
-            return value * 1_024
+        scaledWindow(in: id, pattern: #"[:@\-_](\d{1,4})k\b"#, multiplier: 1_024)
+            ?? scaledWindow(in: id, pattern: #"[:@\-_](\d{1,2})m\b"#, multiplier: 1_000_000)
+    }
+
+    /// Matches an explicit output budget in the model id (`:32k`).
+    private static func explicitOutputWindow(in id: String) -> Int? {
+        scaledWindow(in: id, pattern: #"[:@\-_]out(\d{1,4})k\b"#, multiplier: 1_024)
+    }
+
+    private static func scaledWindow(in id: String, pattern: String, multiplier: Int) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)),
+              let range = Range(match.range(at: 1), in: id),
+              let value = Int(id[range]) else {
+            return nil
         }
-        if let regex = try? NSRegularExpression(pattern: millionPattern, options: .caseInsensitive),
-           let match = regex.firstMatch(in: id, range: NSRange(id.startIndex..., in: id)),
-           let range = Range(match.range(at: 1), in: id),
-           let value = Int(id[range]) {
-            return value * 1_000_000
-        }
-        return nil
+        return value * multiplier
     }
 }

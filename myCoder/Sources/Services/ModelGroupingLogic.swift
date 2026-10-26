@@ -29,6 +29,94 @@ enum ModelGroupingLogic {
     static func groupKey(prefix: String?, providerID: String) -> String {
         "\(providerID)::\(prefix ?? "__all__")"
     }
+
+    // MARK: - Family grouping
+
+    /// Tokens that describe a role, a format or a precision — never the model
+    /// line itself (`codegemma-1.1-7b-instruct` belongs to `codegemma`).
+    static let roleTokens: Set<String> = [
+        "instruct", "it", "chat", "coder", "code", "base", "preview", "latest",
+        "thinking", "reasoning", "free", "turbo", "mini", "nano", "small",
+        "medium", "large", "embed", "embedding", "vision", "vl", "rerank",
+        "tts", "stt", "imggen", "omni", "moe", "flash", "swift", "ultra",
+        "pro", "max", "exp", "experimental", "hf", "gguf", "safetensors",
+        "text", "completion", "chatml", "raw", "sft", "dpo", "rlhf",
+    ]
+
+    /// Quantization / precision markers that are stripped from the family key.
+    static let quantizationTokens: Set<String> = [
+        "fp8", "fp16", "bf16", "fp32", "int4", "int8", "awq", "gptq", "q4",
+        "q5", "q6", "q8", "q4_k_m", "q4_k_s", "q5_k_m", "q6_k", "q8_0", "exl2",
+        "mxfp4", "nf4", "w4a16", "w8a8", "w8a16", "bfloat16", "float16",
+    ]
+
+    /// The model line a model id belongs to: the part that stays the same for
+    /// all variants (`codegemma-1.1-7b` and `codegemma-7b` → `codegemma`).
+    /// A version glued to the name (`qwen3.8`) is kept — it is a new line.
+    static func familyKey(for modelID: String) -> String {
+        let (_, name) = splitModelID(modelID)
+        let lowered = name.lowercased()
+        guard !lowered.isEmpty else { return lowered }
+
+        var tokens = lowered
+            .split(separator: "-", omittingEmptySubsequences: true)
+            .map { String($0) }
+            .filter { !quantizationTokens.contains($0) }
+
+        while let last = tokens.last, roleTokens.contains(last) {
+            tokens.removeLast()
+        }
+        while let last = tokens.last, isSizeToken(last) {
+            tokens.removeLast()
+        }
+        while tokens.count > 1, let last = tokens.last, isVersionToken(last) {
+            tokens.removeLast()
+        }
+
+        guard !tokens.isEmpty else { return lowered }
+        return tokens.joined(separator: "-")
+    }
+
+    /// Models grouped by their family, keeping the incoming order.
+    static func groupedByFamily(_ models: [String]) -> [(family: String, models: [String])] {
+        var order: [String] = []
+        var buckets: [String: [String]] = [:]
+        for model in models {
+            let family = familyKey(for: model)
+            if buckets[family] == nil {
+                buckets[family] = []
+                order.append(family)
+            }
+            buckets[family]?.append(model)
+        }
+        return order.map { (family: $0, models: buckets[$0] ?? []) }
+    }
+
+    /// `7b`, `1.5b`, `30b-a3b` style parameter markers.
+    static func isSizeToken(_ token: String) -> Bool {
+        var candidate = token
+        if candidate.hasPrefix("a") { candidate.removeFirst() }
+        guard candidate.hasSuffix("b") else { return false }
+        candidate.removeLast()
+        guard !candidate.isEmpty else { return false }
+        let parts = candidate.split(separator: ".", omittingEmptySubsequences: true)
+        guard !parts.isEmpty, parts.count <= 2 else { return false }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.allSatisfy { $0.isNumber }
+        }
+    }
+
+    /// `1.1`, `v2`, `v4.1` style version markers.
+    static func isVersionToken(_ token: String) -> Bool {
+        var candidate = token
+        if candidate.hasPrefix("v") { candidate.removeFirst() }
+        guard !candidate.isEmpty else { return false }
+        let parts = candidate.split(separator: ".", omittingEmptySubsequences: true)
+        guard !parts.isEmpty else { return false }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.allSatisfy { $0.isNumber }
+        }
+    }
 }
 
 /// One capability badge rendered next to a model name.
@@ -90,6 +178,32 @@ enum ModelCapabilityLogic {
             in: providers,
             providerID: providerID
         )?.limit?.context
+    }
+
+    /// Effective context window of a model: the provider metadata when it
+    /// exists, otherwise the configured default (200k).
+    static func effectiveContextWindow(
+        for modelID: String,
+        in providers: [MimoProviderResponse],
+        providerID: String? = nil
+    ) -> Int {
+        let reported = contextWindow(for: modelID, in: providers, providerID: providerID)
+        return ContextWindowCatalog.limit(for: modelID, reported: reported)
+    }
+
+    /// Effective output limit of a model: the provider metadata when it
+    /// exists, otherwise the configured default (32k).
+    static func effectiveOutputLimit(
+        for modelID: String,
+        in providers: [MimoProviderResponse],
+        providerID: String? = nil
+    ) -> Int {
+        let reported = ProviderSettingsLogic.model(
+            for: modelID,
+            in: providers,
+            providerID: providerID
+        )?.limit?.output
+        return ContextWindowCatalog.outputLimit(for: modelID, reported: reported)
     }
 
     static func contextLabel(for tokens: Int) -> String {

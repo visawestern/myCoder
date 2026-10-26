@@ -8,12 +8,10 @@ struct StatusBarView: View {
     var body: some View {
         HStack(spacing: 12) {
             HStack(spacing: 6) {
-                Circle()
-                    .fill(appState.selectedProviderConnected ? Color.mimo.success : Color.mimo.error)
-                    .frame(width: 6, height: 6)
+                // Connection state is carried by the label colour — no dot.
                 Text(appState.selectedProviderConnected ? L.t(AppLocalizationKey.locConnected) : L.t(AppLocalizationKey.locDisconnected))
                     .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
+                    .foregroundColor(appState.selectedProviderConnected ? Color.mimo.success : Color.mimo.error)
             }
             
             Rectangle()

@@ -54,7 +54,16 @@ struct ContextUsageLogicTests {
         #expect(ContextWindowCatalog.limit(for: "gpt-4o-mini") == 128_000)
         #expect(ContextWindowCatalog.limit(for: "qwen2.5-coder:32k") == 32_768)
         #expect(ContextWindowCatalog.limit(for: "llama3.1:8b-128k") == 131_072)
-        #expect(ContextWindowCatalog.limit(for: "totally-unknown") == 128_000)
+        // Unknown models use the configured default (user directive).
+        #expect(ContextWindowCatalog.limit(for: "totally-unknown") == 200_000)
+        #expect(ContextWindowCatalog.limit(for: "qwen3.8-27b-coder") == 200_000)
+        #expect(ContextWindowCatalog.limit(for: "codegemma-7b") == 200_000)
+    }
+
+    @Test func outputLimitDefaultsTo32k() {
+        #expect(ContextWindowCatalog.outputLimit(for: "codegemma-7b") == 32_000)
+        #expect(ContextWindowCatalog.outputLimit(for: "codegemma-7b", reported: 8_192) == 8_192)
+        #expect(ContextWindowCatalog.outputLimit(for: "model-out16k") == 16_384)
     }
 
     @Test func badgeTextShowsPercentAndTokens() {

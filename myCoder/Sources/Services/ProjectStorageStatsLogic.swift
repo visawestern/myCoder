@@ -1,6 +1,11 @@
 import Foundation
 
 enum ProjectStorageStatsLogic {
+    /// Identifier of the app-global database (standalone chats without a
+    /// project). It is NOT a project: nothing was ever released publicly, so
+    /// there is no "legacy project" to keep around (user directive).
+    static let globalIdentifier = "__global__"
+
     struct Snapshot: Equatable {
         let databaseSize: UInt64
         let messageCount: Int
@@ -37,7 +42,9 @@ enum ProjectStorageStatsLogic {
             databaseSize: all.reduce(0) { $0 + $1.databaseSize },
             messageCount: all.reduce(0) { $0 + $1.messageCount },
             snapshotSize: snapshotSize,
-            sessionCounts: all.map {
+            // Only real projects are listed per project. The global database
+            // counts into the totals but never appears as a "Legacy" folder.
+            sessionCounts: orderedProjects.map {
                 SessionCount(projectID: $0.projectID, active: $0.active, archived: $0.archived)
             }
         )

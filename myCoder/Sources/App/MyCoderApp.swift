@@ -477,6 +477,12 @@ class AppState: ObservableObject {
             ? FileManager.default.temporaryDirectory
                 .appendingPathComponent("mycoder-test-home-\(UUID().uuidString)", isDirectory: true)
             : FileManager.default.homeDirectoryForCurrentUser
+        // Clean slate (user directive): provider rows, API keys and model
+        // selections from an earlier project must never leak into this build.
+        // Runs once, before any persisted provider value is read.
+        if !Self.isRunningTests {
+            ProviderCleanSlateReset.runIfNeeded(defaults: defaults)
+        }
         let initialHost = Self.isRunningTests
             ? host
             : (defaults.string(forKey: ServerProviderCatalogStore.hostKey)
@@ -561,9 +567,20 @@ class AppState: ObservableObject {
         // Initialize database and perform migrations
         Task {
             await initializeDatabase()
-            // Attempt server connection (non-blocking)
-            serverConnectionManager?.attemptConnection()
+            // Attempt server connection (non-blocking) — only when the user
+            // explicitly connected to a server before. An automatic probe
+            // would import another tool's provider catalog (user directive).
+            if Self.serverConnectionEnabled(defaults: defaults) {
+                serverConnectionManager?.attemptConnection()
+            }
         }
+    }
+
+    /// The server connection is opt-in: the app never connects to a local
+    /// agent on its own, because that agent's provider catalog would show up
+    /// as providers the user never added.
+    static func serverConnectionEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: "com.mycoder.serverConnectionEnabled")
     }
 
     private func migrateLegacyPreferences() {
@@ -585,6 +602,15 @@ class AppState: ObservableObject {
     }
     
     func connectToServer() async {
+        // The startup probe runs only for an explicitly enabled connection.
+        // Without it the app stays offline until the user connects from the
+        // Remote connection sheet — no foreign provider catalog appears.
+        guard Self.serverConnectionEnabled(defaults: defaults) else {
+            await MainActor.run {
+                self.serverConnected = false
+            }
+            return
+        }
         // Complete the health check before deciding whether server-backed
         // models may load. Previously the manager became connected while this
         // AppState boolean stayed false, so ContentView skipped model loading
@@ -680,6 +706,14 @@ class AppState: ObservableObject {
                 isConnected: custom.isEnabled && !custom.models.isEmpty
             )
         }
+        // Server catalog rows have no native enable flag — the switch state
+        // lives in ProviderEnablementStore (user directive: one switch
+        // everywhere, no status dots).
+        if !includeDisabled {
+            options = options.filter { option in
+                option.isCustom || !ProviderEnablementStore.isDisabled(option.id, defaults: defaults)
+            }
+        }
         // Local providers (Ollama/OpenCode/MiMo CLI) — plan Раздел 1.
         options += LocalProviderLogic.providerOptions(
             from: LocalProviderLogic.load(),
@@ -689,8 +723,42 @@ class AppState: ObservableObject {
         options += WebProviderConnectivity.providerOptions(
             WebProviderStore.load(),
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-        )
+        ).filter { includeDisabled || !ProviderEnablementStore.isDisabled($0.id, defaults: defaults) }
         return options
+    }
+
+    /// Whether a provider row is switched on. Custom and local providers keep
+    /// their own flag; server catalog and web rows use the shared store.
+    func isProviderEnabled(_ providerID: String) -> Bool {
+        if let custom = customProviders.first(where: { $0.id == providerID }) {
+            return custom.isEnabled
+        }
+        if let local = LocalProviderLogic.load(defaults: defaults).first(where: { $0.id == providerID }) {
+            return local.isEnabled
+        }
+        return !ProviderEnablementStore.isDisabled(providerID, defaults: defaults)
+    }
+
+    /// Switch a provider row on/off. The selected provider is dropped when it
+    /// is switched off so the composer never keeps a dead provider.
+    func setProviderEnabled(_ providerID: String, isEnabled: Bool) {
+        if customProviders.contains(where: { $0.id == providerID }) {
+            setCustomProviderEnabled(providerID, isEnabled: isEnabled)
+            return
+        }
+        if LocalProviderLogic.load(defaults: defaults).contains(where: { $0.id == providerID }) {
+            LocalProviderLogic.setEnabled(id: providerID, isEnabled: isEnabled, defaults: defaults)
+        } else {
+            ProviderEnablementStore.setDisabled(
+                !isEnabled,
+                providerID: providerID,
+                defaults: defaults
+            )
+        }
+        if !isEnabled, selectedProviderID == providerID {
+            selectProvider("")
+        }
+        validateAndReconcileSelections()
     }
 
     /// Effective selected model — for web providers resolve from their config
@@ -888,6 +956,11 @@ class AppState: ObservableObject {
     @MainActor
     private func refreshProviderConnectivity(_ providerID: String) async {
         guard !providerID.isEmpty else { return }
+        // A row the user switched off is never probed — it stays "offline".
+        if ProviderEnablementStore.isDisabled(providerID, defaults: defaults) {
+            providerConnectivity[providerID] = false
+            return
+        }
         if serverConnected && serverProviders.contains(where: { $0.id == providerID }) {
             providerConnectivity[providerID] = true
             return
@@ -1029,7 +1102,12 @@ class AppState: ObservableObject {
 
         let options = ProviderDuplicationLogic.deduplicatedOptions(rawOptions)
         if options.isEmpty {
-            if selectedProviderID.isEmpty, let firstServer = serverProviders.first {
+            // Only an enabled server row may be picked as a fallback — a row
+            // the user switched off must never become the active provider.
+            if selectedProviderID.isEmpty,
+               let firstServer = serverProviders.first(where: {
+                   !ProviderEnablementStore.isDisabled($0.id, defaults: defaults)
+               }) {
                 selectProvider(firstServer.id, persistPreference: false)
             }
             return
@@ -1244,26 +1322,6 @@ class AppState: ObservableObject {
         return navigationIndex < navigationHistory.count - 1 && navigationIndex >= 0 && navigationHistory.count > 0
     }
     
-    func addNvidiaProvider() {
-        if let existing = customProviders.first(where: { $0.type == .nvidia }) {
-            selectProvider(existing.id)
-            return
-        }
-        let provider = CustomProvider(
-            id: "nvidia",
-            name: "NVIDIA",
-            type: .nvidia,
-            baseURL: ProviderType.nvidia.defaultURL,
-            apiKey: "",
-            isEnabled: true,
-            models: [],
-            supportsTools: true,
-            requiresAPIKey: true
-        )
-        addCustomProvider(provider)
-        selectProvider(provider.id)
-    }
-
     func setCustomProviderEnabled(_ providerID: String, isEnabled: Bool) {
         guard let index = customProviders.firstIndex(where: { $0.id == providerID }) else { return }
         customProviders[index].isEnabled = isEnabled
@@ -1301,6 +1359,7 @@ class AppState: ObservableObject {
     
     func removeCustomProvider(_ provider: CustomProvider) {
         DatabaseBridge.shared.deleteProviderAPIKey(providerId: provider.id)
+        ProviderEnablementStore.clear(providerID: provider.id, defaults: defaults)
         customProviders.removeAll { $0.id == provider.id }
         saveCustomProviders()
         validateAndReconcileSelections()
@@ -2121,7 +2180,9 @@ class AppState: ObservableObject {
         let autoFreeReady = false
         return ProviderConnectionStatusLogic.isConnected(
             selectedID: selectedProviderID,
-            serverProviderIDs: serverProviders.map(\.id),
+            serverProviderIDs: serverProviders
+                .filter { !ProviderEnablementStore.isDisabled($0.id, defaults: defaults) }
+                .map(\.id),
             serverConnected: serverConnected,
             autoFreeID: MyCoderAutoFreeProvider.builtInID,
             autoFreeReady: autoFreeReady,
@@ -2317,6 +2378,8 @@ class AppState: ObservableObject {
             self.serverPort = port
             self.mimoClient = newClient
             ServerProviderCatalogStore.saveConnection(host: hostname, port: port, defaults: self.defaults)
+            // An explicit connection opts into the startup probe from now on.
+            self.defaults.set(true, forKey: "com.mycoder.serverConnectionEnabled")
         }
         
         do {
@@ -2346,6 +2409,9 @@ class AppState: ObservableObject {
             self.serverConnected = false
             self.notificationService.serverDisconnected()
             self.serverProviders = []
+            // Disconnecting also drops the opt-in for the startup probe.
+            self.defaults.set(false, forKey: "com.mycoder.serverConnectionEnabled")
+            ServerProviderCatalogStore.save([], defaults: self.defaults)
             if !self.customProviders.contains(where: { $0.id == self.selectedProviderID && $0.isEnabled }) {
                 if let firstCustom = self.customProviders.first(where: { $0.isEnabled }) {
                     self.selectProvider(firstCustom.id)

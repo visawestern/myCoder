@@ -244,7 +244,7 @@ extension AppState {
             messageCount: (try? DatabaseManager.shared.messageCount()) ?? 0,
             active: globalCounts.reduce(0) { $0 + $1.active },
             archived: globalCounts.reduce(0) { $0 + $1.archived },
-            projectID: "legacy"
+            projectID: ProjectStorageStatsLogic.globalIdentifier
         )
         let projectSnapshots = projectPathsForMaintenance.compactMap { path -> ProjectStorageStatsLogic.Snapshot? in
             guard let projectDB = try? ProjectDatabaseManager.manager(forProjectPath: path),

@@ -131,9 +131,6 @@ struct ProviderSelectorMenu: View {
                 ForEach(options) { option in
                     Button(action: { appState.selectProvider(option.id) }) {
                         HStack {
-                            Circle()
-                                .fill(option.isConnected ? Color.mimo.success : Color.mimo.textMuted)
-                                .frame(width: 6, height: 6)
                             Text(option.name)
                             if option.isCustom {
                                 Text(L.t(AppLocalizationKey.locCustom))
