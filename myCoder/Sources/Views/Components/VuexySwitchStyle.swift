@@ -9,23 +9,26 @@ struct VuexySwitchStyle: ToggleStyle {
     var height: CGFloat = 26
 
     func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-        } label: {
-            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule()
-                    .fill(configuration.isOn ? onColor : offColor)
-                    .frame(width: width, height: height)
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: height - 4, height: height - 4)
-                    .shadow(color: Color.black.opacity(0.18), radius: 1.5, y: 1)
-                    .padding(2)
+        HStack(spacing: 7) {
+            configuration.label
+            Button {
+                configuration.isOn.toggle()
+            } label: {
+                ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                    Capsule()
+                        .fill(configuration.isOn ? onColor : offColor)
+                        .frame(width: width, height: height)
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: height - 4, height: height - 4)
+                        .shadow(color: Color.black.opacity(0.18), radius: 1.5, y: 1)
+                        .padding(2)
+                }
+                .contentShape(Capsule())
             }
-            .contentShape(Capsule())
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isOn ? "1" : "0")
         }
-        .buttonStyle(.plain)
         .animation(.easeInOut(duration: 0.16), value: configuration.isOn)
-        .accessibilityValue(configuration.isOn ? "1" : "0")
     }
 }

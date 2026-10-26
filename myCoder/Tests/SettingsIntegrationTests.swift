@@ -483,12 +483,13 @@ struct ModelSettingsTests {
         #expect(name == "model-name")
     }
 
-    @Test("model list is flat and capped at ten rows")
-    func flatModelListCap() {
-        let models = (1...14).map { "model-\($0)" }
-        #expect(ModelSettingsListLogic.limit == 10)
-        #expect(ModelSettingsListLogic.visibleModels(models, query: "") == Array(models.prefix(10)))
-        #expect(ModelSettingsListLogic.visibleModels(models, query: "model-1").count == 6)
+    @Test("model list is flat and shows the full catalog inside a ScrollView")
+    func flatModelListShowsAll() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Settings/ModelSettingsView.swift")
+        #expect(source.contains("ForEach(displayModels"))
+        #expect(source.contains("ScrollView {"))
+        #expect(!source.contains("ModelSettingsListLogic"))
+        #expect(!source.contains("prefix(10)"))
     }
 }
 

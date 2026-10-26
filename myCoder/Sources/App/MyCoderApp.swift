@@ -641,6 +641,12 @@ class AppState: ObservableObject {
     }
 
     private func buildProviderOptions(includeDisabled: Bool) -> [ProviderOption] {
+        ProviderDuplicationLogic.deduplicatedOptions(
+            rawProviderOptions(includeDisabled: includeDisabled)
+        )
+    }
+
+    private func rawProviderOptions(includeDisabled: Bool) -> [ProviderOption] {
         var options = ProviderSettingsLogic.allProviderOptions(
             serverProviders: serverProviders,
             customProviders: customProviders,
@@ -667,7 +673,7 @@ class AppState: ObservableObject {
             WebProviderStore.load(),
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser
         )
-        return ProviderDuplicationLogic.deduplicatedOptions(options)
+        return options
     }
 
     /// Effective selected model — for web providers resolve from their config
@@ -995,7 +1001,16 @@ class AppState: ObservableObject {
     }
 
     func validateAndReconcileSelections() {
-        let options = providerOptions
+        let rawOptions = rawProviderOptions(includeDisabled: false)
+        let canonicalID = ProviderDuplicationLogic.canonicalID(
+            for: selectedProviderID,
+            in: rawOptions
+        )
+        if canonicalID != selectedProviderID {
+            selectProvider(canonicalID, persistPreference: false)
+        }
+
+        let options = ProviderDuplicationLogic.deduplicatedOptions(rawOptions)
         if options.isEmpty {
             if selectedProviderID.isEmpty, let firstServer = serverProviders.first {
                 selectProvider(firstServer.id, persistPreference: false)

@@ -41,12 +41,14 @@ struct ModelSettingsPremiumTests {
         #expect(!source.contains("result.contains(\"Success\")"))
     }
 
-    @Test("Model list has filter, sort, ten-row cap and delete controls")
+    @Test("Model list has filter, sort, scrollable full list and delete controls")
     func modelManagementControls() throws {
         let source = try sourceText("myCoder/Sources/Views/Settings/ModelSettingsView.swift")
         #expect(source.contains("locFilterModels"))
         #expect(source.contains("ModelSortOrder"))
-        #expect(source.contains("ModelSettingsListLogic.visibleModels"))
+        #expect(source.contains("ForEach(displayModels"))
+        #expect(!source.contains("ModelSettingsListLogic"))
+        #expect(!source.contains("prefix(10)"))
         #expect(!source.contains("collapsedModelGroups"))
         #expect(source.contains("appState.removeModel(modelID, from: providerID)"))
     }

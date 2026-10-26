@@ -76,8 +76,7 @@ struct SubagentRunnerTests {
         let projectPath = try makeTempProjectDir()
         defer { try? FileManager.default.removeItem(atPath: projectPath) }
         let bridge = DatabaseBridge.shared
-        let parent = bridge.createSession(id: UUID().uuidString, projectId: projectPath, title: "Parent", directory: projectPath)
-        _ = parent
+        bridge.createSession(id: UUID().uuidString, projectId: projectPath, title: "Parent", directory: projectPath)
         let child = bridge.createSubagentSession(
             parentSessionID: "bridge-parent",
             projectKey: projectPath,

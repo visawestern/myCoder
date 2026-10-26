@@ -80,6 +80,29 @@ struct ProviderManagementTests {
         #expect(deduplicated.first?.name == "NVIDIA")
     }
 
+    @Test("Server and custom providers with the same name collapse to the manageable row")
+    func duplicateNamesPreferCustomOption() {
+        let options = [
+            ProviderOption(id: "nvidia", name: "Nvidia", isCustom: false, isConnected: true),
+            ProviderOption(id: "custom-nvidia", name: "  nvidia ", isCustom: true, isConnected: true)
+        ]
+        let deduplicated = ProviderDuplicationLogic.deduplicatedOptions(options)
+        #expect(deduplicated.count == 1)
+        #expect(deduplicated.first?.id == "custom-nvidia")
+        #expect(deduplicated.first?.isCustom == true)
+        #expect(ProviderDuplicationLogic.canonicalID(for: "nvidia", in: options) == "custom-nvidia")
+    }
+
+    @Test("Distinct provider names are not collapsed")
+    func distinctNamesAreKept() {
+        let options = [
+            ProviderOption(id: "google", name: "Google", isCustom: false, isConnected: true),
+            ProviderOption(id: "nvidia", name: "Nvidia", isCustom: false, isConnected: true),
+            ProviderOption(id: "custom-nvidia", name: "Nvidia API", isCustom: true, isConnected: true)
+        ]
+        #expect(ProviderDuplicationLogic.deduplicatedOptions(options).count == 3)
+    }
+
     @Test("Disabled models are tracked per provider")
     func disabledModelsAreStoredPerProvider() {
         let (defaults, suite) = makeDefaults()

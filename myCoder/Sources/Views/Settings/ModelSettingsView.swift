@@ -1042,7 +1042,7 @@ struct ModelSettingsProviderColumns: View {
             let providerID = detailProviderID.isEmpty ? appState.selectedProviderID : detailProviderID
             let allModels = models(for: providerID)
             let filteredModels = visibleModelIDs(allModels, providerID: providerID)
-            let displayModels = ModelSettingsListLogic.visibleModels(filteredModels, query: "")
+            let displayModels = filteredModels
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
