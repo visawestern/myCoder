@@ -10,16 +10,8 @@ import Foundation
 enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
     case ollama
     case openCode
-    case localAgent
-    /// ACP-protocol server (probe: GET /acp/v1/models). Kept as its own kind so
-    /// an auto-detected ACP server is NOT stored as OpenCode: OpenCode routes
-    /// to OpenAI /v1/chat/completions, which a real ACP server doesn't speak.
-    case acp
-    /// Generic OpenAI-compatible server (probe: GET /v1/models). Kept apart
-    /// from OpenCode for the mirror reason: a generic server does NOT speak
-    /// the opencode session REST API that `openCode` routes to (OC-3/OC-4,
-    /// verified live against `opencode serve` 1.18.29).
-    case openAICompatible
+    /// STRATA local inference server (OpenAI-compatible /v1 API, port 8399).
+    case strata
 
     var id: String { rawValue }
 
@@ -27,9 +19,7 @@ enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .ollama: return "Ollama"
         case .openCode: return "OpenCode"
-        case .localAgent: return "Local Agent"
-        case .acp: return "ACP"
-        case .openAICompatible: return "OpenAI-compatible"
+        case .strata: return "STRATA"
         }
     }
 
@@ -37,9 +27,7 @@ enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .ollama: return "desktopcomputer"
         case .openCode: return "terminal"
-        case .localAgent: return "cpu"
-        case .acp: return "terminal.fill"
-        case .openAICompatible: return "network"
+        case .strata: return "square.stack.3d.up"
         }
     }
 
@@ -48,9 +36,7 @@ enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .ollama: return "/api/tags"
         case .openCode: return "/global/health"
-        case .localAgent: return "/global/health"
-        case .acp: return "/models" // relative to the /acp/v1 API base
-        case .openAICompatible: return "/v1/models"
+        case .strata: return "/v1/models"
         }
     }
 
@@ -58,9 +44,7 @@ enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .ollama: return 11434
         case .openCode: return 4096
-        case .localAgent: return 4096
-        case .acp: return 8080
-        case .openAICompatible: return 1234
+        case .strata: return 8399
         }
     }
 }
@@ -131,12 +115,9 @@ struct LocalProviderConfig: Identifiable, Codable, Equatable {
     /// Base URL for the serve endpoint (used for health-check and model list).
     var serveBaseURL: String { "http://\(host):\(port)" }
 
-    /// Endpoint the client actually talks to. ACP servers speak the ACP
-    /// protocol under `/acp/v1` (the ACPClient appends `chat/completions` to
-    /// this base); every other kind uses the plain origin.
-    var apiBaseURL: String {
-        kind == .acp ? serveBaseURL + "/acp/v1" : serveBaseURL
-    }
+    /// Endpoint the client actually talks to. Every supported local kind
+    /// serves its API from the plain origin.
+    var apiBaseURL: String { serveBaseURL }
 
     var healthURL: String { apiBaseURL + kind.healthPath }
 
@@ -193,8 +174,25 @@ enum LocalProviderLogic {
 
     static func load(defaults: UserDefaults = .standard) -> [LocalProviderConfig] {
         guard let data = defaults.data(forKey: storageKey),
-              let providers = try? JSONDecoder().decode([LocalProviderConfig].self, from: data) else {
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [Any] else {
             return []
+        }
+        // Decode one entry at a time so a legacy provider kind that no longer
+        // exists (localAgent / acp / openAICompatible) is dropped without
+        // wiping every other configured local provider.
+        let decoder = JSONDecoder()
+        var providers: [LocalProviderConfig] = []
+        var droppedEntry = false
+        for item in raw {
+            guard let itemData = try? JSONSerialization.data(withJSONObject: item),
+                  let provider = try? decoder.decode(LocalProviderConfig.self, from: itemData) else {
+                droppedEntry = true
+                continue
+            }
+            providers.append(provider)
+        }
+        if droppedEntry, let cleaned = try? JSONEncoder().encode(providers) {
+            defaults.set(cleaned, forKey: storageKey)
         }
         return providers
     }
@@ -257,11 +255,7 @@ enum LocalProviderLogic {
             endpoint = config.serveBaseURL + "/api/tags"
         case .openCode:
             endpoint = config.serveBaseURL + "/config/providers"
-        case .localAgent:
-            endpoint = config.serveBaseURL + "/global/models"
-        case .acp:
-            endpoint = config.serveBaseURL + "/acp/v1/models"
-        case .openAICompatible:
+        case .strata:
             endpoint = config.serveBaseURL + "/v1/models"
         }
         guard let url = URL(string: endpoint) else { return nil }
@@ -291,24 +285,14 @@ enum LocalProviderLogic {
             if let dict = json as? [String: Any], let models = dict["models"] as? [[String: Any]] {
                 names = models.compactMap { $0["name"] as? String }
             }
-        case .openCode, .localAgent:
+        case .openCode:
             if let dict = json as? [String: Any], let models = dict["models"] as? [[String: Any]] {
                 names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
             } else if let models = json as? [[String: Any]] {
                 names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
             }
-        case .acp:
-            if let dict = json as? [String: Any], let models = dict["models"] as? [[String: Any]] {
-                names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
-            } else if let models = json as? [[String: Any]] {
-                names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
-            }
-        case .openAICompatible:
-            if let dict = json as? [String: Any], let models = dict["models"] as? [[String: Any]] {
-                names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
-            } else if let models = json as? [[String: Any]] {
-                names = models.compactMap { $0["id"] as? String ?? $0["name"] as? String }
-            }
+        case .strata:
+            return ProviderAutoDetector.parseOpenAIModels(data)
         }
         return names.isEmpty ? nil : names
     }
@@ -338,10 +322,8 @@ enum LocalProviderConfirmLogic {
         let kind: LocalProviderKind
         switch info.kind {
         case .ollama: kind = .ollama
-        case .mimoCLI: kind = .localAgent
-        case .acp: kind = .acp
         case .openCode: kind = .openCode
-        case .openAICompatible: kind = .openAICompatible
+        case .strata: kind = .strata
         }
         return LocalProviderConfig(kind: kind, host: host, port: port, models: info.models)
     }
@@ -366,10 +348,8 @@ enum LocalProviderConfirmLogic {
     static func displayName(for kind: DetectedProviderInfo.Kind) -> String {
         switch kind {
         case .ollama: return "Ollama"
-        case .mimoCLI: return "Local Agent"
-        case .acp: return "ACP"
         case .openCode: return "OpenCode"
-        case .openAICompatible: return "OpenAI-compatible"
+        case .strata: return "STRATA"
         }
     }
 }

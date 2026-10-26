@@ -74,14 +74,14 @@ struct SendRoutingTests {
         #expect(route == .openCodeServe(baseURL: "http://127.0.0.1:4096", headers: [:], providerID: "opencode", model: "big-pickle"))
     }
 
-    @Test func mimoCLILocalUsesServeBaseNoV1() {
-        let cli = LocalProviderConfig(kind: .localAgent, host: "127.0.0.1", port: 4096)
+    @Test func strataLocalRoutesToOpenAICompatibleV1() {
+        let strata = LocalProviderConfig(kind: .strata, host: "127.0.0.1", port: 8399)
         let route = SendRouteResolver.route(
-            selectedProviderID: cli.id, selectedModel: "m",
+            selectedProviderID: strata.id, selectedModel: "m",
             serverConnected: false, isACP: false,
-            customProviders: [], localProviders: [cli], webProviderIDs: []
+            customProviders: [], localProviders: [strata], webProviderIDs: []
         )
-        #expect(route == .openAICompatible(baseURL: "http://127.0.0.1:4096", apiKey: nil, model: "m"))
+        #expect(route == .openAICompatible(baseURL: "http://127.0.0.1:8399/v1", apiKey: nil, model: "m"))
     }
 
     @Test func customProviderRoutesToOpenAICompatible() {

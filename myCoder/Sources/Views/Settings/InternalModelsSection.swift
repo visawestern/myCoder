@@ -22,11 +22,18 @@ struct InternalModelsSection: View {
         return catalog.isEmpty ? MyCoderAutoFreeClient.freeModelIDs : catalog
     }
 
+    /// Live server catalog while connected, persisted catalog otherwise so
+    /// internal server models survive a restart before the server reconnects.
+    private var serverProviders: [MimoProviderResponse]? {
+        appState.serverProviders.isEmpty ? nil : appState.serverProviders
+    }
+
     private var availableRefs: [InternalModelRef] {
         InternalModelResolver.availableModels(
             customProviders: customProviders,
             localProviders: localProviders,
-            freeModels: freeModels
+            freeModels: freeModels,
+            serverProviders: serverProviders
         )
     }
 
@@ -135,7 +142,8 @@ struct InternalModelsSection: View {
             let title = InternalModelResolver.displayName(
                 for: ref,
                 customProviders: customProviders,
-                localProviders: localProviders
+                localProviders: localProviders,
+                serverProviders: serverProviders
             )
             if byTitle[title] == nil {
                 order.append(title)
@@ -150,10 +158,16 @@ struct InternalModelsSection: View {
         let providerName = InternalModelResolver.displayName(
             for: ref,
             customProviders: customProviders,
-            localProviders: localProviders
+            localProviders: localProviders,
+            serverProviders: serverProviders
         )
         let isFree = ref.providerID == MyCoderAutoFreeProvider.builtInID
-        let isAvailable = InternalModelResolver.route(for: ref) != nil
+        let isAvailable = InternalModelResolver.route(
+            for: ref,
+            customProviders: customProviders,
+            localProviders: localProviders,
+            serverProviders: serverProviders
+        ) != nil
 
         return HStack(spacing: 8) {
             Text("\(index + 1)")

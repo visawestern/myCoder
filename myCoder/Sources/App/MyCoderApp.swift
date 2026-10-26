@@ -468,9 +468,16 @@ class AppState: ObservableObject {
     @Published var serverConnectionManager: MimoServeConnectionManager?
 
     init(host: String = "127.0.0.1", port: Int = 4096, defaults: UserDefaults = .standard) {
-        self.serverHost = host
-        self.serverPort = port
-        self.mimoClient = MimoServeClient(host: host, port: port)
+        let initialHost = Self.isRunningTests
+            ? host
+            : (defaults.string(forKey: ServerProviderCatalogStore.hostKey)
+                .flatMap { $0.isEmpty ? nil : $0 } ?? host)
+        let initialPort = Self.isRunningTests
+            ? port
+            : (defaults.object(forKey: ServerProviderCatalogStore.portKey) as? Int ?? port)
+        self.serverHost = initialHost
+        self.serverPort = initialPort
+        self.mimoClient = MimoServeClient(host: initialHost, port: initialPort)
         self.serverConnectionManager = MimoServeConnectionManager(client: mimoClient)
         self.defaults = defaults
         MyCoderAPIServer.appendLog("🆕 AppState.init: id=\(instanceID)")
@@ -622,6 +629,7 @@ class AppState: ObservableObject {
             let providers = try await mimoClient.providers()
             await MainActor.run {
                 self.serverProviders = providers
+                ServerProviderCatalogStore.save(providers, defaults: self.defaults)
                 self.validateAndReconcileSelections()
             }
         } catch {
@@ -2299,6 +2307,7 @@ class AppState: ObservableObject {
             self.serverHost = hostname
             self.serverPort = port
             self.mimoClient = newClient
+            ServerProviderCatalogStore.saveConnection(host: hostname, port: port, defaults: self.defaults)
         }
         
         do {

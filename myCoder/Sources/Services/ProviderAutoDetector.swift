@@ -4,12 +4,11 @@ import FoundationNetworking
 #endif
 
 /// Auto-detection of a local provider by probing host:port (plan Раздел 9 Блок 3).
-/// The detector classifies an endpoint as Ollama / OpenAI-compatible / MiMo CLI /
-/// ACP by hitting known probe paths in order from most-specific to most-generic,
-/// then auto-loads the model list for the detected type.
+/// Only the three supported local kinds are detected: Ollama, OpenCode serve,
+/// and STRATA. Unsupported legacy kinds are never classified or auto-added.
 
 struct DetectedProviderInfo: Equatable {
-    enum Kind: Equatable { case ollama, openAICompatible, mimoCLI, acp, openCode }
+    enum Kind: Equatable { case ollama, openCode, strata }
     let kind: Kind
     let baseURL: String
     /// Model ids discovered during probing (may be empty if the probe
@@ -30,8 +29,8 @@ enum ProviderAutoDetector {
     static let overallTimeout: TimeInterval = 10
 
     /// Probe an endpoint and classify it. Probes run from most-specific to
-    /// most-generic to avoid misclassifying a specific server as generic
-    /// OpenAI-compatible (plan Блок 3 п.26). The whole sequence is bounded by
+    /// least-specific to avoid misclassifying one server as another
+    /// (plan Блок 3 п.26). The whole sequence is bounded by
     /// `overallTimeout` (E24): each probe is raced against the deadline and
     /// cancelled in-flight once it passes, so a misbehaving endpoint cannot
     /// stretch detection beyond the budget (a start-gate alone would still
@@ -60,10 +59,10 @@ enum ProviderAutoDetector {
         }
 
         // (1b) OpenCode serve: GET /global/health (200) + /config/providers
-        // with the opencode entry. MUST precede the mimoCLI branch: both share
-        // /global/health, but only the session REST API sends to opencode
-        // correctly (verified live against 1.18.29). Without credentials a
-        // locked serve answers 401 and detection honestly yields nil.
+        // with the opencode entry. MUST precede the generic /v1/models probe:
+        // only the session REST API sends to opencode correctly (verified live
+        // against 1.18.29). Without credentials a locked serve answers 401 and
+        // detection honestly yields nil.
         if let health = await probeOnce(probe, url: "\(base)/global/health", headers: headers, deadline: deadline),
            health.0 == 200,
            let providers = await probeOnce(probe, url: "\(base)/config/providers", headers: headers, deadline: deadline),
@@ -71,24 +70,13 @@ enum ProviderAutoDetector {
             return DetectedProviderInfo(kind: .openCode, baseURL: base, models: models)
         }
 
-        // (2) MiMo CLI/Serve: GET /global/health
-        if let health = await probeOnce(probe, url: "\(base)/global/health", headers: headers, deadline: deadline),
-           health.0 == 200 {
-            let models = (await probeOnce(probe, url: "\(base)/global/models", headers: headers, deadline: deadline))
-                .flatMap { parseOpenAIModels($0.1) } ?? []
-            return DetectedProviderInfo(kind: .mimoCLI, baseURL: base, models: models)
-        }
-
-        // (3) ACP: GET /acp/v1/models
-        if let result = await probeOnce(probe, url: "\(base)/acp/v1/models", headers: headers, deadline: deadline),
+        // (2) STRATA: OpenAI-compatible /v1/models on its default port. A
+        // generic server on 8399 is indistinguishable by protocol, and STRATA
+        // is the supported server for that port.
+        if port == LocalProviderKind.strata.defaultPort,
+           let result = await probeOnce(probe, url: "\(base)/v1/models", headers: headers, deadline: deadline),
            let models = parseOpenAIModels(result.1) {
-            return DetectedProviderInfo(kind: .acp, baseURL: base, models: models)
-        }
-
-        // (4) Generic OpenAI-compatible: GET /v1/models (fallback)
-        if let result = await probeOnce(probe, url: "\(base)/v1/models", headers: headers, deadline: deadline),
-           let models = parseOpenAIModels(result.1) {
-            return DetectedProviderInfo(kind: .openAICompatible, baseURL: base, models: models)
+            return DetectedProviderInfo(kind: .strata, baseURL: base, models: models)
         }
 
         return nil

@@ -397,6 +397,11 @@ enum AppLocalizationKey: String, CaseIterable {
     case locAddInternalModel
     case locNoInternalModels
     case locInternalModelsHint
+    case locInternalModelBadge
+    case locInternalModelBadgeHelp
+    case locMarkAsInternalModel
+    case locUnmarkAsInternalModel
+    case locInternalModelUnavailable
     case locMoveUp
     case locMoveDown
     case locFree
@@ -1075,6 +1080,11 @@ enum AppLocalization {
         "locAddInternalModel": ["en": "Add internal model", "ru": "Добавить внутреннюю модель", "es": "Añadir modelo interno", "fr": "Ajouter un modèle interne", "de": "Internes Modell hinzufügen", "zh": "添加内部模型", "ja": "内部モデルを追加", "ko": "내부 모델 추가", "pt": "Adicionar modelo interno", "ar": "إضافة نموذج داخلي"],
         "locNoInternalModels": ["en": "No internal models selected", "ru": "Внутренние модели не выбраны", "es": "No hay modelos internos seleccionados", "fr": "Aucun modèle interne sélectionné", "de": "Keine internen Modelle ausgewählt", "zh": "未选择内部模型", "ja": "内部モデルが選択されていません", "ko": "선택된 내부 모델 없음", "pt": "Nenhum modelo interno selecionado", "ar": "لم يتم اختيار نماذج داخلية"],
         "locInternalModelsHint": ["en": "Add one or more models. They are tried in order; the next model is used if one fails.", "ru": "Добавьте одну или несколько моделей. Они пробуются по порядку; при ошибке используется следующая.", "es": "Añade uno o más modelos. Se prueban en orden; si uno falla, se usa el siguiente.", "fr": "Ajoutez un ou plusieurs modèles. Ils sont essayés dans l’ordre ; le suivant est utilisé en cas d’échec.", "de": "Fügen Sie ein oder mehrere Modelle hinzu. Sie werden der Reihe nach versucht; bei einem Fehler wird das nächste verwendet.", "zh": "添加一个或多个模型。它们会按顺序尝试；如果某个模型失败，则使用下一个。", "ja": "1 つ以上のモデルを追加してください。順番に試行され、失敗した場合は次のモデルが使用されます。", "ko": "모델을 하나 이상 추가하세요. 순서대로 시도하며 실패하면 다음 모델을 사용합니다.", "pt": "Adicione um ou mais modelos. Eles são tentados em ordem; o próximo é usado se um falhar.", "ar": "أضف نموذجاً واحداً أو أكثر. ستُجرَّب بالترتيب؛ ويُستخدم التالي عند فشل أحدها."],
+        "locInternalModelBadge": ["en": "Internal", "ru": "Внутренняя", "es": "Interno", "fr": "Interne", "de": "Intern", "zh": "内部", "ja": "内部", "ko": "내부", "pt": "Interno", "ar": "داخلي"],
+        "locInternalModelBadgeHelp": ["en": "Used for myCoder background work", "ru": "Используется для фоновой работы myCoder", "es": "Se usa para el trabajo en segundo plano de myCoder", "fr": "Utilisé pour les tâches d’arrière-plan de myCoder", "de": "Wird für myCoder-Hintergrundarbeit verwendet", "zh": "用于 myCoder 后台工作", "ja": "myCoder のバックグラウンド処理に使用", "ko": "myCoder 백그라운드 작업에 사용", "pt": "Usado para trabalho em segundo plano do myCoder", "ar": "يُستخدم لعمل myCoder في الخلفية"],
+        "locMarkAsInternalModel": ["en": "Use as internal model", "ru": "Сделать внутренней моделью", "es": "Usar como modelo interno", "fr": "Utiliser comme modèle interne", "de": "Als internes Modell verwenden", "zh": "用作内部模型", "ja": "内部モデルとして使用", "ko": "내부 모델로 사용", "pt": "Usar como modelo interno", "ar": "استخدام كنموذج داخلي"],
+        "locUnmarkAsInternalModel": ["en": "Remove from internal models", "ru": "Убрать из внутренних моделей", "es": "Quitar de los modelos internos", "fr": "Retirer des modèles internes", "de": "Aus internen Modellen entfernen", "zh": "从内部模型中移除", "ja": "内部モデルから削除", "ko": "내부 모델에서 제거", "pt": "Remover dos modelos internos", "ar": "إزالة من النماذج الداخلية"],
+        "locInternalModelUnavailable": ["en": "This model cannot run in the background", "ru": "Эта модель не может работать в фоне", "es": "Este modelo no puede ejecutarse en segundo plano", "fr": "Ce modèle ne peut pas s’exécuter en arrière-plan", "de": "Dieses Modell kann nicht im Hintergrund ausgeführt werden", "zh": "此模型无法在后台运行", "ja": "このモデルはバックグラウンドで実行できません", "ko": "이 모델은 백그라운드에서 실행할 수 없습니다", "pt": "Este modelo não pode ser executado em segundo plano", "ar": "لا يمكن تشغيل هذا النموذج في الخلفية"],
         "locMoveUp": ["en": "Move up", "ru": "Выше", "es": "Subir", "fr": "Monter", "de": "Nach oben", "zh": "上移", "ja": "上へ移動", "ko": "위로 이동", "pt": "Mover para cima", "ar": "نقل للأعلى"],
         "locMoveDown": ["en": "Move down", "ru": "Ниже", "es": "Bajar", "fr": "Descendre", "de": "Nach unten", "zh": "下移", "ja": "下へ移動", "ko": "아래로 이동", "pt": "Mover para baixo", "ar": "نقل للأسفل"],
         "locFree": ["en": "Free", "ru": "Бесплатно", "es": "Gratis", "fr": "Gratuit", "de": "Kostenlos", "zh": "免费", "ja": "無料", "ko": "무료", "pt": "Grátis", "ar": "مجاني"],

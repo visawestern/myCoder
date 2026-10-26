@@ -29,34 +29,21 @@ struct ProviderAutoDetectorTests {
         #expect(info?.baseURL == "http://localhost:11434")
     }
 
-    @Test func detectsMimoCLIFromGlobalHealth() async {
+    @Test func detectsStrataOnDefaultPort() async {
         let probe = ScriptedProbe(routes: [
-            ("/global/health", 200, nil),
-            ("/global/models", 200, data(#"{"data":[{"id":"gpt-4o"}]}"#))
+            ("/v1/models", 200, data(#"{"data":[{"id":"strata-model"}]}"#))
         ])
-        let info = await ProviderAutoDetector.detect(host: "127.0.0.1", port: 4096, probe: probe)
-        #expect(info?.kind == .mimoCLI)
-        #expect(info?.models == ["gpt-4o"])
+        let info = await ProviderAutoDetector.detect(host: "127.0.0.1", port: 8399, probe: probe)
+        #expect(info?.kind == .strata)
+        #expect(info?.models == ["strata-model"])
     }
 
-    @Test func detectsACPFromAcpModels() async {
+    @Test func genericOpenAICompatibleOutsideStrataPortIsNotDetected() async {
         let probe = ScriptedProbe(routes: [
-            ("/acp/v1/models", 200, data(#"{"data":[{"id":"model-a"}]}"#))
-        ])
-        let info = await ProviderAutoDetector.detect(host: "localhost", port: 8080, probe: probe)
-        #expect(info?.kind == .acp)
-    }
-
-    @Test func fallsBackToGenericOpenAICompatible() async {
-        // Explicit 404 for /acp/v1/models so the ACP probe step fails before the
-        // generic /v1/models fallback (ScriptedProbe matches by url substring).
-        let probe = ScriptedProbe(routes: [
-            ("/acp/v1/models", 404, Data()),
             ("/v1/models", 200, data(#"{"data":[{"id":"llama"}]}"#))
         ])
         let info = await ProviderAutoDetector.detect(host: "localhost", port: 1234, probe: probe)
-        #expect(info?.kind == .openAICompatible)
-        #expect(info?.models == ["llama"])
+        #expect(info == nil)
     }
 
     @Test func returnsNilWhenNothingResponds() async {
@@ -101,7 +88,7 @@ struct ProviderAutoDetectorTests {
     @Test func detectsOpenCodeServeViaConfigProviders() async {
         // Authenticated `opencode serve`: /global/health is 200 AND
         // /config/providers carries the opencode entry — must win over the
-        // generic mimoCLI branch (same health path, wrong protocol).
+        // generic /v1/models branch.
         let probe = ScriptedProbe(routes: [
             ("/global/health", 200, data(#"{"healthy":true,"version":"1.18.29"}"#)),
             ("/config/providers", 200, data(#"{"providers":[{"id":"opencode","models":{"big-pickle":{"id":"big-pickle"},"muse-spark-1.3-contributor-free":{"id":"muse-spark-1.3-contributor-free"}}},{"id":"google","models":{"gemini-flash-latest":{"id":"gemini-flash-latest"}}}]}"#)),

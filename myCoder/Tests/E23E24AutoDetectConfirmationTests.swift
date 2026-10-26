@@ -31,20 +31,21 @@ struct E23E24AutoDetectConfirmationTests {
 
     // MARK: - E24: overall timeout enforced
 
-    @Test("detection stops once the overall deadline passes instead of probing all 4 steps")
+    @Test("detection stops once the overall deadline passes instead of probing every step")
     func overallTimeoutStopsSequentialProbes() async {
-        // Only the LAST probe (/v1/models) would succeed, but each probe is
-        // slow (100ms) while the overall budget is 150ms → the deadline must
-        // cut the sequence short and return nil instead of reaching the hit.
+        // Only the last probe (/v1/models on the STRATA port) would succeed,
+        // but each probe is slow (100ms) while the overall budget is 150ms →
+        // the deadline must cut the sequence short and return nil instead of
+        // reaching the hit.
         let probe = SlowCountingProbe(delay: 0.1, routes: [
             ("/v1/models", 200, data(#"{"data":[{"id":"llama"}]}"#))
         ])
-        let info = await ProviderAutoDetector.detect(host: "localhost", port: 1234,
+        let info = await ProviderAutoDetector.detect(host: "localhost", port: 8399,
                                                      probe: probe, overallTimeout: 0.15)
 
         #expect(info == nil, "the late-hit probe must be stopped by the deadline")
-        #expect(probe.callCount < 4, "not all sequential probes may run (ran \(probe.callCount))")
-        // The deadline is proven by callCount < 4 (the sequence is cut short).
+        #expect(probe.callCount < 3, "not all sequential probes may run (ran \(probe.callCount))")
+        // The deadline is proven by callCount < 3 (the sequence is cut short).
         // Wall-clock is not asserted tightly: under a loaded parallel test
         // runner Task.sleep stretches far beyond nominal sleep time.
     }
@@ -81,9 +82,9 @@ struct E23E24AutoDetectConfirmationTests {
 
     @Test("confirmation message includes host:port and model count")
     func confirmationMessageIncludesDetails() {
-        let info = DetectedProviderInfo(kind: .openAICompatible, baseURL: "http://localhost:1234", models: ["a", "b", "c"])
-        let message = LocalProviderConfirmLogic.message(for: info, host: "localhost", port: 1234)
-        #expect(message.contains("localhost:1234"))
+        let info = DetectedProviderInfo(kind: .strata, baseURL: "http://localhost:8399", models: ["a", "b", "c"])
+        let message = LocalProviderConfirmLogic.message(for: info, host: "localhost", port: 8399)
+        #expect(message.contains("localhost:8399"))
         #expect(message.contains("3"))
     }
 
@@ -100,13 +101,11 @@ struct E23E24AutoDetectConfirmationTests {
 
     @Test("cancelling leaves the locals list unchanged (no auto-add)")
     func cancelDoesNotAdd() {
-        let info = DetectedProviderInfo(kind: .acp, baseURL: "http://localhost:8080", models: ["m"])
+        let info = DetectedProviderInfo(kind: .strata, baseURL: "http://localhost:8399", models: ["m"])
         // The confirmation decision is explicit: no config is produced on cancel.
-        // An ACP server is now representable as its own local kind — it must
-        // NOT be folded into the OpenCode card (which routes to OpenAI
-        // /v1/chat/completions, a protocol a real ACP server doesn't speak).
-        #expect(LocalProviderConfirmLogic.config(from: info, host: "localhost", port: 8080).kind == .acp,
-                "detected ACP must stay ACP, not masquerade as OpenCode")
+        // A detected STRATA server must keep its own kind, not masquerade as
+        // OpenCode (different transport).
+        #expect(LocalProviderConfirmLogic.config(from: info, host: "localhost", port: 8399).kind == .strata)
     }
 
     // MARK: - E24 hardening: the deadline must bound probe DURATION, not just probe start
@@ -176,34 +175,29 @@ struct E23E24AutoDetectConfirmationTests {
         #expect(probe.callCount == 0)
     }
 
-    // MARK: - E23: detected ACP must remain ACP end-to-end (config → send route)
+    // MARK: - E23: detected STRATA must remain STRATA end-to-end (config → send route)
 
-    @Test("confirmed ACP detection maps to the ACP local kind, not OpenCode")
-    func acpDetectionMapsToAcpKind() {
-        let info = DetectedProviderInfo(kind: .acp, baseURL: "http://localhost:8080", models: ["m"])
-        let cfg = LocalProviderConfirmLogic.config(from: info, host: "localhost", port: 8080)
-        #expect(cfg.kind == .acp)
-        #expect(cfg.apiBaseURL == "http://localhost:8080/acp/v1",
-                "ACPClient appends chat/completions to this base — it must point at /acp/v1")
+    @Test("confirmed STRATA detection maps to the STRATA local kind")
+    func strataDetectionMapsToStrataKind() {
+        let info = DetectedProviderInfo(kind: .strata, baseURL: "http://localhost:8399", models: ["m"])
+        let cfg = LocalProviderConfirmLogic.config(from: info, host: "localhost", port: 8399)
+        #expect(cfg.kind == .strata)
+        #expect(cfg.apiBaseURL == "http://localhost:8399")
     }
 
     @Test("every detected kind maps to a local kind without losing protocol")
     func allDetectedKindsMapSensibly() {
         let ollama = DetectedProviderInfo(kind: .ollama, baseURL: "http://x", models: ["a"])
         #expect(LocalProviderConfirmLogic.config(from: ollama, host: "x", port: 1).kind == .ollama)
-        let mimo = DetectedProviderInfo(kind: .mimoCLI, baseURL: "http://x", models: ["a"])
-        #expect(LocalProviderConfirmLogic.config(from: mimo, host: "x", port: 1).kind == .localAgent)
-        let compat = DetectedProviderInfo(kind: .openAICompatible, baseURL: "http://x", models: ["a"])
-        #expect(LocalProviderConfirmLogic.config(from: compat, host: "x", port: 1).kind == .openAICompatible)
-        let acp = DetectedProviderInfo(kind: .acp, baseURL: "http://x", models: ["a"])
-        #expect(LocalProviderConfirmLogic.config(from: acp, host: "x", port: 1).kind == .acp)
+        let strata = DetectedProviderInfo(kind: .strata, baseURL: "http://x", models: ["a"])
+        #expect(LocalProviderConfirmLogic.config(from: strata, host: "x", port: 1).kind == .strata)
         let oc = DetectedProviderInfo(kind: .openCode, baseURL: "http://x", models: ["a"])
         #expect(LocalProviderConfirmLogic.config(from: oc, host: "x", port: 1).kind == .openCode)
     }
 
-    @Test("an auto-detected ACP local provider routes through the ACP route, not OpenAI-compatible")
-    func acpLocalProviderRoutesToACP() {
-        let local = LocalProviderConfig(kind: .acp, host: "localhost", port: 8080)
+    @Test("an auto-detected STRATA local provider routes through OpenAI-compatible /v1")
+    func strataLocalProviderRoutesToOpenAICompatible() {
+        let local = LocalProviderConfig(kind: .strata, host: "localhost", port: 8399)
         let route = SendRouteResolver.route(
             selectedProviderID: local.id,
             selectedModel: "m",
@@ -213,11 +207,11 @@ struct E23E24AutoDetectConfirmationTests {
             localProviders: [local],
             webProviderIDs: []
         )
-        #expect(route == .acp)
+        #expect(route == .openAICompatible(baseURL: "http://localhost:8399/v1", apiKey: nil, model: "m"))
     }
 
-    @Test("Ollama locals still route as OpenAI-compatible; OpenCode locals use the session API")
-    func nonACPLocalsStillRouteOpenAICompatible() {
+    @Test("Ollama/STRATA locals route as OpenAI-compatible; OpenCode locals use the session API")
+    func supportedLocalsStillRouteCorrectly() {
         let openCode = LocalProviderConfig(kind: .openCode, host: "localhost", port: 4096)
         let route = SendRouteResolver.route(
             selectedProviderID: openCode.id, selectedModel: "m",

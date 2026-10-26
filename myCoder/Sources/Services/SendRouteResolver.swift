@@ -43,20 +43,15 @@ enum SendRouteResolver {
            webProviderIDs.contains(webID) {
             return .web(configID: webID)
         }
-        // 2) Local provider (Ollama/OpenCode/MiMo CLI/ACP) → OpenAI-compatible
-        //    HTTP, except ACP which keeps its own route (an ACP server speaks
-        //    /acp/v1, not OpenAI /v1/chat/completions).
+        // 2) Local provider (Ollama/STRATA) → OpenAI-compatible HTTP, except
+        //    OpenCode which keeps its session REST route.
         if let local = localProviders.first(where: { $0.id == selectedProviderID && $0.isEnabled }) {
             switch local.kind {
-            case .ollama, .openAICompatible:
+            case .ollama, .strata:
                 return .openAICompatible(baseURL: "\(local.apiBaseURL)/v1", apiKey: nil, model: selectedModel)
             case .openCode:
                 return .openCodeServe(baseURL: local.apiBaseURL, headers: local.authHeaders(),
                                       providerID: local.openCodeProviderID, model: selectedModel)
-            case .localAgent:
-                return .openAICompatible(baseURL: local.apiBaseURL, apiKey: nil, model: selectedModel)
-            case .acp:
-                return .acp
             }
         }
         // 3) ACP provider.

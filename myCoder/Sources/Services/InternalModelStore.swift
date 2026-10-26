@@ -83,7 +83,9 @@ enum InternalModelResolver {
 
     static func route(for ref: InternalModelRef,
                       customProviders: [CustomProvider]? = nil,
-                      localProviders: [LocalProviderConfig]? = nil) -> SpecPlannerRoute? {
+                      localProviders: [LocalProviderConfig]? = nil,
+                      serverProviders: [MimoProviderResponse]? = nil,
+                      serverBaseURL: String? = nil) -> SpecPlannerRoute? {
         if ref.providerID == MyCoderAutoFreeProvider.builtInID {
             return .autoFree(model: ref.modelID)
         }
@@ -99,51 +101,72 @@ enum InternalModelResolver {
         }
 
         let locals = localProviders ?? LocalProviderLogic.load()
-        guard let local = locals.first(where: { $0.id == ref.providerID && $0.isEnabled }) else {
-            return nil
+        if let local = locals.first(where: { $0.id == ref.providerID && $0.isEnabled }) {
+            switch local.kind {
+            case .ollama, .strata:
+                return .openAICompatible(
+                    baseURL: "\(local.apiBaseURL)/v1",
+                    apiKey: nil,
+                    model: ref.modelID
+                )
+            case .openCode:
+                return .openCodeServe(
+                    baseURL: local.apiBaseURL,
+                    headers: local.authHeaders(),
+                    providerID: local.openCodeProviderID,
+                    model: ref.modelID
+                )
+            }
         }
-        switch local.kind {
-        case .ollama, .openAICompatible, .localAgent:
-            return .openAICompatible(
-                baseURL: local.kind == .ollama ? "\(local.apiBaseURL)/v1" : local.apiBaseURL,
-                apiKey: nil,
-                model: ref.modelID
-            )
-        case .openCode:
+
+        // Server-provided models (OpenCode serve catalog, e.g. Google/Nvidia)
+        // run through the same session REST API as the visible chat.
+        let servers = serverProviders ?? ServerProviderCatalogStore.load()
+        if servers.contains(where: { $0.id == ref.providerID }) {
             return .openCodeServe(
-                baseURL: local.apiBaseURL,
-                headers: local.authHeaders(),
-                providerID: local.openCodeProviderID,
+                baseURL: serverBaseURL ?? ServerProviderCatalogStore.serverBaseURL(),
+                headers: [:],
+                providerID: ref.providerID,
                 model: ref.modelID
             )
-        case .acp:
-            return nil
         }
+        return nil
     }
 
     static func availableModels(customProviders: [CustomProvider],
                                 localProviders: [LocalProviderConfig],
-                                freeModels: [String]) -> [InternalModelRef] {
+                                freeModels: [String],
+                                serverProviders: [MimoProviderResponse]? = nil) -> [InternalModelRef] {
         var refs: [InternalModelRef] = []
+        var seen = Set<InternalModelRef>()
+        func append(_ ref: InternalModelRef) {
+            if seen.insert(ref).inserted { refs.append(ref) }
+        }
         for custom in customProviders where custom.isEnabled {
-            refs.append(contentsOf: custom.models.sorted().map {
-                InternalModelRef(providerID: custom.id, modelID: $0)
-            })
+            for model in custom.models.sorted() {
+                append(InternalModelRef(providerID: custom.id, modelID: model))
+            }
         }
-        for local in localProviders where local.isEnabled && local.kind != .acp {
-            refs.append(contentsOf: local.models.sorted().map {
-                InternalModelRef(providerID: local.id, modelID: $0)
-            })
+        for local in localProviders where local.isEnabled {
+            for model in local.models.sorted() {
+                append(InternalModelRef(providerID: local.id, modelID: model))
+            }
         }
-        refs.append(contentsOf: freeModels.map {
-            InternalModelRef(providerID: MyCoderAutoFreeProvider.builtInID, modelID: $0)
-        })
+        for server in serverProviders ?? ServerProviderCatalogStore.load() {
+            for model in server.models.keys.sorted() {
+                append(InternalModelRef(providerID: server.id, modelID: model))
+            }
+        }
+        for model in freeModels {
+            append(InternalModelRef(providerID: MyCoderAutoFreeProvider.builtInID, modelID: model))
+        }
         return refs
     }
 
     static func displayName(for ref: InternalModelRef,
                             customProviders: [CustomProvider],
-                            localProviders: [LocalProviderConfig]) -> String {
+                            localProviders: [LocalProviderConfig],
+                            serverProviders: [MimoProviderResponse]? = nil) -> String {
         if ref.providerID == MyCoderAutoFreeProvider.builtInID {
             return L.t(AppLocalizationKey.locOpenCodeZen)
         }
@@ -152,6 +175,9 @@ enum InternalModelResolver {
         }
         if let local = localProviders.first(where: { $0.id == ref.providerID }) {
             return local.displayName
+        }
+        if let server = (serverProviders ?? ServerProviderCatalogStore.load()).first(where: { $0.id == ref.providerID }) {
+            return server.name
         }
         return ref.providerID
     }
