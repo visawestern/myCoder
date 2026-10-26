@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>myCoder app icon</title>
+  <rect width="1024" height="1024" fill="#1A1D29"/>
+  <g transform="translate(194.6,222.6) scale(2.48)">
+    <g fill="none" stroke="#6EE7F2" stroke-width="28" stroke-linecap="round">
+    <path d="M48 204 V100"/>
+    <path d="M48 100 C48 62 128 62 128 100"/>
+    <path d="M128 100 V204"/>
+    <path d="M128 100 C128 62 208 62 208 100"/>
+    <path d="M208 100 V204"/>
+  </g>
+    <circle cx="88" cy="140" r="11" fill="#6EE7F2"/>
+  <circle cx="168" cy="140" r="11" fill="#6EE7F2"/>
+  </g>
+</svg>

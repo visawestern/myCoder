@@ -1,0 +1,121 @@
+{
+  "version": 4,
+  "updatedAt": "2026-08-06",
+  "note": "Vendor selectors for web-chat automation. Model lists and effort selectors from live site inspection (2026-08-06).",
+  "vendors": [
+    {
+      "id": "kimi",
+      "name": "Kimi (Moonshot AI)",
+      "chatURL": "https://www.kimi.ai/",
+      "loginURL": "https://www.kimi.ai/",
+      "models": ["k2-thinking"],
+      "effortToggle": "thinking",
+      "selectors": {
+        "input": "div.chat-input-editor, textarea, div[contenteditable='true']",
+        "sendButton": ".send-button-container, .chat-editor-action button[class*='send'], button[type='submit']",
+        "responseContainer": "div[class*='markdown']",
+        "stopButton": ".send-button-container.stop, button[aria-label*='stop' i]",
+        "modelDropdown": ".current-model",
+        "modelButton": ".current-model",
+        "modelItem": ".model-item .model-name .name, .model-item span.name, [class*='model-item'] span.name",
+        "effortDropdown": ".effort-item .effort-current, .effort-item",
+        "effortItem": ".effort-item .effort-value, .effort-value",
+        "newChatTexts": [
+          "New Chat",
+          "Новый чат"
+        ],
+        "newChatSelector": ".new-chat-btn",
+        "loginIndicator": "input[type='password'], button:has-text('Log in')"
+      }
+    },
+    {
+      "id": "qwen",
+      "name": "Qwen (Alibaba Cloud)",
+      "chatURL": "https://chat.qwen.ai/",
+      "loginURL": "https://chat.qwen.ai/auth",
+      "models": [
+        "Qwen3.7-Plus",
+        "Qwen3.8-Max",
+        "Qwen3.7-Max",
+        "Qwen3.7-Coder",
+        "Qwen3.7-Coder-Plus"
+      ],
+      "effortToggle": "deep-thinking",
+      "selectors": {
+        "input": "textarea.message-input-textarea, div[contenteditable='true']",
+        "sendButton": ".chat-prompt-send-button button.send-button, button.send-button, .message-input-right-button-send button, .message-input-right-button-send, button.ant-btn-primary",
+        "responseContainer": "div[class*='markdown-body'], div[class*='response']",
+        "stopButton": "button[class*='stop']",
+        "modelDropdown": ".ant-dropdown-trigger",
+        "modelButton": ".ant-dropdown-trigger",
+        "modelItem": ".wms-list__item",
+        "effortDropdown": ".qwen-thinking-selector .qwen-chat-v2-dropdown-menu-trigger, .qwen-thinking-selector",
+        "effortItem": ".qwen-chat-v2-dropdown-menu-item, [class*='effort-option'], [class*='thinking-option'], [role='option']",
+        "newChatTexts": [
+          "Начать",
+          "Start",
+          "New Chat"
+        ],
+        "newChatSelector": ".new-chat",
+        "loginIndicator": "input[type='password'], button:has-text('Sign in')",
+        "modeSelect": "[class*=\"mode-select\"]",
+        "thinkingSelect": ".qwen-thinking-selector"
+      }
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT (OpenAI)",
+      "chatURL": "https://chatgpt.com/",
+      "loginURL": "https://chatgpt.com/auth/login",
+      "models": [],
+      "effortToggle": "reasoning-effort",
+      "selectors": {
+        "input": "#prompt-textarea, div[contenteditable='true']",
+        "sendButton": "button[data-testid=\"send-button\"], button[aria-label*='Отправить' i], button[aria-label*='send' i]",
+        "responseContainer": "div[data-message-author-role='assistant'], div.font-claude-message, div[class*='markdown']",
+        "stopButton": "button[data-testid='stop-button'], button[aria-label*='Остановить' i], button[aria-label*='stop' i]",
+        "modelDropdown": "button[data-testid*='model-switcher'], button[aria-haspopup='listbox']",
+        "modelButton": "button[data-testid*='model-switcher'], button[aria-haspopup='listbox']",
+        "modelItem": "[role='option'], [class*='model-item'], [class*='ModelSwitcherItem']",
+        "effortDropdown": "[data-testid*='reasoning'], [data-testid*='effort'], button[aria-label*='Think'], button[aria-label*='Reasoning']",
+        "effortItem": "[role='option'], [class*='option']",
+        "loginIndicator": "input[name='username'], button:has-text('Log in')",
+        "newChatTexts": [
+          "New chat",
+          "Новый чат",
+          "Новый диалог",
+          "新对话"
+        ],
+        "newChatSelector": "a[href='/']"
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude (Anthropic)",
+      "chatURL": "https://claude.ai/new",
+      "loginURL": "https://claude.ai/login",
+      "models": [],
+      "effortToggle": "effort",
+      "selectors": {
+        "input": "div.tiptap.ProseMirror, div[contenteditable='true'], textarea",
+        "sendButton": "button[data-testid='chat-input-send'], button[aria-label*='Send message' i], button[aria-label*='send' i], button[class*='send']",
+        "responseContainer": "div[class*='font-claude'], .standard-markdown, div.prose",
+        "stopButton": "button[aria-label*='Stop' i], button[aria-label*='stop' i], button[aria-label*='Остановить' i], [data-is-streaming='true']",
+        "modelDropdown": "button[data-testid='model-selector-dropdown']",
+        "modelButton": "button[data-testid='model-selector-dropdown']",
+        "modelItem": "[role='menuitem']",
+        "effortDropdown": "[role='menuitem'][aria-haspopup='menu'], [class*='effort'] [role='menuitem'], [role='menuitem']",
+        "effortItem": "[role='menuitem'], [role='option'], [class*='option']",
+        "newChatTexts": [
+          "New chat",
+          "New Chat",
+          "Новый чат",
+          "Start new chat"
+        ],
+        "newChatSelector": "a[href='/new']",
+        "loginIndicator": "input[type='email'], button:has-text('Log in'), button:has-text('Continue')",
+        "expandModelLabels": ["More models"]
+      }
+    }
+  ]
+}

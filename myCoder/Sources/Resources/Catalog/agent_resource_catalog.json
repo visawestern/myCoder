@@ -1,0 +1,990 @@
+{
+  "version": 2,
+  "updatedAt": "2026-07-23",
+  "skills": [
+    {
+      "id": "lazyweb",
+      "name": "Lazyweb",
+      "description": "Real product screenshots and UI patterns for design research, onboarding, paywalls, and dashboards.",
+      "category": "Design",
+      "bundlePath": "skill-lazyweb.md",
+      "relatedMCPIds": [
+        "lazyweb"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "canvas",
+      "name": "Canvas",
+      "description": "Build interactive React canvases for charts, tables, timelines, and data-heavy deliverables.",
+      "category": "Productivity",
+      "bundlePath": "skill-canvas.md",
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "create-skill",
+      "name": "Create Skill",
+      "description": "Author new Cursor agent skills with the correct SKILL.md structure and packaging.",
+      "category": "Agent",
+      "bundlePath": "skill-create-skill.md",
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "create-hook",
+      "name": "Create Hook",
+      "description": "Create Cursor hooks.json scripts to automate behavior around agent events.",
+      "category": "Agent",
+      "bundlePath": "skill-create-hook.md",
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "review-bugbot",
+      "name": "Review Bugbot",
+      "description": "Launch a Bugbot subagent to review local branch or uncommitted changes.",
+      "category": "Quality",
+      "bundlePath": "skill-review-bugbot.md",
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "systematic-debugging",
+      "name": "Systematic Debugging",
+      "description": "Structured debugging workflow before proposing fixes for bugs and test failures.",
+      "category": "Quality",
+      "bundlePath": "skill-systematic-debugging.md",
+      "version": "1.0.0",
+      "sourceRepo": "mimo-macos"
+    },
+    {
+      "id": "pdf",
+      "name": "PDF Documents",
+      "description": "Read, extract, and author PDF documents.",
+      "category": "Documents",
+      "embeddedMarkdown": "---\nname: pdf\ndescription: Read, extract, and author PDF documents.\n---\nWhen the user asks to read, extract, or author a PDF document, use the appropriate library to parse/produce it. Never paste raw base64 as the document — write a real file and report its path. Preserve formatting, styles, and tables. Prefer streaming large documents to disk.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "docx",
+      "name": "DOCX Documents",
+      "description": "Read, extract, and author Word DOCX documents.",
+      "category": "Documents",
+      "embeddedMarkdown": "---\nname: docx\ndescription: Read, extract, and author Word DOCX documents.\n---\nWhen the user asks to read, extract, or author a Word DOCX document, use the appropriate library to parse/produce it. Never paste raw base64 as the document — write a real file and report its path. Preserve formatting, styles, and tables. Prefer streaming large documents to disk.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "pptx",
+      "name": "PPTX Documents",
+      "description": "Read, extract, and author PowerPoint PPTX documents.",
+      "category": "Documents",
+      "embeddedMarkdown": "---\nname: pptx\ndescription: Read, extract, and author PowerPoint PPTX documents.\n---\nWhen the user asks to read, extract, or author a PowerPoint PPTX document, use the appropriate library to parse/produce it. Never paste raw base64 as the document — write a real file and report its path. Preserve formatting, styles, and tables. Prefer streaming large documents to disk.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "xlsx",
+      "name": "XLSX Documents",
+      "description": "Read, extract, and author Excel XLSX documents.",
+      "category": "Documents",
+      "embeddedMarkdown": "---\nname: xlsx\ndescription: Read, extract, and author Excel XLSX documents.\n---\nWhen the user asks to read, extract, or author a Excel XLSX document, use the appropriate library to parse/produce it. Never paste raw base64 as the document — write a real file and report its path. Preserve formatting, styles, and tables. Prefer streaming large documents to disk.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "mcp-builder",
+      "name": "MCP Builder",
+      "description": "Generate scaffolded MCP servers (stdio or HTTP) from a tool description, including package manifests and tool handlers.",
+      "category": "Development",
+      "embeddedMarkdown": "---\nname: mcp-builder\ndescription: Generate scaffolded MCP servers (stdio or HTTP) from a tool description, including package manifests and tool handlers.\n---\n# MCP Builder\n\nUse this skill when the user asks to: Generate scaffolded MCP servers (stdio or HTTP) from a tool description, including package manifests and tool handlers.\n\nFollow the established SKILL.md structure. Keep instructions concrete and side-effect-aware. Always verify the result before declaring success.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": [
+        "node>=18"
+      ]
+    },
+    {
+      "id": "web-artifacts-builder",
+      "name": "Web Artifacts Builder",
+      "description": "Produce self-contained interactive HTML/JS artifacts (charts, demos, widgets) from a prompt.",
+      "category": "Development",
+      "embeddedMarkdown": "---\nname: web-artifacts-builder\ndescription: Produce self-contained interactive HTML/JS artifacts (charts, demos, widgets) from a prompt.\n---\n# Web Artifacts Builder\n\nUse this skill when the user asks to: Produce self-contained interactive HTML/JS artifacts (charts, demos, widgets) from a prompt.\n\nFollow the established SKILL.md structure. Keep instructions concrete and side-effect-aware. Always verify the result before declaring success.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "webapp-testing",
+      "name": "Webapp Testing",
+      "description": "Drive end-to-end tests of a local webapp through a browser MCP, report failures with repro steps.",
+      "category": "Development",
+      "embeddedMarkdown": "---\nname: webapp-testing\ndescription: Drive end-to-end tests of a local webapp through a browser MCP, report failures with repro steps.\n---\n# Webapp Testing\n\nUse this skill when the user asks to: Drive end-to-end tests of a local webapp through a browser MCP, report failures with repro steps.\n\nFollow the established SKILL.md structure. Keep instructions concrete and side-effect-aware. Always verify the result before declaring success.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": [
+        "playwright-mcp"
+      ]
+    },
+    {
+      "id": "skill-creator",
+      "name": "Skill Creator",
+      "description": "Meta-skill: author a new SKILL.md with correct frontmatter, trigger description, and instructions.",
+      "category": "Development",
+      "embeddedMarkdown": "---\nname: skill-creator\ndescription: Meta-skill: author a new SKILL.md with correct frontmatter, trigger description, and instructions.\n---\n# Skill Creator\n\nUse this skill when the user asks to: Meta-skill: author a new SKILL.md with correct frontmatter, trigger description, and instructions.\n\nFollow the established SKILL.md structure. Keep instructions concrete and side-effect-aware. Always verify the result before declaring success.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "canvas-design",
+      "name": "Canvas Design",
+      "description": "Design interactive data canvases (charts, tables, timelines) with consistent visual language.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: canvas-design\ndescription: Design interactive data canvases (charts, tables, timelines) with consistent visual language.\n---\n# Canvas Design\n\nDesign interactive data canvases (charts, tables, timelines) with consistent visual language.\n\nAnchor every visual decision to the design system. Prefer composition over duplication. Export assets in the requested format.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "brand-guidelines",
+      "name": "Brand Guidelines",
+      "description": "Apply brand colors, type scale, spacing, and voice consistently across generated UI.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: brand-guidelines\ndescription: Apply brand colors, type scale, spacing, and voice consistently across generated UI.\n---\n# Brand Guidelines\n\nApply brand colors, type scale, spacing, and voice consistently across generated UI.\n\nAnchor every visual decision to the design system. Prefer composition over duplication. Export assets in the requested format.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "algorithmic-art",
+      "name": "Algorithmic Art",
+      "description": "Generate procedural/generative art (p5.js, SVG, shaders) from a creative prompt.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: algorithmic-art\ndescription: Generate procedural/generative art (p5.js, SVG, shaders) from a creative prompt.\n---\n# Algorithmic Art\n\nGenerate procedural/generative art (p5.js, SVG, shaders) from a creative prompt.\n\nAnchor every visual decision to the design system. Prefer composition over duplication. Export assets in the requested format.\n",
+      "version": "1.0.0",
+      "sourceRepo": "anthropics/skills",
+      "dependencies": []
+    },
+    {
+      "id": "brainstorming",
+      "name": "Brainstorming",
+      "description": "Run a structured brainstorm: diverge → cluster → converge → pick, recording each step.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: brainstorming\ndescription: Run a structured brainstorm: diverge → cluster → converge → pick, recording each step.\n---\n# Brainstorming\n\nRun a structured brainstorm: diverge → cluster → converge → pick, recording each step.\n\nProceed methodically. Do not skip verification. Record decisions and blockers explicitly.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "dispatching-parallel-agents",
+      "name": "Dispatching Parallel Agents",
+      "description": "Split a task into independent subtasks and fan them out to subagents, then merge results.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: dispatching-parallel-agents\ndescription: Split a task into independent subtasks and fan them out to subagents, then merge results.\n---\n# Dispatching Parallel Agents\n\nSplit a task into independent subtasks and fan them out to subagents, then merge results.\n\nProceed methodically. Do not skip verification. Record decisions and blockers explicitly.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "executing-plans",
+      "name": "Executing Plans",
+      "description": "Execute a written plan step by step, marking each step done only after verification.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: executing-plans\ndescription: Execute a written plan step by step, marking each step done only after verification.\n---\n# Executing Plans\n\nExecute a written plan step by step, marking each step done only after verification.\n\nProceed methodically. Do not skip verification. Record decisions and blockers explicitly.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "finishing-dev-branch",
+      "name": "Finishing a Development Branch",
+      "description": "Land a branch cleanly: tests green, deslop, review, merge/PR.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: finishing-dev-branch\ndescription: Land a branch cleanly: tests green, deslop, review, merge/PR.\n---\n# Finishing a Development Branch\n\nLand a branch cleanly: tests green, deslop, review, merge/PR.\n\nProceed methodically. Do not skip verification. Record decisions and blockers explicitly.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "receiving-code-review",
+      "name": "Receiving Code Review",
+      "description": "Triage review comments: address, defer, or push back with rationale; update the PR.",
+      "category": "Quality",
+      "embeddedMarkdown": "---\nname: receiving-code-review\ndescription: Triage review comments: address, defer, or push back with rationale; update the PR.\n---\n# Receiving Code Review\n\nTriage review comments: address, defer, or push back with rationale; update the PR.\n\nWrite the test first. Keep changes minimal and behavior-preserving. Never declare done without a green test.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "requesting-code-review",
+      "name": "Requesting Code Review",
+      "description": "Prepare a branch for review: summarize intent, call out risks, request focused feedback.",
+      "category": "Quality",
+      "embeddedMarkdown": "---\nname: requesting-code-review\ndescription: Prepare a branch for review: summarize intent, call out risks, request focused feedback.\n---\n# Requesting Code Review\n\nPrepare a branch for review: summarize intent, call out risks, request focused feedback.\n\nWrite the test first. Keep changes minimal and behavior-preserving. Never declare done without a green test.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "subagent-driven-development",
+      "name": "Subagent-Driven Development",
+      "description": "Drive implementation by delegating well-scoped units of work to subagents.",
+      "category": "Quality",
+      "embeddedMarkdown": "---\nname: subagent-driven-development\ndescription: Drive implementation by delegating well-scoped units of work to subagents.\n---\n# Subagent-Driven Development\n\nDrive implementation by delegating well-scoped units of work to subagents.\n\nWrite the test first. Keep changes minimal and behavior-preserving. Never declare done without a green test.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "test-driven-development",
+      "name": "Test-Driven Development",
+      "description": "Red-green-refactor: write a failing test, make it pass, then refactor.",
+      "category": "Quality",
+      "embeddedMarkdown": "---\nname: test-driven-development\ndescription: Red-green-refactor: write a failing test, make it pass, then refactor.\n---\n# Test-Driven Development\n\nRed-green-refactor: write a failing test, make it pass, then refactor.\n\nWrite the test first. Keep changes minimal and behavior-preserving. Never declare done without a green test.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "using-git-worktrees",
+      "name": "Using Git Worktrees",
+      "description": "Isolate parallel work in git worktrees; never edit in a shared checkout.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: using-git-worktrees\ndescription: Isolate parallel work in git worktrees; never edit in a shared checkout.\n---\n# Using Git Worktrees\n\nIsolate parallel work in git worktrees; never edit in a shared checkout.\n\nPlans and skills are reusable artifacts: keep them general, concrete, and side-effect-aware.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "verification-before-completion",
+      "name": "Verification Before Completion",
+      "description": "Verify the change by running/building before claiming it is done.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: verification-before-completion\ndescription: Verify the change by running/building before claiming it is done.\n---\n# Verification Before Completion\n\nVerify the change by running/building before claiming it is done.\n\nPlans and skills are reusable artifacts: keep them general, concrete, and side-effect-aware.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "writing-plans",
+      "name": "Writing Plans",
+      "description": "Write a clear, step-by-step plan with acceptance criteria before implementing.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: writing-plans\ndescription: Write a clear, step-by-step plan with acceptance criteria before implementing.\n---\n# Writing Plans\n\nWrite a clear, step-by-step plan with acceptance criteria before implementing.\n\nPlans and skills are reusable artifacts: keep them general, concrete, and side-effect-aware.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "writing-skills",
+      "name": "Writing Skills",
+      "description": "Author reusable SKILL.md files following the standard frontmatter and instruction shape.",
+      "category": "Workflow",
+      "embeddedMarkdown": "---\nname: writing-skills\ndescription: Author reusable SKILL.md files following the standard frontmatter and instruction shape.\n---\n# Writing Skills\n\nAuthor reusable SKILL.md files following the standard frontmatter and instruction shape.\n\nPlans and skills are reusable artifacts: keep them general, concrete, and side-effect-aware.\n",
+      "version": "1.0.0",
+      "sourceRepo": "obra/superpowers",
+      "dependencies": []
+    },
+    {
+      "id": "check-compiler-errors",
+      "name": "Check Compiler Errors",
+      "description": "Run the project's typecheck/build and fix every reported error before proceeding.",
+      "category": "Engineering",
+      "embeddedMarkdown": "---\nname: check-compiler-errors\ndescription: Run the project's typecheck/build and fix every reported error before proceeding.\n---\n# Check Compiler Errors\n\nRun the project's typecheck/build and fix every reported error before proceeding.\n\nTreat CI/compiler output as ground truth. Fix root causes, not symptoms.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "control-cli",
+      "name": "Control CLI",
+      "description": "Drive the project's CLI tooling, parse its output, and act on failures.",
+      "category": "Engineering",
+      "embeddedMarkdown": "---\nname: control-cli\ndescription: Drive the project's CLI tooling, parse its output, and act on failures.\n---\n# Control CLI\n\nDrive the project's CLI tooling, parse its output, and act on failures.\n\nTreat CI/compiler output as ground truth. Fix root causes, not symptoms.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "control-ui",
+      "name": "Control UI",
+      "description": "Drive the project's UI for verification (via a browser MCP) and report visual regressions.",
+      "category": "Engineering",
+      "embeddedMarkdown": "---\nname: control-ui\ndescription: Drive the project's UI for verification (via a browser MCP) and report visual regressions.\n---\n# Control UI\n\nDrive the project's UI for verification (via a browser MCP) and report visual regressions.\n\nTreat CI/compiler output as ground truth. Fix root causes, not symptoms.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": [
+        "playwright-mcp",
+        "chrome-devtools-mcp"
+      ]
+    },
+    {
+      "id": "deslop",
+      "name": "Deslop",
+      "description": "Remove dead code, duplicated logic, and cosmetic leftovers; keep behavior identical.",
+      "category": "Engineering",
+      "embeddedMarkdown": "---\nname: deslop\ndescription: Remove dead code, duplicated logic, and cosmetic leftovers; keep behavior identical.\n---\n# Deslop\n\nRemove dead code, duplicated logic, and cosmetic leftovers; keep behavior identical.\n\nTreat CI/compiler output as ground truth. Fix root causes, not symptoms.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "fix-ci",
+      "name": "Fix CI",
+      "description": "Reproduce the failing CI job locally, fix the root cause, and confirm green before pushing.",
+      "category": "Engineering",
+      "embeddedMarkdown": "---\nname: fix-ci\ndescription: Reproduce the failing CI job locally, fix the root cause, and confirm green before pushing.\n---\n# Fix CI\n\nReproduce the failing CI job locally, fix the root cause, and confirm green before pushing.\n\nTreat CI/compiler output as ground truth. Fix root causes, not symptoms.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "fix-merge-conflicts",
+      "name": "Fix Merge Conflicts",
+      "description": "Resolve merge conflicts by understanding both sides, keeping intent, and re-testing.",
+      "category": "Git/CI",
+      "embeddedMarkdown": "---\nname: fix-merge-conflicts\ndescription: Resolve merge conflicts by understanding both sides, keeping intent, and re-testing.\n---\n# Fix Merge Conflicts\n\nResolve merge conflicts by understanding both sides, keeping intent, and re-testing.\n\nSmall, reviewable PRs win. Keep diffs focused and descriptions honest.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "get-pr-comments",
+      "name": "Get PR Comments",
+      "description": "Fetch and summarize PR review comments for action.",
+      "category": "Git/CI",
+      "embeddedMarkdown": "---\nname: get-pr-comments\ndescription: Fetch and summarize PR review comments for action.\n---\n# Get PR Comments\n\nFetch and summarize PR review comments for action.\n\nSmall, reviewable PRs win. Keep diffs focused and descriptions honest.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "loop-on-ci",
+      "name": "Loop on CI",
+      "description": "Iterate pushing fixes until CI is green, each time addressing the real failure.",
+      "category": "Git/CI",
+      "embeddedMarkdown": "---\nname: loop-on-ci\ndescription: Iterate pushing fixes until CI is green, each time addressing the real failure.\n---\n# Loop on CI\n\nIterate pushing fixes until CI is green, each time addressing the real failure.\n\nSmall, reviewable PRs win. Keep diffs focused and descriptions honest.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "make-pr-easy-to-review",
+      "name": "Make PR Easy to Review",
+      "description": "Scope PRs small, with a clear description and self-review notes.",
+      "category": "Git/CI",
+      "embeddedMarkdown": "---\nname: make-pr-easy-to-review\ndescription: Scope PRs small, with a clear description and self-review notes.\n---\n# Make PR Easy to Review\n\nScope PRs small, with a clear description and self-review notes.\n\nSmall, reviewable PRs win. Keep diffs focused and descriptions honest.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "new-branch-and-pr",
+      "name": "New Branch and PR",
+      "description": "Create a focused branch, commit, push, and open a PR with a templated description.",
+      "category": "Git/CI",
+      "embeddedMarkdown": "---\nname: new-branch-and-pr\ndescription: Create a focused branch, commit, push, and open a PR with a templated description.\n---\n# New Branch and PR\n\nCreate a focused branch, commit, push, and open a PR with a templated description.\n\nSmall, reviewable PRs win. Keep diffs focused and descriptions honest.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "review-and-ship",
+      "name": "Review and Ship",
+      "description": "Self-review the diff, confirm tests, and ship.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: review-and-ship\ndescription: Self-review the diff, confirm tests, and ship.\n---\n# Review and Ship\n\nSelf-review the diff, confirm tests, and ship.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "run-smoke-tests",
+      "name": "Run Smoke Tests",
+      "description": "Run the project's smoke tests and report pass/fail with logs.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: run-smoke-tests\ndescription: Run the project's smoke tests and report pass/fail with logs.\n---\n# Run Smoke Tests\n\nRun the project's smoke tests and report pass/fail with logs.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "verify-this",
+      "name": "Verify This",
+      "description": "Verify a specific change/claim by running it, not by asserting it.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: verify-this\ndescription: Verify a specific change/claim by running it, not by asserting it.\n---\n# Verify This\n\nVerify a specific change/claim by running it, not by asserting it.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "weekly-review",
+      "name": "Weekly Review",
+      "description": "Summarize the week's work: what shipped, what's blocked, what's next.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: weekly-review\ndescription: Summarize the week's work: what shipped, what's blocked, what's next.\n---\n# Weekly Review\n\nSummarize the week's work: what shipped, what's blocked, what's next.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "what-did-i-get-done",
+      "name": "What Did I Get Done",
+      "description": "Produce a changelog of completed work from git history and notes.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: what-did-i-get-done\ndescription: Produce a changelog of completed work from git history and notes.\n---\n# What Did I Get Done\n\nProduce a changelog of completed work from git history and notes.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "workflow-from-chats",
+      "name": "Workflow From Chats",
+      "description": "Turn a chat conversation into a repeatable workflow or plan.",
+      "category": "Reporting",
+      "embeddedMarkdown": "---\nname: workflow-from-chats\ndescription: Turn a chat conversation into a repeatable workflow or plan.\n---\n# Workflow From Chats\n\nTurn a chat conversation into a repeatable workflow or plan.\n\nReport facts with evidence (logs, diffs, links), not assertions.\n",
+      "version": "1.0.0",
+      "sourceRepo": "cursor-team-kit",
+      "dependencies": []
+    },
+    {
+      "id": "design-create",
+      "name": "Design Create",
+      "description": "Create new UI/screens from a brief, following the design system.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: design-create\ndescription: Create new UI/screens from a brief, following the design system.\n---\n# Design Create\n\nCreate new UI/screens from a brief, following the design system.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": [
+        "figma-mcp"
+      ]
+    },
+    {
+      "id": "design-umbrella",
+      "name": "Design Umbrella",
+      "description": "Umbrella skill routing design requests to the right sub-skill.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: design-umbrella\ndescription: Umbrella skill routing design requests to the right sub-skill.\n---\n# Design Umbrella\n\nUmbrella skill routing design requests to the right sub-skill.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": [
+        "figma-mcp",
+        "pablooo-mcp"
+      ]
+    },
+    {
+      "id": "explain-flow",
+      "name": "Explain Flow",
+      "description": "Explain a user/feature flow step by step with diagrams.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: explain-flow\ndescription: Explain a user/feature flow step by step with diagrams.\n---\n# Explain Flow\n\nExplain a user/feature flow step by step with diagrams.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": []
+    },
+    {
+      "id": "propose-ui-changes",
+      "name": "Propose UI Changes",
+      "description": "Propose concrete UI changes with before/after and rationale.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: propose-ui-changes\ndescription: Propose concrete UI changes with before/after and rationale.\n---\n# Propose UI Changes\n\nPropose concrete UI changes with before/after and rationale.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": [
+        "pablooo-mcp"
+      ]
+    },
+    {
+      "id": "quick-search",
+      "name": "Quick Search",
+      "description": "Quickly find a file, symbol, or reference in the project.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: quick-search\ndescription: Quickly find a file, symbol, or reference in the project.\n---\n# Quick Search\n\nQuickly find a file, symbol, or reference in the project.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": []
+    },
+    {
+      "id": "design-update",
+      "name": "Design Update",
+      "description": "Update an existing screen while preserving design tokens and layout.",
+      "category": "Design",
+      "embeddedMarkdown": "---\nname: design-update\ndescription: Update an existing screen while preserving design tokens and layout.\n---\n# Design Update\n\nUpdate an existing screen while preserving design tokens and layout.\n\nAnchor to design tokens. Prefer incremental, reviewable changes.\n",
+      "version": "1.0.0",
+      "sourceRepo": "appdisign",
+      "dependencies": [
+        "figma-mcp"
+      ]
+    },
+    {
+      "id": "remotion-video",
+      "name": "Remotion Video",
+      "category": "Media",
+      "description": "Generate React-based Remotion videos/compositions from a storyboard.",
+      "embeddedMarkdown": "---\nname: remotion-video\ndescription: Generate React-based Remotion videos/compositions from a storyboard.\n---\nRender via the Remotion CLI. Keep compositions parameterized. Export to the requested format and report the path.\n",
+      "version": "1.0.0",
+      "sourceRepo": "remotion-dev/remotion",
+      "dependencies": [
+        "node>=18"
+      ]
+    }
+  ],
+  "mcpServers": [
+    {
+      "id": "lazyweb",
+      "name": "Lazyweb",
+      "description": "Design research MCP with screenshot library, search, and health checks.",
+      "category": "Design",
+      "url": "https://www.lazyweb.com/mcp",
+      "version": "1.0.0",
+      "sourceRepo": "lazyweb",
+      "fetchInstallToken": {
+        "url": "https://www.lazyweb.com/api/mcp/install-token",
+        "method": "POST",
+        "body": "{}",
+        "tokenKeys": [
+          "token",
+          "installToken",
+          "access_token"
+        ]
+      }
+    },
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read and write files in your home directory via MCP (requires Node.js 18+).",
+      "category": "Development",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "{HOME}"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch",
+      "description": "Fetch web content and convert to markdown for the model.",
+      "category": "Core",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "description": "Persistent knowledge graph memory store across sessions.",
+      "category": "Core",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "description": "Structured multi-step reasoning and planning tool.",
+      "category": "Core",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "time",
+      "name": "Time",
+      "description": "Current time, timezone conversion, and clock utilities.",
+      "category": "Core",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-time"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "everything",
+      "name": "Everything",
+      "description": "Reference MCP exercising every protocol feature (testing/demo).",
+      "category": "Core",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-everything"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "description": "Git operations: log, diff, status, blame, branch management.",
+      "category": "Core",
+      "command": "uvx",
+      "args": [
+        "mcp-server-git"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "python3"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "postgres",
+      "name": "Postgres",
+      "description": "Query and inspect a PostgreSQL database (read-only by default).",
+      "category": "Data/Integrations",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "{DATABASE_URL}"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "DATABASE_URL": ""
+      }
+    },
+    {
+      "id": "sqlite",
+      "name": "SQLite",
+      "description": "Query and inspect a SQLite database file.",
+      "category": "Data/Integrations",
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "{DB_PATH}"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "python3"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Search and interact with Slack workspaces.",
+      "category": "Data/Integrations",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "description": "Search and read files from Google Drive.",
+      "category": "Data/Integrations",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-drive"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "description": "Web and local search via the Brave Search API.",
+      "category": "Data/Integrations",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "BRAVE_API_KEY": ""
+      }
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "description": "Read and inspect a Redis instance.",
+      "category": "Data/Integrations",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers-archived",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "GitHub repos, issues, PRs, and actions via the official GitHub MCP server.",
+      "category": "Development",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@github/github-mcp-server"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "github/github-mcp-server",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
+      }
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "description": "Inspect Stripe customers, charges, and events.",
+      "category": "Business",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@stripe/mcp"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "stripe/stripe-mcp",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "STRIPE_SECRET_KEY": ""
+      }
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "description": "Read and create Linear issues and projects.",
+      "category": "Business",
+      "url": "https://mcp.linear.app/sse",
+      "version": "1.0.0",
+      "sourceRepo": "linear/linear-mcp",
+      "transport": "http"
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright",
+      "description": "Full browser automation: navigate, click, fill, screenshot, assert via Playwright.",
+      "category": "Browser Automation",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": null
+    },
+    {
+      "id": "puppeteer",
+      "name": "Puppeteer",
+      "description": "Headless Chrome automation via Puppeteer (archived but popular).",
+      "category": "Browser Automation",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": null
+    },
+    {
+      "id": "chrome-devtools",
+      "name": "Chrome DevTools",
+      "description": "CDP-based inspection, profiling, and debugging of a live Chrome instance.",
+      "category": "Browser Automation",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": null
+    },
+    {
+      "id": "browserbase",
+      "name": "Browserbase",
+      "description": "Managed headless browsers in the cloud for agent workflows.",
+      "category": "Browser Automation",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@browserbasehq/mcp-server"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "modelcontextprotocol/servers",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "BROWSERBASE_API_KEY": ""
+      }
+    },
+    {
+      "id": "figma",
+      "name": "Figma",
+      "description": "Figma Dev Mode MCP — pull designs, components, and tokens from Figma files.",
+      "category": "Design",
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp",
+        "--figma-api-key={FIGMA_API_KEY}"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "GLips/Figma-Context-MCP",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio",
+      "env": {
+        "FIGMA_API_KEY": ""
+      }
+    },
+    {
+      "id": "pablooo",
+      "name": "Pablooo",
+      "description": "Premium UI reference screenshots via mcp.pablooo.club for design inspiration.",
+      "category": "Design",
+      "url": "https://mcp.pablooo.club/mcp",
+      "version": "1.0.0",
+      "sourceRepo": "pablooo",
+      "transport": "http"
+    },
+    {
+      "id": "context7",
+      "name": "Context7",
+      "description": "Up-to-date library/framework documentation lookup for accurate code.",
+      "category": "Productivity",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "upstash/context7",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "shell",
+      "name": "Shell",
+      "description": "Execute sandboxed shell commands and return output (with user approval).",
+      "category": "Development",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-95/desktop-commander"
+      ],
+      "version": "1.0.0",
+      "sourceRepo": "wonderwhy-95/desktop-commander",
+      "requires": [
+        "node>=18"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "id": "everart",
+      "name": "EverArt",
+      "description": "Generate design images/assets via EverArt for prototyping.",
+      "category": "Design",
+      "url": "https://mcp.everart.ai/mcp",
+      "version": "1.0.0",
+      "sourceRepo": "everart",
+      "transport": "http"
+    }
+  ]
+}

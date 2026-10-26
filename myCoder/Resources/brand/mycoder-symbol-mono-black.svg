@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>myCoder logo</title>
+  <g fill="none" stroke="#000" stroke-width="28" stroke-linecap="round">
+    <path d="M48 204 V100"/>
+    <path d="M48 100 C48 62 128 62 128 100"/>
+    <path d="M128 100 V204"/>
+    <path d="M128 100 C128 62 208 62 208 100"/>
+    <path d="M208 100 V204"/>
+  </g>
+  <circle cx="88" cy="140" r="11" fill="#000"/>
+  <circle cx="168" cy="140" r="11" fill="#000"/>
+</svg>
