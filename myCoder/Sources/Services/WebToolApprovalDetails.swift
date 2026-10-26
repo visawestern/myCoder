@@ -74,7 +74,7 @@ struct WebToolApprovalDetails: Equatable {
         case .gitPull: return "Pull remote commits into the current branch."
         case .todoWrite: return "Write or update the session task checklist."
         case .taskCreate: return "Add a task to the session checklist."
-        case .taskUpdate: return "Update a task in the session checklist."
+        case .taskUpdate: return "Update a task in the session checklist or move a task of the execution plan."
         case .task: return "Launch a sub-agent for a complex task."
         default: return tool.description
         }
@@ -115,7 +115,7 @@ struct WebToolApprovalDetails: Equatable {
         case .gitBranch, .gitCheckout:
             return "Changes git branch state in \(projectRoot)."
         case .todoWrite, .taskCreate, .taskUpdate:
-            return "Changes the session task checklist only."
+            return "Changes the session task checklist only (a plan task id moves the task's status in the execution plan)."
         case .task:
             return "Starts a sub-agent that may make further tool calls against this project."
         default:

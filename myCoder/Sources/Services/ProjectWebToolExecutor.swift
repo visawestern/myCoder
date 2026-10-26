@@ -358,18 +358,14 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         MyCoderPaths.todosURL(projectPath: projectRoot)
     }
 
-    /// Read the current todo list from `<project>/.mycoder/todos.json`.
+    /// Read the current checklist AND the active execution plan.
+    /// The plan (spec decomposition) is the authoritative checklist: the user
+    /// asked for the plan to be aliased into `todo_read`, so the assistant
+    /// always sees the atomic tasks, their dependencies and their criteria.
     private func todoRead() -> String {
         let todos = loadTodoItems()
-        guard !todos.isEmpty else { return "[]" }
-        var lines: [String] = []
-        for item in todos {
-            let id = item["id"] as? String ?? "?"
-            let content = item["content"] as? String ?? ""
-            let status = item["status"] as? String ?? "pending"
-            lines.append("[\(status)] \(id): \(content)")
-        }
-        return lines.joined(separator: "\n")
+        let plan = PlanTodoBridge.planItems(projectPath: projectRoot)
+        return PlanTodoBridge.mergedText(sessionTodos: todos, planItems: plan)
     }
 
     /// Raw todo items (bare array), shared by todo_read/todo_write and the
@@ -474,7 +470,12 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     private func taskUpdate(id: String, content: String?, status: String?) -> String {
         var todos = loadTodoItems()
         guard let idx = todos.firstIndex(where: { ($0["id"] as? String) == id }) else {
-            return "error: no task with id '\(id)' — use task_list to see ids"
+            // The id may address a task of the execution plan (the plan is
+            // aliased into the todo tools) — move that one instead.
+            if let planResult = updatePlanItem(id: id, status: status) {
+                return planResult
+            }
+            return "error: no task with id '\(id)' — use todo_read to see ids"
         }
         if let content, !content.isEmpty {
             todos[idx]["content"] = content
@@ -489,6 +490,47 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         guard result.hasPrefix("ok") else { return result }
         let item = todos[idx]
         return "ok: updated task \(id) [\((item["status"] as? String) ?? "pending")]: \((item["content"] as? String) ?? "")"
+    }
+
+    /// Move a task of the execution plan (status only — the plan's text is
+    /// owned by the planner). Returns nil when the id is not a plan task.
+    private func updatePlanItem(id: String, status: String?) -> String? {
+        guard let status, !status.isEmpty else { return nil }
+        guard let database = try? ProjectDatabaseManager.manager(forProjectPath: projectRoot) else {
+            return nil
+        }
+        let store = database.makeSpecStore()
+        let projectID = ProjectIdentityLogic.projectID(for: projectRoot)
+        guard let revision = try? store.latestRevision(projectID: projectID) else { return nil }
+        let nodes = (try? store.nodes(revisionID: revision.id)) ?? []
+        guard let node = nodes.first(where: { $0.externalKey == id }) else { return nil }
+        let planStatus = Self.planStatus(for: status)
+        // The plan runs one task at a time: only the next runnable task may
+        // be started (same rule the spec wizard enforces).
+        if planStatus == "running" {
+            let edges = (try? store.edges(revisionID: revision.id)) ?? []
+            let next = SpecNodeExecutionLogic.nextRunnableNode(nodes: nodes, edges: edges)
+            guard next?.id == node.id else {
+                let nextKey = next?.externalKey ?? "none"
+                return "error: task \(id) is not the next runnable task (next: \(nextKey)) — finish or skip the current task first"
+            }
+        }
+        guard (try? store.updateNodeStatus(nodeID: node.id, status: planStatus, updatedAt: Int64(Date().timeIntervalSince1970))) == true else {
+            return "error: could not update plan task \(id)"
+        }
+        return "ok: updated plan task \(id) [\(planStatus)]: \(node.title)"
+    }
+
+    /// Todo status vocabulary → plan status vocabulary.
+    static func planStatus(for status: String) -> String {
+        switch status.lowercased() {
+        case "completed", "complete", "done":
+            return "done"
+        case "in_progress", "in-progress", "inprogress", "active":
+            return "running"
+        default:
+            return "pending"
+        }
     }
 
     // MARK: - Installed skill lookup (Claude Code Skill parity)

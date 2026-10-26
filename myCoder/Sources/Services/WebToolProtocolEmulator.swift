@@ -66,7 +66,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .skill: return #"{"name": "<installed skill id> (omit to list installed skills)"}"#
         case .taskCreate: return #"{"content": "<task text>", "status": "<optional pending|in_progress|completed>"}"#
         case .taskList: return #"{}"#
-        case .taskUpdate: return #"{"id": "<todo id>", "content": "<optional new text>", "status": "<optional pending|in_progress|completed>"}"#
+        case .taskUpdate: return #"{"id": "<todo id or plan task id>", "content": "<optional new text>", "status": "<optional pending|in_progress|completed>"}"#
         }
     }
 
@@ -87,8 +87,8 @@ enum WebEmulatedTool: String, CaseIterable {
         case .gitPush: return "Push commits to remote."
         case .gitPull: return "Pull commits from remote."
         case .glob: return "Find files matching a glob pattern."
-        case .todoRead: return "Read the current todo list."
-        case .todoWrite: return "Write/update the todo list."
+        case .todoRead: return "Read the current execution plan and todo checklist."
+        case .todoWrite: return "Write/update the todo checklist (replaces the whole list)."
         case .task: return "Launch a sub-agent for a complex task (runs in background, returns result)."
         case .webFetch: return "Fetch a web page as text (http/https only, bounded)."
         case .skill: return "Show an installed skill's instructions (omit name to list skills)."
@@ -234,7 +234,7 @@ enum WebToolProtocolEmulator {
             policy += "; git_* for VCS"
         }
         if listedNames2.contains("todo_read") {
-            policy += "; todo_* for checklists"
+            policy += "; todo_* for the checklist, todo_read also shows the current execution plan (its task ids are the plan ids — todo_update/todo_edit moves a plan task)"
         }
         policy += ". Page large files with read_file offset/limit instead of re-reading from the start. When done, reply without a tool block."
         lines.append(policy)
@@ -592,10 +592,16 @@ enum WebToolProtocolEmulator {
         // File search & glob
         case "glob", "glob_search", "find_files":
             return WebEmulatedTool.glob.rawValue
-        case "todo_read", "todos", "todo", "todoread":
+        case "todo_read", "todos", "todo", "todoread", "read_todos", "plan", "plan_read", "current_plan":
             return WebEmulatedTool.todoRead.rawValue
-        case "todo_write", "todowrite", "todo_add", "todo_update":
+        case "todo_write", "todowrite", "write_todos", "set_todos":
             return WebEmulatedTool.todoWrite.rawValue
+        // Granular todo aliases: they edit ONE item, they never replace the
+        // whole list (that is what todo_write does).
+        case "todo_add", "add_todo", "todo_create", "new_todo":
+            return WebEmulatedTool.taskCreate.rawValue
+        case "todo_update", "update_todo", "todo_edit", "edit_todo", "todo_set_status":
+            return WebEmulatedTool.taskUpdate.rawValue
         // Sub-agent / task tool
         case "task", "subagent", "agent", "spawn":
             return WebEmulatedTool.task.rawValue
@@ -608,7 +614,7 @@ enum WebToolProtocolEmulator {
         // Granular task tools (Claude Code TaskCreate/List/Update parity)
         case "task_create", "taskcreate", "create_task", "add_task", "new_task":
             return WebEmulatedTool.taskCreate.rawValue
-        case "task_list", "tasklist", "list_tasks", "tasks", "list_todos":
+        case "task_list", "tasklist", "list_tasks", "tasks", "list_todos", "todo_list", "todolist":
             return WebEmulatedTool.taskList.rawValue
         case "task_update", "taskupdate", "update_task", "edit_task", "complete_task":
             return WebEmulatedTool.taskUpdate.rawValue
