@@ -10,7 +10,10 @@ struct QueuedMessage: Identifiable {
 
 class MessageQueue: ObservableObject {
     @Published var pendingMessages: [QueuedMessage] = []
-    
+    /// While paused, completions do not auto-drain the queue. Force-send uses
+    /// this so the interrupted turn cannot start the next item concurrently.
+    @Published private(set) var isPaused = false
+
     private var onProcess: ((QueuedMessage) -> Void)?
     
     init() {}
@@ -29,9 +32,23 @@ class MessageQueue: ObservableObject {
     }
     
     func processNext() {
-        guard let handler = onProcess, let first = pendingMessages.first else { return }
+        guard !isPaused, let handler = onProcess, let first = pendingMessages.first else { return }
         pendingMessages.removeFirst()
         handler(first)
+    }
+
+    func pause() {
+        isPaused = true
+    }
+
+    func resume() {
+        isPaused = false
+    }
+
+    @discardableResult
+    func remove(id: UUID) -> QueuedMessage? {
+        guard let index = pendingMessages.firstIndex(where: { $0.id == id }) else { return nil }
+        return pendingMessages.remove(at: index)
     }
     
     func cancelPending(at index: Int) {

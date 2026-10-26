@@ -546,6 +546,10 @@ enum AppLocalizationKey: String, CaseIterable {
     case locParametersFor
     case locStopGeneration
     case locSendMessage
+    case locSendNow
+    case locQueueMessage
+    case locEditQueuedMessage
+    case locDeleteQueuedMessage
     case locAccessAskBefore
     case locAccessEditAuto
     case locAccessFull
@@ -1457,6 +1461,10 @@ enum AppLocalization {
         "locParametersFor": ["en": "Parameters", "ru": "Параметры", "es": "Parámetros", "fr": "Paramètres", "de": "Parameter", "zh": "参数", "ja": "パラメータ", "ko": "매개변수", "pt": "Parâmetros", "ar": "المعلمات"],
         "locStopGeneration": ["en": "Stop generation", "ru": "Остановить генерацию", "es": "Detener generación", "fr": "Arrêter la génération", "de": "Generierung stoppen", "zh": "停止生成", "ja": "生成を停止", "ko": "생성 중지", "pt": "Parar geração", "ar": "إيقاف التوليد"],
         "locSendMessage": ["en": "Send message", "ru": "Отправить сообщение", "es": "Enviar mensaje", "fr": "Envoyer le message", "de": "Nachricht senden", "zh": "发送消息", "ja": "メッセージを送信", "ko": "메시지 보내기", "pt": "Enviar mensagem", "ar": "إرسال الرسالة"],
+        "locSendNow": ["en": "Send now", "ru": "Отправить сейчас", "es": "Enviar ahora", "fr": "Envoyer maintenant", "de": "Jetzt senden", "zh": "立即发送", "ja": "今すぐ送信", "ko": "지금 보내기", "pt": "Enviar agora", "ar": "إرسال الآن"],
+        "locQueueMessage": ["en": "Add to queue", "ru": "Добавить в очередь", "es": "Añadir a la cola", "fr": "Ajouter à la file d'attente", "de": "Zur Warteschlange hinzufügen", "zh": "加入队列", "ja": "キューに追加", "ko": "대기열에 추가", "pt": "Adicionar à fila", "ar": "إضافة إلى قائمة الانتظار"],
+        "locEditQueuedMessage": ["en": "Edit queued message", "ru": "Редактировать сообщение в очереди", "es": "Editar mensaje en cola", "fr": "Modifier le message en file d'attente", "de": "Wartende Nachricht bearbeiten", "zh": "编辑排队消息", "ja": "待機中のメッセージを編集", "ko": "대기 중인 메시지 편집", "pt": "Editar mensagem na fila", "ar": "تحرير الرسالة في قائمة الانتظار"],
+        "locDeleteQueuedMessage": ["en": "Delete queued message", "ru": "Удалить сообщение из очереди", "es": "Eliminar mensaje en cola", "fr": "Supprimer le message en file d'attente", "de": "Wartende Nachricht löschen", "zh": "删除排队消息", "ja": "待機中のメッセージを削除", "ko": "대기 중인 메시지 삭제", "pt": "Eliminar mensagem na fila", "ar": "حذف الرسالة من قائمة الانتظار"],
         "locWebNoSelectorYet": ["en": "This provider does not expose a model-list selector yet.", "ru": "У этого провайдера нет селектора списка моделей.", "es": "Este proveedor no expone un selector de lista de modelos.", "fr": "Ce fournisseur n'expose pas encore de sélecteur de liste de modèles.", "de": "Dieser Anbieter stellt noch keine Modellauswahl bereit.", "zh": "此提供商尚未公开模型列表选择器。", "ja": "このプロバイダーはモデルリストセレクターを公開していません。", "ko": "이 공급자는 모델 목록 선택기를 노출하지 않습니다.", "pt": "Este provedor aindaне expõe um seletor de lista de modelos.", "ar": "لا يعرض هذا الموفر محدد قائمة النماذج после."],
 
         "locWebLoginFirst": ["en": "Log in first, then capture the web session before refreshing models.", "ru": "Сначала войдите, затем захватите веб-сессию.", "es": "Inicia sesión primero, luego captura la sesión web.", "fr": "Connectез-vous d'abord, puis capturez la session web.", "de": "Melden Sie sich zuerst an, dann erfassen Sie die Web-Sitzунг.", "zh": "请先登录，然后捕获网络会话。", "ja": "最初にログインしてから、Webセッションをキャプチャしてください。", "ko": "먼저 로그인한 다음 웹 세션을 캡처하세요.", "pt": "Faça login primeiro, depois capture a sessão web.", "ar": "سجل الدخول أولاً، ثم التقط جلسة 的ويب."],

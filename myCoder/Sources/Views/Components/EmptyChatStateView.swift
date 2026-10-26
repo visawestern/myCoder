@@ -10,6 +10,8 @@ struct EmptyChatStateView: View {
     let onStop: () -> Void
     let isLoading: Bool
     let isLoadingChat: Bool
+    var onForceSendQueued: (QueuedMessage) -> Void = { _ in }
+    var onEditQueued: (QueuedMessage) -> Void = { _ in }
 
     var body: some View {
         GeometryReader { geometry in
@@ -57,6 +59,8 @@ struct EmptyChatStateView: View {
                         showFilePicker: $showFilePicker,
                         messageQueue: messageQueue,
                         requestInputFocus: true,
+                        onForceSendQueued: onForceSendQueued,
+                        onEditQueued: onEditQueued,
                         autoGrow: true,
                         maxTextHeight: maxTextHeight
                     )

@@ -434,13 +434,34 @@ struct SendStopButton: View {
 
     var body: some View {
         if isLoading {
-            Button(action: onStop) {
-                Image(systemName: "stop.circle.fill")
-                    .interfaceFont(size: 24)
-                    .foregroundColor(Color.mimo.error)
+            // While the model works the composer keeps a queue action so the
+            // user can add follow-up messages instead of being blocked.
+            HStack(spacing: 6) {
+                Button(action: onSend) {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .interfaceFont(size: 24)
+                            .foregroundColor(canSend ? Color.mimo.brand : Color.mimo.textMuted)
+                        Image(systemName: "plus")
+                            .interfaceFont(size: 8, weight: .bold)
+                            .foregroundColor(Color.mimo.brand)
+                            .offset(x: 3, y: 3)
+                    }
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                .disabled(!canSend)
+                .help(canSend
+                    ? L.t(AppLocalizationKey.locQueueMessage)
+                    : (disabledReason ?? L.t(AppLocalizationKey.locSendMessage)))
+
+                Button(action: onStop) {
+                    Image(systemName: "stop.circle.fill")
+                        .interfaceFont(size: 24)
+                        .foregroundColor(Color.mimo.error)
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locStopGeneration))
             }
-            .buttonStyle(HandCursorButtonStyle())
-            .help(L.t(AppLocalizationKey.locStopGeneration))
         } else {
             Button(action: onSend) {
                 Image(systemName: "arrow.up.circle.fill")

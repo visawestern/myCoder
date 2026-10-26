@@ -14,6 +14,20 @@ private func localToolParts(
     }
 }
 
+/// Composer contents saved while a queued message is being edited. Restored
+/// after that edited message is sent so the user's in-progress draft is not lost.
+private struct ComposerDraftSnapshot {
+    let text: String
+    let files: [FileInfo]
+    let images: [ClipboardImage]
+
+    var isEmpty: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && files.isEmpty
+            && images.isEmpty
+    }
+}
+
 private struct PreparedLocalToolCall {
     let call: WebToolCall
     let callID: String
@@ -45,6 +59,9 @@ struct ChatPanelView: View {
     @StateObject private var messageQueue = MessageQueue()
     @StateObject private var attachmentStore = MessageAttachmentStore()
     @State private var messageText = ""
+    @State private var stashedComposerDraft: ComposerDraftSnapshot?
+    @State private var restoreStashedDraftAfterSend = false
+    @State private var composerHoldsQueuedMessage = false
     @State private var showFilePicker = false
     @State private var streamingText = ""
     @State private var currentAssistantMessageID: String?
@@ -123,6 +140,8 @@ struct ChatPanelView: View {
                     onSend: sendMessage,
                     onStop: stopGeneration,
                     isLoading: appState.isLoading,
+                    onForceSendQueued: forceSendQueued,
+                    onEditQueued: editQueuedMessage,
                     isLoadingChat: ChatLoadingIndicatorLogic.presentation(
                         isLoading: messageStore.isLoadingMessages,
                         messageCount: messageStore.messages.count
@@ -295,7 +314,9 @@ struct ChatPanelView: View {
                         attachmentStore: attachmentStore,
                         showFilePicker: $showFilePicker,
                         messageQueue: messageQueue,
-                        contextUsage: currentContextUsage
+                        contextUsage: currentContextUsage,
+                        onForceSendQueued: forceSendQueued,
+                        onEditQueued: editQueuedMessage
                     )
                 }
             }
@@ -354,6 +375,9 @@ struct ChatPanelView: View {
                 messageStore.clear()
                 messageText = ""
                 attachmentStore.clear()
+                stashedComposerDraft = nil
+                restoreStashedDraftAfterSend = false
+                composerHoldsQueuedMessage = false
             }
         }
         .onChange(of: appState.isLoading) { loading in
@@ -814,6 +838,7 @@ struct ChatPanelView: View {
             messageText = ""
             clearDraft()
             attachmentStore.clear()
+            restoreStashedDraftIfNeeded()
             return
         }
         if let error = SendReadinessLogic.sendValidationError(
@@ -828,6 +853,7 @@ struct ChatPanelView: View {
             messageText = ""
             clearDraft()
             attachmentStore.clear()
+            restoreStashedDraftIfNeeded()
             return
         }
         
@@ -837,6 +863,7 @@ struct ChatPanelView: View {
         messageText = ""
         clearDraft()
         attachmentStore.clear()
+        restoreStashedDraftIfNeeded()
         
         if appState.isLoading {
             messageQueue.enqueue(
@@ -851,6 +878,72 @@ struct ChatPanelView: View {
         currentTask = Task {
             await sendDirectly(text: text, files: files, images: images)
         }
+    }
+
+    /// Move a queued message back into the composer. The draft that was already
+    /// in the composer is stashed and restored after the edited message is sent.
+    @MainActor
+    func editQueuedMessage(_ queued: QueuedMessage) {
+        guard messageQueue.remove(id: queued.id) != nil else { return }
+        let current = ComposerDraftSnapshot(
+            text: messageText,
+            files: attachmentStore.attachedFiles,
+            images: attachmentStore.attachedImages
+        )
+        if composerHoldsQueuedMessage, !current.isEmpty {
+            // Switching edit targets: put the previously edited queued message
+            // back instead of silently discarding it.
+            messageQueue.enqueue(
+                text: current.text,
+                files: current.files,
+                images: current.images,
+                type: MessageType(from: appState.agentMode)
+            )
+        } else if stashedComposerDraft == nil, !current.isEmpty {
+            stashedComposerDraft = current
+        }
+        messageText = queued.text
+        attachmentStore.replaceImages(queued.images)
+        attachmentStore.replaceFiles(queued.files)
+        composerHoldsQueuedMessage = true
+        restoreStashedDraftAfterSend = stashedComposerDraft != nil
+        appState.inputFocusRequest += 1
+    }
+
+    /// Interrupt the current turn and send this queued message immediately.
+    /// Remaining queued messages stay visible and resume after the forced send.
+    @MainActor
+    func forceSendQueued(_ queued: QueuedMessage) {
+        guard messageQueue.pendingMessages.contains(where: { $0.id == queued.id }) else { return }
+        let previousTask = currentTask
+        messageQueue.pause()
+        messageQueue.remove(id: queued.id)
+        stopGeneration(cancelQueued: false)
+        currentTask = Task { @MainActor in
+            _ = await previousTask?.value
+            guard !Task.isCancelled else { return }
+            await sendDirectly(
+                text: queued.text,
+                files: queued.files,
+                images: queued.images,
+                agentModeOverride: queued.type.toAgentMode
+            )
+            guard !Task.isCancelled else { return }
+            messageQueue.resume()
+            if !appState.isLoading {
+                messageQueue.processNext()
+            }
+        }
+    }
+
+    private func restoreStashedDraftIfNeeded() {
+        composerHoldsQueuedMessage = false
+        guard restoreStashedDraftAfterSend, let draft = stashedComposerDraft else { return }
+        messageText = draft.text
+        attachmentStore.replaceImages(draft.images)
+        attachmentStore.replaceFiles(draft.files)
+        stashedComposerDraft = nil
+        restoreStashedDraftAfterSend = false
     }
 
     /// Applies a slash-command effect to real app state (E08, Раздел 5 п.12-16).
@@ -2198,6 +2291,10 @@ struct ChatPanelView: View {
     }
 
     func stopGeneration() {
+        stopGeneration(cancelQueued: true)
+    }
+
+    func stopGeneration(cancelQueued: Bool) {
         currentTask?.cancel()
         currentTask = nil
         // A direct-model turn may be suspended on queued approvals. Deny
@@ -2213,7 +2310,10 @@ struct ChatPanelView: View {
         serveTimeoutTask?.cancel()
         serveTimeoutTask = nil
         sseClient.disconnect()
-        messageQueue.cancelAll()
+        if cancelQueued {
+            messageQueue.cancelAll()
+            messageQueue.resume()
+        }
 
         #if canImport(WebKit)
         if let providerID = activeWebProviderID {

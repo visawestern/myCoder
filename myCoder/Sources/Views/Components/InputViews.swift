@@ -296,6 +296,8 @@ struct CenteredInputCard: View {
     var requestInputFocus: Bool = false
     var autoGrow: Bool = false
     var maxTextHeight: CGFloat? = nil
+    var onForceSendQueued: (QueuedMessage) -> Void = { _ in }
+    var onEditQueued: (QueuedMessage) -> Void = { _ in }
     @State private var showWorkspaceDropdown = false
     @State private var showPlusMenu = false
     @State private var showPhotoPicker = false
@@ -487,9 +489,13 @@ struct CenteredInputCard: View {
     private var pendingQueueSection: some View {
         VStack(spacing: 4) {
             ForEach(Array(messageQueue.pendingMessages.enumerated()), id: \.element.id) { index, queued in
-                PendingMessageCard(queued: queued, index: index) {
-                    messageQueue.cancelPending(at: index)
-                }
+                PendingMessageCard(
+                    queued: queued,
+                    index: index,
+                    onForceSend: { onForceSendQueued(queued) },
+                    onEdit: { onEditQueued(queued) },
+                    onCancel: { messageQueue.cancelPending(at: index) }
+                )
             }
         }
         .padding(.bottom, 4)
@@ -538,6 +544,8 @@ struct BottomInputBar: View {
     @Binding var showFilePicker: Bool
     @ObservedObject var messageQueue: MessageQueue
     var contextUsage: ContextUsage? = nil
+    var onForceSendQueued: (QueuedMessage) -> Void = { _ in }
+    var onEditQueued: (QueuedMessage) -> Void = { _ in }
     @EnvironmentObject var appState: AppState
     @State private var showPlusMenu = false
     @State private var showPhotoPicker = false
@@ -587,9 +595,13 @@ struct BottomInputBar: View {
             if !messageQueue.pendingMessages.isEmpty {
                 VStack(spacing: 4) {
                     ForEach(Array(messageQueue.pendingMessages.enumerated()), id: \.element.id) { index, queued in
-                        PendingMessageCard(queued: queued, index: index) {
-                            messageQueue.cancelPending(at: index)
-                        }
+                        PendingMessageCard(
+                            queued: queued,
+                            index: index,
+                            onForceSend: { onForceSendQueued(queued) },
+                            onEdit: { onEditQueued(queued) },
+                            onCancel: { messageQueue.cancelPending(at: index) }
+                        )
                     }
                 }
                 .padding(.horizontal, 12)
@@ -748,6 +760,8 @@ struct WorkspaceDropdown: View {
 struct PendingMessageCard: View {
     let queued: QueuedMessage
     let index: Int
+    let onForceSend: () -> Void
+    let onEdit: () -> Void
     let onCancel: () -> Void
     
     var body: some View {
@@ -812,13 +826,32 @@ struct PendingMessageCard: View {
                 .interfaceFont(size: 10, weight: .medium)
                 .foregroundColor(Color.mimo.textMuted)
             
-            // Cancel button
+            // Force-send now (interrupts the current turn).
+            Button(action: onForceSend) {
+                Image(systemName: "paperplane.fill")
+                    .interfaceFont(size: 11)
+                    .foregroundColor(Color.mimo.brand)
+            }
+            .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locSendNow))
+
+            // Edit the queued message in the composer (draft is preserved).
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .interfaceFont(size: 11)
+                    .foregroundColor(Color.mimo.textSecondary)
+            }
+            .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locEditQueuedMessage))
+
+            // Cancel/remove this queued message.
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
                     .interfaceFont(size: 12)
                     .foregroundColor(Color.mimo.textMuted)
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locDeleteQueuedMessage))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
