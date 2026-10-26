@@ -27,7 +27,7 @@ enum SendProviderReadinessLogic {
         if selected == autoFreeID {
             return autoFreeReady
                 ? nil
-                : "myCoder Auto Free is unavailable. Refresh the anonymous OpenCode free catalog or choose another provider."
+                : "OpenCode Zen is unavailable. Refresh the anonymous OpenCode free catalog or choose another provider."
         }
 
         if let webID = webID(from: selected) {

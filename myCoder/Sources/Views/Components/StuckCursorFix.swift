@@ -57,7 +57,8 @@ enum StuckCursorFix {
         guard let hit = hitViewUnderPointer() else { return false }
         var current: NSView? = hit
         while let view = current {
-            if view.accessibilityRole() == .button { return true }
+            let role = view.accessibilityRole()?.rawValue
+            if CursorHitLogic.isAction(role: role, actionNames: []) { return true }
             current = view.superview
         }
         return false

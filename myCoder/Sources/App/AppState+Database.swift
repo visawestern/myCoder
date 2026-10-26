@@ -364,15 +364,26 @@ extension AppState {
     /// touch `DatabaseManager.shared`.
     func resetStorage(scope: StorageResetScope,
                       homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+                      projectPaths: [String] = [],
                       resetDatabase: () -> Void = { try? DatabaseManager.shared.wipeAndReopen() }) {
         let home = homeDirectory
-        let plan = StorageResetLogic.plan(for: scope, homeDirectory: home)
+        let plan = StorageResetLogic.plan(
+            for: scope,
+            homeDirectory: home,
+            projectPaths: projectPaths
+        )
 
         // Audit the reset (plan Раздел 8 п.46) BEFORE the deletion so the log
         // survives any crash mid-reset.
         try? StorageAuditLog.append(action: "storage.reset",
                                     detail: "scope=\(plan.scope) paths=\(plan.deletesPaths.joined(separator: ", "))",
                                     homeDirectory: home)
+
+        if scope == .fullDatabase {
+            // Drop every pooled project connection before its file disappears,
+            // otherwise a stale inode could keep serving deleted data.
+            ProjectDatabaseManager.evictAll()
+        }
 
         // Delete exactly the planned paths and their SQLite sidecars
         // (-journal/-wal/-shm). The live connection is still open for this

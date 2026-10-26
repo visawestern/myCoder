@@ -34,7 +34,7 @@ enum SendWaitAnswerLogic {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         guard !WebVendorErrorPlaceholderLogic.isErrorPlaceholder(trimmed) else { return false }
-        let errorPrefixes = ["myCoder Auto Free error:", "Web chat was not sent", "Web provider error:"]
+        let errorPrefixes = ["OpenCode Zen error:", "Web chat was not sent", "Web provider error:"]
         guard !errorPrefixes.contains(where: { trimmed.hasPrefix($0) }) else { return false }
         return !statusMarkers.contains { trimmed.contains($0) }
     }

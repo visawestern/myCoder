@@ -1699,7 +1699,7 @@ struct ChatPanelView: View {
                 } catch {
                     await MainActor.run {
                         self.messageStore.update(id: assistantID) { m in
-                            m.content = "myCoder Auto Free error: \(error.localizedDescription)"
+                            m.content = "OpenCode Zen error: \(error.localizedDescription)"
                             m.isFinished = true
                             m.isStreaming = false
                         }
@@ -3042,7 +3042,7 @@ struct ChatPanelView: View {
 
         for file in files {
             guard let path = file.path, !path.isEmpty else {
-                warnings.append("Attachment \(file.name) could not be read and was not sent to myCoder Auto Free.")
+                warnings.append("Attachment \(file.name) could not be read and was not sent to OpenCode Zen.")
                 continue
             }
             let url = URL(fileURLWithPath: path)
@@ -3054,10 +3054,10 @@ struct ChatPanelView: View {
                         base64: data.base64EncodedString()
                     ))
                 } else {
-                    warnings.append("Attachment \(file.name) is an unreadable image and was not sent to myCoder Auto Free.")
+                    warnings.append("Attachment \(file.name) is an unreadable image and was not sent to OpenCode Zen.")
                 }
             } else if MyCoderAutoFreeContentLogic.isUnsupportedForTextRoute(fileName: file.name, mimeType: mime) {
-                warnings.append("Attachment \(file.name) is not supported by the free route and was not sent to myCoder Auto Free.")
+                warnings.append("Attachment \(file.name) is not supported by the free route and was not sent to OpenCode Zen.")
             } else if let data = try? Data(contentsOf: url),
                       let content = String(data: data, encoding: .utf8) {
                 let bounded = String(content.prefix(250_000))
@@ -3066,7 +3066,7 @@ struct ChatPanelView: View {
                     warnings.append("Attachment \(file.name) was truncated to 250,000 characters for the free route.")
                 }
             } else {
-                warnings.append("Attachment \(file.name) is not a readable text/image file and was not sent to myCoder Auto Free.")
+                warnings.append("Attachment \(file.name) is not a readable text/image file and was not sent to OpenCode Zen.")
             }
         }
 

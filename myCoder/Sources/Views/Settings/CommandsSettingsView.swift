@@ -59,6 +59,7 @@ struct CommandsSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .help(L.t(AppLocalizationKey.locNewCommand))
             }
 
             if filtered.isEmpty {
@@ -154,11 +155,13 @@ struct CommandsSettingsView: View {
                 Image(systemName: "pencil").interfaceFont(size: 12).foregroundColor(Color.mimo.textSecondary)
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locEdit))
 
             Button(action: { commandToDelete = command }) {
                 Image(systemName: "trash").interfaceFont(size: 12).foregroundColor(Color.mimo.error)
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locDelete))
         }
         .padding(12)
         .background(Color.mimo.surface)

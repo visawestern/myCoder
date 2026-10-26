@@ -14,7 +14,7 @@ struct MyCoderAutoFreeProvider: Identifiable, Codable, Equatable {
     var systemPrompt: String = ""
 
     var isFreeTier: Bool { MyCoderAutoFreeClient.isEligibleFreeModel(selectedModel) }
-    var displayName: String { "myCoder Auto Free" }
+    var displayName: String { "OpenCode Zen" }
     var icon: String = "sparkles"
     var isBuiltIn: Bool { true }
 
@@ -273,7 +273,7 @@ final class MyCoderAutoFreeStore: ObservableObject {
                             ]
                         )
                         defaults.set(nextModel.id, forKey: "com.mycoder.autoFree.model")
-                        continuation.yield(.content("\n\n[myCoder Auto Free switched to \(nextModel.id): \(reason)]\n\n"))
+                        continuation.yield(.content("\n\n[OpenCode Zen switched to \(nextModel.id): \(reason)]\n\n"))
                         currentModel = nextModel.id
                     }
                 }

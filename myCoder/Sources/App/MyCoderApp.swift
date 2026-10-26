@@ -97,6 +97,9 @@ class AppState: ObservableObject {
         if let observer = autoFreeSwitchObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = providersObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         MyCoderAPIServer.appendLog("💀 AppState.deinit: id=\(instanceID)")
     }
     /// The UserDefaults instance used for persistence.  Public so tests can
@@ -159,7 +162,12 @@ class AppState: ObservableObject {
     /// bad URL, authentication failure, or unsupported response is actionable
     /// instead of looking like a mysterious empty model list.
     @Published private(set) var providerModelLoadMessages: [String: String] = [:]
-    
+    /// Bumped whenever a local/web provider config or custom-provider list is
+    /// saved. Provider options are computed from disk-backed stores, so without
+    /// this SwiftUI would not re-render the chat model menu after a Settings
+    /// refresh (plan Раздел 1 п.3).
+    @Published private(set) var providerCatalogRevision = 0
+
     @Published var workspaces: [Workspace] = []
     /// Lightweight registry snapshot used to reconcile sidebar visibility with
     /// Storage archive actions without hiding an unknown legacy workspace.
@@ -322,7 +330,8 @@ class AppState: ObservableObject {
     /// Short-lived feedback for shell actions such as Cmd+Option+Z.
     @Published var shellActionNotice: String?
     @Published var shellActionNoticeTone: UndoActionFeedbackTone = .success
-    private var autoFreeSwitchObserver: NSObjectProtocol? = nil
+    private var autoFreeSwitchObserver: NSObjectProtocol?
+    private var providersObserver: NSObjectProtocol? = nil
     private var subagentObserver: NSObjectProtocol? = nil
     
     var displayedWorkspaces: [Workspace] {
@@ -506,6 +515,14 @@ class AppState: ObservableObject {
             )
             self.notificationService.add(appNotification)
             self.transientProviderNotification = appNotification
+        }
+
+        providersObserver = NotificationCenter.default.addObserver(
+            forName: .providersChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.providerCatalogRevision &+= 1
         }
 
         subagentObserver = NotificationCenter.default.addObserver(

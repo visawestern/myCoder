@@ -1,12 +1,5 @@
+import AppKit
 import SwiftUI
-
-enum ProviderDetailField: Hashable {
-    case name
-    case baseURL
-    case apiKey
-    case host
-    case port
-}
 
 enum ModelSortOrder: String, CaseIterable, Identifiable {
     case name
@@ -83,9 +76,8 @@ struct ModelSettingsProviderColumns: View {
     @State private var localRefreshMessage: String?
     @State private var providerPendingDelete: ProviderOption?
     @State private var providerRevision: Int = 0
+    @State private var disabledRevision: Int = 0
     @State private var didRefreshProvider = false
-    @State private var providerSaveTask: Task<Void, Never>?
-    @FocusState private var focusedProviderField: ProviderDetailField?
     @State private var localHostDraft: String = ""
     @State private var localPortDraft: String = ""
     @State private var editingModelProviderID: String = ""
@@ -107,7 +99,7 @@ struct ModelSettingsProviderColumns: View {
     }
 
     private func isMutableProvider(_ option: ProviderOption) -> Bool {
-        option.isCustom || webConfig(for: option.id) != nil
+        option.isCustom || localProvider(for: option.id) != nil || webConfig(for: option.id) != nil
     }
 
     private func localProvider(for providerID: String) -> LocalProviderConfig? {
@@ -142,7 +134,7 @@ struct ModelSettingsProviderColumns: View {
     }
 
     private func isRenameableProvider(_ option: ProviderOption) -> Bool {
-        customProvider(for: option.id) != nil
+        isMutableProvider(option)
     }
 
     private func commitProviderName(_ option: ProviderOption) {
@@ -152,21 +144,22 @@ struct ModelSettingsProviderColumns: View {
             return
         }
         guard trimmed != option.name else { return }
-        guard let index = appState.customProviders.firstIndex(where: { $0.id == option.id }) else {
-            providerNameDraft = option.name
+        if let index = appState.customProviders.firstIndex(where: { $0.id == option.id }) {
+            var updated = appState.customProviders[index]
+            updated.name = trimmed
+            appState.updateCustomProvider(updated)
             return
         }
-        var updated = appState.customProviders[index]
-        updated.name = trimmed
-        appState.updateCustomProvider(updated)
-    }
-
-    private func scheduleProviderSave(_ action: @escaping () -> Void) {
-        providerSaveTask?.cancel()
-        providerSaveTask = Task {
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run { action() }
+        if var local = localProvider(for: option.id) {
+            local.name = trimmed
+            LocalProviderLogic.update(local)
+            return
+        }
+        if let web = webConfig(for: option.id) {
+            var configs = WebProviderStore.load()
+            guard let index = configs.firstIndex(where: { $0.id == web.id }) else { return }
+            configs[index].displayName = trimmed
+            WebProviderStore.save(configs)
         }
     }
 
@@ -217,17 +210,6 @@ struct ModelSettingsProviderColumns: View {
         }
     }
 
-    private func modelCountLabel(_ count: Int) -> String {
-        count == 1 ? L.t(AppLocalizationKey.locModelCount, count) : L.t(AppLocalizationKey.locModelsCount, count)
-    }
-
-    private func providerKindLabel(_ option: ProviderOption) -> String {
-        if webConfig(for: option.id) != nil { return L.t(AppLocalizationKey.locWebSession) }
-        if localProvider(for: option.id) != nil { return L.t(AppLocalizationKey.locLocalProviders) }
-        if customProvider(for: option.id) != nil { return L.t(AppLocalizationKey.locCustomProvider) }
-        return L.t(AppLocalizationKey.locLocalAgent)
-    }
-
     private func selectProvider(_ option: ProviderOption) {
         detailProviderID = option.id
         guard isProviderEnabled(option) else { return }
@@ -276,6 +258,7 @@ struct ModelSettingsProviderColumns: View {
     private func toggleModelDisabled(_ modelID: String, providerID: String) {
         let disabled = !isModelDisabled(modelID, providerID: providerID)
         DisabledModelStore.setDisabled(disabled, providerID: providerID, modelID: modelID)
+        disabledRevision &+= 1
         guard disabled,
               appState.selectedProviderID == providerID,
               appState.selectedModel == modelID else { return }
@@ -369,6 +352,7 @@ struct ModelSettingsProviderColumns: View {
                     .foregroundColor(Color.mimo.brand)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locAddProvider1))
             }
 
             if layoutMode == .wide {
@@ -491,18 +475,12 @@ struct ModelSettingsProviderColumns: View {
             }
 
             Button(action: { selectProvider(option) }) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(option.name)
-                        .interfaceFont(size: 12, weight: isSelected ? .semibold : .regular)
-                        .foregroundColor(enabled ? Color.mimo.textPrimary : Color.mimo.textMuted)
-                        .lineLimit(1)
-                    Text(providerKindLabel(option))
-                        .interfaceFont(size: 9)
-                        .foregroundColor(Color.mimo.textMuted)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                Text(option.name)
+                    .interfaceFont(size: 12, weight: isSelected ? .semibold : .regular)
+                    .foregroundColor(enabled ? Color.mimo.textPrimary : Color.mimo.textMuted)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
 
@@ -539,6 +517,7 @@ struct ModelSettingsProviderColumns: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .help(L.t(AppLocalizationKey.locActions))
             }
         }
         .padding(.horizontal, 8)
@@ -626,14 +605,16 @@ struct ModelSettingsProviderColumns: View {
     private func providerDetailHeader(_ option: ProviderOption) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if isRenameableProvider(option) {
-                TextField(L.t(AppLocalizationKey.locName), text: $providerNameDraft)
-                    .zcodeTextFieldStyle()
-                    .interfaceFont(size: 13, weight: .semibold)
-                    .focused($focusedProviderField, equals: .name)
-                    .onSubmit { commitProviderName(option) }
-                    .onChange(of: providerNameDraft) { _ in
-                        scheduleProviderSave { commitProviderName(option) }
-                    }
+                InlineEditableField(
+                    title: nil,
+                    value: option.name,
+                    placeholder: L.t(AppLocalizationKey.locName),
+                    fontSize: 14,
+                    fontWeight: .semibold
+                ) { value in
+                    providerNameDraft = value
+                    commitProviderName(option)
+                }
             } else {
                 Text(option.name)
                     .interfaceFont(size: 14, weight: .semibold)
@@ -644,7 +625,7 @@ struct ModelSettingsProviderColumns: View {
                 Circle()
                     .fill(option.isConnected ? Color.mimo.success : Color.mimo.warning)
                     .frame(width: 8, height: 8)
-                Text(providerKindLabel(option))
+                Text(option.isConnected ? L.t(AppLocalizationKey.locConnected) : L.t(AppLocalizationKey.locDisconnected))
                     .interfaceFont(size: 12)
                     .foregroundColor(Color.mimo.textSecondary)
                 if isToggleableProvider(option), !isProviderEnabled(option) {
@@ -675,31 +656,27 @@ struct ModelSettingsProviderColumns: View {
 
     private func customProviderFields(_ custom: CustomProvider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.t(AppLocalizationKey.locBaseUrl))
-                    .interfaceFont(size: 11, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                TextField("https://api.example.com/v1", text: $customBaseURLDraft)
-                    .zcodeTextFieldStyle()
-                    .interfaceFont(size: 11, design: .monospaced)
-                    .focused($focusedProviderField, equals: .baseURL)
-                    .onSubmit { commitCustomProviderDraft(custom.id) }
-                    .onChange(of: customBaseURLDraft) { _ in
-                        scheduleProviderSave { commitCustomProviderDraft(custom.id) }
-                    }
+            InlineEditableField(
+                title: L.t(AppLocalizationKey.locBaseUrl),
+                value: custom.baseURL,
+                placeholder: "https://api.example.com/v1",
+                monospaced: true
+            ) { value in
+                guard ProviderEndpointLogic.normalizedBaseURL(value) != nil else { return }
+                customBaseURLDraft = value
+                commitCustomProviderDraft(custom.id)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.t(AppLocalizationKey.locApiKey))
-                    .interfaceFont(size: 11, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                SecureField(custom.type == .openModel ? "om-..." : "sk-...", text: $customAPIKeyDraft)
-                    .zcodeTextFieldStyle()
-                    .focused($focusedProviderField, equals: .apiKey)
-                    .onSubmit { commitCustomProviderDraft(custom.id) }
-                    .onChange(of: customAPIKeyDraft) { _ in
-                        scheduleProviderSave { commitCustomProviderDraft(custom.id) }
-                    }
+            let key = custom.getSecureAPIKey() ?? ""
+            InlineEditableField(
+                title: L.t(AppLocalizationKey.locApiKey),
+                value: key.isEmpty ? "" : "••••••••••••",
+                placeholder: custom.type == .openModel ? "om-..." : "sk-...",
+                isSecure: true,
+                editValue: key
+            ) { value in
+                customAPIKeyDraft = value
+                commitCustomProviderDraft(custom.id)
             }
 
             Toggle(L.t(AppLocalizationKey.locEnableToolCalling), isOn: Binding(
@@ -746,31 +723,22 @@ struct ModelSettingsProviderColumns: View {
 
     private func localProviderFields(_ local: LocalProviderConfig) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.t(AppLocalizationKey.locHost))
-                    .interfaceFont(size: 11, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                TextField("127.0.0.1", text: $localHostDraft)
-                    .zcodeTextFieldStyle()
-                    .interfaceFont(size: 11, design: .monospaced)
-                    .focused($focusedProviderField, equals: .host)
-                    .onSubmit { commitLocalProviderDraft(local.id) }
-                    .onChange(of: localHostDraft) { _ in
-                        scheduleProviderSave { commitLocalProviderDraft(local.id) }
-                    }
+            InlineEditableField(
+                title: L.t(AppLocalizationKey.locHost),
+                value: local.host,
+                placeholder: "127.0.0.1",
+                monospaced: true
+            ) { value in
+                localHostDraft = value
+                commitLocalProviderDraft(local.id)
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.t(AppLocalizationKey.locPort))
-                    .interfaceFont(size: 11, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                TextField(String(local.port), text: $localPortDraft)
-                    .zcodeTextFieldStyle()
-                    .interfaceFont(size: 11, design: .monospaced)
-                    .focused($focusedProviderField, equals: .port)
-                    .onSubmit { commitLocalProviderDraft(local.id) }
-                    .onChange(of: localPortDraft) { _ in
-                        scheduleProviderSave { commitLocalProviderDraft(local.id) }
-                    }
+            InlineEditableField(
+                title: L.t(AppLocalizationKey.locPort),
+                value: String(local.port),
+                monospaced: true
+            ) { value in
+                localPortDraft = value
+                commitLocalProviderDraft(local.id)
             }
         }
     }
@@ -836,15 +804,6 @@ struct ModelSettingsProviderColumns: View {
         }
     }
 
-    private var selectedParameterMetadata: MimoProviderModel? {
-        guard !parameterModelID.isEmpty else { return nil }
-        return ProviderSettingsLogic.model(
-            for: parameterModelID,
-            in: appState.serverProviders,
-            providerID: parameterProviderID.isEmpty ? nil : parameterProviderID
-        )
-    }
-
     private var selectedWebModel: WebProviderModel? {
         guard !parameterModelID.isEmpty,
               let web = webConfig(for: parameterProviderID) else { return nil }
@@ -873,6 +832,7 @@ struct ModelSettingsProviderColumns: View {
                         .foregroundColor(Color.mimo.textMuted)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locCloseModelParameters))
                 .accessibilityLabel(L.t(AppLocalizationKey.locCloseModelParameters))
             }
 
@@ -880,42 +840,55 @@ struct ModelSettingsProviderColumns: View {
                 webProfilePanel(webModel)
             }
 
-            if let meta = selectedParameterMetadata {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(L.t(AppLocalizationKey.locProviderMetadata))
-                        .interfaceFont(size: 11, weight: .semibold)
-                        .foregroundColor(Color.mimo.textSecondary)
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 7) {
-                        metadataValue(L.t(AppLocalizationKey.locParamContext), meta.limit?.context.map { "\($0 / 1000)k" } ?? "—")
-                        metadataValue(L.t(AppLocalizationKey.locParamOutput), meta.limit?.output.map { String($0) } ?? "—")
-                        metadataValue(L.t(AppLocalizationKey.locParamReasoning), meta.capabilities?.reasoning == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
-                        metadataValue(L.t(AppLocalizationKey.locParamTools), meta.capabilities?.toolcall != false ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
-                        metadataValue(L.t(AppLocalizationKey.locParamPlan), meta.capabilities?.plan == true ? L.t(AppLocalizationKey.locYes) : L.t(AppLocalizationKey.locNo))
-                        metadataValue(L.t(AppLocalizationKey.locParamVariants), meta.variants.map { String($0.count) } ?? "—")
-                    }
-                }
-            } else if selectedWebModel == nil {
-                Text(L.t(AppLocalizationKey.locNoModelMetadata))
-                    .interfaceFont(size: 10)
-                    .foregroundColor(Color.mimo.textMuted)
+            if selectedWebModel == nil {
+                ModelMetadataEditor(
+                    modelID: parameterModelID,
+                    providerID: parameterProviderID,
+                    serverModel: ProviderSettingsLogic.model(
+                        for: parameterModelID,
+                        in: appState.serverProviders,
+                        providerID: parameterProviderID.isEmpty ? nil : parameterProviderID
+                    )
+                )
             }
 
             HStack(spacing: 10) {
-                parameterField(title: L.t(AppLocalizationKey.locTemperature), placeholder: L.t(AppLocalizationKey.locDefault), text: $parameterTemperature)
-                parameterField(title: L.t(AppLocalizationKey.locMaxTokens), placeholder: L.t(AppLocalizationKey.locDefault), text: $parameterMaxTokens)
-                parameterField(title: L.t(AppLocalizationKey.locTopP), placeholder: L.t(AppLocalizationKey.locDefault), text: $parameterTopP)
+                InlineEditableField(
+                    title: L.t(AppLocalizationKey.locTemperature),
+                    value: parameterTemperature,
+                    placeholder: L.t(AppLocalizationKey.locDefault),
+                    monospaced: true
+                ) { value in
+                    parameterTemperature = value
+                    saveParameters()
+                }
+                InlineEditableField(
+                    title: L.t(AppLocalizationKey.locMaxTokens),
+                    value: parameterMaxTokens,
+                    placeholder: L.t(AppLocalizationKey.locDefault),
+                    monospaced: true
+                ) { value in
+                    parameterMaxTokens = value
+                    saveParameters()
+                }
+                InlineEditableField(
+                    title: L.t(AppLocalizationKey.locTopP),
+                    value: parameterTopP,
+                    placeholder: L.t(AppLocalizationKey.locDefault),
+                    monospaced: true
+                ) { value in
+                    parameterTopP = value
+                    saveParameters()
+                }
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(L.t(AppLocalizationKey.locSystemPromptOverride))
-                    .interfaceFont(size: 11, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                TextEditor(text: $parameterSystemPrompt)
-                    .font(.system(size: 11))
-                    .frame(minHeight: 58, maxHeight: 100)
-                    .padding(6)
-                    .background(Color.mimo.background)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.mimo.border, lineWidth: 1))
+            InlineEditableTextArea(
+                title: L.t(AppLocalizationKey.locSystemPromptOverride),
+                value: parameterSystemPrompt,
+                placeholder: L.t(AppLocalizationKey.locDefault)
+            ) { value in
+                parameterSystemPrompt = value
+                saveParameters()
             }
 
             if let parameterError {
@@ -934,9 +907,7 @@ struct ModelSettingsProviderColumns: View {
                     .buttonStyle(HandCursorButtonStyle())
                     .interfaceFont(size: 11)
                     .foregroundColor(Color.mimo.textSecondary)
-                Button(L.t(AppLocalizationKey.locSaveParameters)) { saveParameters() }
-                    .buttonStyle(.borderedProminent)
-                    .interfaceFont(size: 11)
+                    .help(L.t(AppLocalizationKey.locResetParameters))
             }
         }
         .padding(14)
@@ -976,30 +947,6 @@ struct ModelSettingsProviderColumns: View {
         .padding(8)
         .background(metadataBackground)
         .clipShape(RoundedRectangle(cornerRadius: 7))
-    }
-
-    private func metadataValue(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .interfaceFont(size: 8, weight: .bold)
-                .foregroundColor(Color.mimo.textMuted)
-            Text(value)
-                .interfaceFont(size: 10, weight: .medium)
-                .foregroundColor(Color.mimo.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func parameterField(title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .interfaceFont(size: 10, weight: .medium)
-                .foregroundColor(Color.mimo.textSecondary)
-            TextField(placeholder, text: text)
-                .zcodeTextFieldStyle()
-                .interfaceFont(size: 11, design: .monospaced)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func openParameters(modelID: String, providerID: String) {
@@ -1089,6 +1036,7 @@ struct ModelSettingsProviderColumns: View {
                         .foregroundColor(Color.mimo.brand)
                 }
                 .menuStyle(.borderlessButton)
+                .help(L.t(AppLocalizationKey.locSortModels, modelSortOrder.title))
             }
 
             let providerID = detailProviderID.isEmpty ? appState.selectedProviderID : detailProviderID
@@ -1113,6 +1061,7 @@ struct ModelSettingsProviderColumns: View {
                             .foregroundColor(Color.mimo.textMuted)
                     }
                     .buttonStyle(HandCursorButtonStyle())
+                    .help(L.t(AppLocalizationKey.locCancel))
                 }
             }
             .padding(.horizontal, 8)
@@ -1135,10 +1084,6 @@ struct ModelSettingsProviderColumns: View {
                     .foregroundColor(Color.mimo.textMuted)
                     .padding(.vertical, 8)
             } else {
-                Text(L.t(AppLocalizationKey.locModelsCountOf, filteredModels.count, allModels.count))
-                    .interfaceFont(size: 10)
-                    .foregroundColor(Color.mimo.textMuted)
-
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(displayModels, id: \.self) { modelID in
@@ -1165,6 +1110,7 @@ struct ModelSettingsProviderColumns: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(HandCursorButtonStyle())
+                        .help(L.t(AppLocalizationKey.locSave))
                         Button(action: {
                             newModelProviderID = ""
                             newModelDraft = ""
@@ -1176,6 +1122,7 @@ struct ModelSettingsProviderColumns: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(HandCursorButtonStyle())
+                        .help(L.t(AppLocalizationKey.locCancel))
                     } else {
                         Button {
                             newModelProviderID = providerID
@@ -1186,6 +1133,7 @@ struct ModelSettingsProviderColumns: View {
                                 .foregroundColor(Color.mimo.brand)
                         }
                         .buttonStyle(HandCursorButtonStyle())
+                        .help(L.t("Add custom model"))
                         Spacer()
                     }
                 }
@@ -1268,6 +1216,7 @@ struct ModelSettingsProviderColumns: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locSave))
             Button(action: {
                 cloneSourceModelID = ""
                 cloneModelProviderID = ""
@@ -1280,6 +1229,7 @@ struct ModelSettingsProviderColumns: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locCancel))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -1302,6 +1252,7 @@ struct ModelSettingsProviderColumns: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locSave))
             Button(action: { cancelRename() }) {
                 Image(systemName: "xmark")
                     .interfaceFont(size: 11, weight: .semibold)
@@ -1310,6 +1261,7 @@ struct ModelSettingsProviderColumns: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locCancel))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -1479,6 +1431,7 @@ struct ModelSettingsProviderColumns: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            .help(L.t(AppLocalizationKey.locActions))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -1494,6 +1447,14 @@ struct ModelSettingsProviderColumns: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
+        .accessibilityAddTraits(.isButton)
+        .onHover { inside in
+            if inside {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
         .onTapGesture {
             guard !isSelected, !isDisabled else { return }
             if !providerID.isEmpty {
@@ -1570,6 +1531,7 @@ struct CustomProviderCard: View {
                         .foregroundColor(Color.mimo.error)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locRemoveProvider))
             }
             
             Divider()
@@ -1628,6 +1590,7 @@ struct AddProviderSheet: View {
                         .foregroundColor(Color.mimo.textMuted)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locClose))
             }
             .padding(16)
             
@@ -1664,6 +1627,9 @@ struct AddProviderSheet: View {
                             .foregroundColor(Color.mimo.textPrimary)
                         TextField(L.t(AppLocalizationKey.locProviderNameExample), text: $name)
                             .zcodeTextFieldStyle()
+                        Text(L.t(AppLocalizationKey.locProviderNameOptional))
+                            .interfaceFont(size: 10)
+                            .foregroundColor(Color.mimo.textMuted)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -1755,8 +1721,8 @@ struct AddProviderSheet: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          ProviderEndpointLogic.normalizedBaseURL(url) == nil)
+                .disabled(ProviderEndpointLogic.normalizedBaseURL(url) == nil)
+                .help(L.t(AppLocalizationKey.locTestConnection))
                 
                 Spacer()
                 
@@ -1765,13 +1731,18 @@ struct AddProviderSheet: View {
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .foregroundColor(Color.mimo.textSecondary)
+                .help(L.t(AppLocalizationKey.locCancel))
                 
                 Button(action: {
                     guard let normalizedURL = ProviderEndpointLogic.normalizedBaseURL(url) else { return }
-                    let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let resolvedName = ProviderNameLogic.resolvedName(
+                        name,
+                        fallback: type.rawValue,
+                        existing: appState.manageableProviderOptions.map(\.name)
+                    )
                     let provider = CustomProvider(
                         id: UUID().uuidString,
-                        name: normalizedName.isEmpty ? type.rawValue : normalizedName,
+                        name: resolvedName,
                         type: type,
                         baseURL: normalizedURL,
                         apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1792,14 +1763,13 @@ struct AddProviderSheet: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                             ProviderEndpointLogic.normalizedBaseURL(url) == nil
+                        .background(ProviderEndpointLogic.normalizedBaseURL(url) == nil
                              ? Color.mimo.textMuted : Color.mimo.brand)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(HandCursorButtonStyle())
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          ProviderEndpointLogic.normalizedBaseURL(url) == nil)
+                .disabled(ProviderEndpointLogic.normalizedBaseURL(url) == nil)
+                .help(L.t(AppLocalizationKey.locAddProvider1))
             }
             .padding(16)
         }

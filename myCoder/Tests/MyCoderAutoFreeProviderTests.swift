@@ -10,7 +10,7 @@ struct MyCoderAutoFreeProviderTests {
         let provider = MyCoderAutoFreeProvider()
 
         #expect(MyCoderAutoFreeProvider.builtInID == "mycoder-auto-free")
-        #expect(provider.displayName == "myCoder Auto Free")
+        #expect(provider.displayName == "OpenCode Zen")
         #expect(provider.selectedModel == "big-pickle")
         #expect(provider.isReady == false)
         #expect(MyCoderAutoFreeClient.defaultModelID == "big-pickle")

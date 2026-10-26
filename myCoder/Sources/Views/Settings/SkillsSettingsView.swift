@@ -121,6 +121,7 @@ struct InstalledSkillRow: View {
                 Image(systemName: "trash").interfaceFont(size: 12).foregroundColor(Color.mimo.error)
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locDelete))
         }
         .padding(12)
         .background(Color.mimo.surface)

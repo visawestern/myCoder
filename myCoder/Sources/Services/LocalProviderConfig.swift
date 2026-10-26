@@ -76,6 +76,8 @@ enum LocalProviderKind: String, Codable, CaseIterable, Identifiable {
 struct LocalProviderConfig: Identifiable, Codable, Equatable {
     let id: String
     var kind: LocalProviderKind
+    /// Optional user-visible name. Empty/nil falls back to the kind name.
+    var name: String?
     var host: String
     var port: Int
     var isEnabled: Bool
@@ -90,13 +92,14 @@ struct LocalProviderConfig: Identifiable, Codable, Equatable {
     var openCodeProviderID: String
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, host, port, isEnabled, models, username, openCodeProviderID
+        case id, kind, name, host, port, isEnabled, models, username, openCodeProviderID
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         kind = try c.decode(LocalProviderKind.self, forKey: .kind)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
         host = try c.decode(String.self, forKey: .host)
         port = try c.decode(Int.self, forKey: .port)
         isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
@@ -107,6 +110,7 @@ struct LocalProviderConfig: Identifiable, Codable, Equatable {
 
     init(id: String = UUID().uuidString,
          kind: LocalProviderKind,
+         name: String? = nil,
          host: String = "127.0.0.1",
          port: Int? = nil,
          isEnabled: Bool = true,
@@ -115,6 +119,7 @@ struct LocalProviderConfig: Identifiable, Codable, Equatable {
          openCodeProviderID: String = "opencode") {
         self.id = id
         self.kind = kind
+        self.name = name
         self.host = host
         self.port = port ?? kind.defaultPort
         self.isEnabled = isEnabled
@@ -135,7 +140,10 @@ struct LocalProviderConfig: Identifiable, Codable, Equatable {
 
     var healthURL: String { apiBaseURL + kind.healthPath }
 
-    var displayName: String { kind.displayName }
+    var displayName: String {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? kind.displayName : trimmed
+    }
 
     /// Keychain identifier for this provider's basic-auth password.
     var passwordKeychainIdentifier: String { "local-provider-password-\(id)" }

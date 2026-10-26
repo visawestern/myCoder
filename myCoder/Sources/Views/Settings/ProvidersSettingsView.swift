@@ -56,6 +56,7 @@ struct LocalProvidersSection: View {
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .disabled(detecting)
+                .help(L.t(AppLocalizationKey.locAutoDetect))
             }
             // Optional basic-auth for locked servers (`opencode serve`
             // answers 401 on every endpoint without it).
@@ -254,6 +255,7 @@ struct LocalProviderCard: View {
         }
         .buttonStyle(HandCursorButtonStyle())
         .disabled(isAdded)
+        .help(isAdded ? L.t(AppLocalizationKey.locAdded) : L.t(AppLocalizationKey.locAdd))
     }
 }
 
@@ -271,15 +273,8 @@ struct LocalProviderRow: View {
     @State private var refreshing = false
     @State private var models: [String] = []
     @State private var showModelPicker = false
-    @State private var showAllModels = false
     @State private var username: String = ""
     @State private var password: String = ""
-
-    private let collapsedModelLimit = 12
-
-    private var visibleModels: [String] {
-        showAllModels ? models : Array(models.prefix(collapsedModelLimit))
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -307,54 +302,49 @@ struct LocalProviderRow: View {
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .disabled(refreshing)
+                .help(L.t(AppLocalizationKey.locRefreshModels))
                 Button(action: onToggle) {
                     Text(config.isEnabled ? L.t(AppLocalizationKey.locEnabled) : L.t(AppLocalizationKey.locDisabled))
                         .interfaceFont(size: 11, weight: .medium)
                         .foregroundColor(config.isEnabled ? Color.mimo.success : Color.mimo.textMuted)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(config.isEnabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .interfaceFont(size: 12)
                         .foregroundColor(Color.mimo.error)
                 }
                 .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locRemoveProvider))
             }
             if !models.isEmpty {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 130, maximum: 240), spacing: 6)],
-                    alignment: .leading,
-                    spacing: 6
-                ) {
-                    ForEach(visibleModels, id: \.self) { model in
-                        Button(action: { selectModel(model) }) {
-                            Text(model)
-                                .interfaceFont(size: 10)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(isSelected(model) ? Color.mimo.brand.opacity(0.2) : Color.mimo.surface)
-                                .foregroundColor(isSelected(model) ? Color.mimo.brand : Color.mimo.textSecondary)
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(isSelected(model) ? Color.mimo.brand : Color.mimo.border, lineWidth: 1))
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                ScrollView {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 130, maximum: 240), spacing: 6)],
+                        alignment: .leading,
+                        spacing: 6
+                    ) {
+                        ForEach(models, id: \.self) { model in
+                            Button(action: { selectModel(model) }) {
+                                Text(model)
+                                    .interfaceFont(size: 10)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(isSelected(model) ? Color.mimo.brand.opacity(0.2) : Color.mimo.surface)
+                                    .foregroundColor(isSelected(model) ? Color.mimo.brand : Color.mimo.textSecondary)
+                                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(isSelected(model) ? Color.mimo.brand : Color.mimo.border, lineWidth: 1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(HandCursorButtonStyle())
+                            .help(model)
                         }
-                        .buttonStyle(HandCursorButtonStyle())
                     }
                 }
-                if models.count > collapsedModelLimit {
-                    Button {
-                        showAllModels.toggle()
-                    } label: {
-                        Text(showAllModels
-                             ? L.t("Show fewer models")
-                             : L.t("Show all models (%d)", models.count))
-                            .interfaceFont(size: 10, weight: .medium)
-                            .foregroundColor(Color.mimo.brand)
-                    }
-                    .buttonStyle(HandCursorButtonStyle())
-                }
+                .frame(maxHeight: 240)
             }
             // `opencode serve` locks every endpoint behind basic auth
             // (verified live) — credentials live here, password in Keychain.
@@ -497,6 +487,7 @@ struct ProvidersSettingsView: View {
                 .foregroundColor(Color.mimo.brand)
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locAddProvider1))
         }
     }
     
@@ -706,6 +697,7 @@ struct ModelDetailSpoiler: View {
                 }
             }
             .buttonStyle(HandCursorButtonStyle())
+            .help(isExpanded ? L.t(AppLocalizationKey.locCollapse) : L.t(AppLocalizationKey.locShow))
             
             if isExpanded, let meta = meta {
                 VStack(alignment: .leading, spacing: 8) {

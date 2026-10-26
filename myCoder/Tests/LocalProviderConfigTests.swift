@@ -30,6 +30,12 @@ struct LocalProviderConfigTests {
         #expect(!agent.displayName.contains("MiMo"))
     }
 
+    @Test func customLocalNameOverridesKindName() {
+        let custom = LocalProviderConfig(kind: .ollama, name: "Home Ollama")
+        #expect(custom.displayName == "Home Ollama")
+        #expect(LocalProviderConfig(kind: .ollama, name: "   ").displayName == "Ollama")
+    }
+
     @Test func persistenceRoundTrip() {
         let defaults = UserDefaults(suiteName: "test-local-providers-\(UUID().uuidString)")!
         let providers = [LocalProviderConfig(kind: .ollama), LocalProviderConfig(kind: .localAgent)]
@@ -63,6 +69,7 @@ struct LocalProviderConfigTests {
         let json = #"{"id":"old","kind":"openCode","host":"127.0.0.1","port":4096,"isEnabled":true,"models":["m"],"username":""}"#
         let decoded = try JSONDecoder().decode(LocalProviderConfig.self, from: json.data(using: .utf8)!)
         #expect(decoded.openCodeProviderID == "opencode")
+        #expect(decoded.name == nil)
     }
 
     @Test func refreshReconcileKeepsValidSelection() {

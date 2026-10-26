@@ -1,13 +1,17 @@
 import Foundation
 
-/// Pure logic for the explicit storage-reset scenario (plan Раздел 8 Блок 1 п.10).
-/// The app is HTTP-only (no local CLI) — there is no CLI history to clear and
-/// no auto-import switch, so the single honest scenario is "clear the app
-/// database". Decoupled from the UI so it is unit-testable without touching
-/// real databases.
+/// Pure logic for the explicit storage-reset scenarios (plan Раздел 8 Блок 1 п.10).
+/// The app is HTTP-only (no local CLI): the cache-only scope clears the global
+/// app database, while the full scope also removes the project registry and
+/// every known per-project database. Decoupled from the UI so it is
+/// unit-testable without touching real databases.
 enum StorageResetScope: Equatable {
     /// Clear the app database (`~/.mycoder/mimo.db`).
     case appCacheOnly
+    /// Wipe the app database, the project registry and every known
+    /// per-project database (`<project>/.mycoder/project.db`) plus the
+    /// fallback project database directory.
+    case fullDatabase
 }
 
 struct StorageResetPlan: Equatable {
@@ -20,20 +24,37 @@ enum StorageResetLogic {
     /// Build the concrete plan for a given scope. Paths are relative to the
     /// provided home directory.
     static func plan(for scope: StorageResetScope,
-                     homeDirectory: URL) -> StorageResetPlan {
+                     homeDirectory: URL,
+                     projectPaths: [String] = []) -> StorageResetPlan {
         let dbURL = MyCoderPaths.globalDatabaseURL(homeDirectory: homeDirectory)
         switch scope {
         case .appCacheOnly:
             return StorageResetPlan(scope: scope, deletesPaths: [dbURL.path])
+        case .fullDatabase:
+            var paths = [
+                dbURL.path,
+                MyCoderPaths.registryURL(homeDirectory: homeDirectory).path
+            ]
+            for projectPath in projectPaths {
+                paths.append(
+                    MyCoderPaths.projectDataDir(projectPath: projectPath)
+                        .appendingPathComponent("project.db").path
+                )
+            }
+            paths.append(
+                MyCoderPaths.appDir(homeDirectory: homeDirectory)
+                    .appendingPathComponent("projects", isDirectory: true).path
+            )
+            var seen = Set<String>()
+            let unique = paths.filter { seen.insert($0).inserted }
+            return StorageResetPlan(scope: scope, deletesPaths: unique)
         }
     }
 
-    /// Human-readable summary of what a plan will do (shown in the confirm alert).
+    /// Human-readable list of paths a plan will delete. The caller supplies
+    /// the localized heading so this stays free of hardcoded UI strings.
     static func summary(for plan: StorageResetPlan) -> String {
-        var lines: [String] = []
-        lines.append("Paths to delete:")
-        lines.append(contentsOf: plan.deletesPaths.map { "  - \($0)" })
-        return lines.joined(separator: "\n")
+        plan.deletesPaths.map { "  - \($0)" }.joined(separator: "\n")
     }
 }
 

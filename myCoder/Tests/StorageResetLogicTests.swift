@@ -19,6 +19,28 @@ struct StorageResetLogicTests {
         #expect(s.contains("mimo.db"))
     }
 
+    @Test func fullDatabasePlanCoversGlobalRegistryAndProjectDatabases() {
+        let plan = StorageResetLogic.plan(
+            for: .fullDatabase,
+            homeDirectory: home,
+            projectPaths: ["/work/alpha", "/work/beta"]
+        )
+        #expect(plan.scope == .fullDatabase)
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mimo.db"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects.json"))
+        #expect(plan.deletesPaths.contains("/work/alpha/.mycoder/project.db"))
+        #expect(plan.deletesPaths.contains("/work/beta/.mycoder/project.db"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects"))
+        #expect(plan.deletesPaths.count == Set(plan.deletesPaths).count)
+    }
+
+    @Test func fullDatabasePlanWorksWithoutKnownProjects() {
+        let plan = StorageResetLogic.plan(for: .fullDatabase, homeDirectory: home)
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mimo.db"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects.json"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects"))
+    }
+
     // MARK: - Identifier normalization (Блок 2 п.17)
 
     @Test func projectIDStripsTrailingSlash() {

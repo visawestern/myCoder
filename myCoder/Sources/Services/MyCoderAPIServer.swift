@@ -1098,7 +1098,7 @@ final class MyCoderAPIServer {
             }
             // A visible error message also completes the turn.
             if let last = messages.last, last.role == .assistant, last.isFinished,
-               last.content.hasPrefix("myCoder Auto Free error:")
+               last.content.hasPrefix("OpenCode Zen error:")
                    || last.content.hasPrefix("Web chat was not sent")
                    || last.content.hasPrefix("Web provider error:") {
                 return jsonResponse([

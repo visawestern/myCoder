@@ -50,7 +50,7 @@ struct WebVendorErrorPlaceholderTests {
         #expect(!SendWaitAnswerLogic.isRealAnswer(
             "Web chat was not sent: binding failed"))
         #expect(!SendWaitAnswerLogic.isRealAnswer(
-            "myCoder Auto Free error: boom"))
+            "OpenCode Zen error: boom"))
     }
 
     @Test func degenerateShortTextsNeverMatch() {

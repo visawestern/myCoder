@@ -25,28 +25,6 @@ struct GeneralSettingsView: View {
                 .interfaceFont(size: 24, weight: .bold)
                 .foregroundColor(Color.mimo.textPrimary)
             
-            HStack(spacing: 8) {
-                Text(AppLocalization.string(.settingsGeneralTitle, language: language))
-                    .interfaceFont(size: 12, weight: .medium)
-                    .foregroundColor(Color.mimo.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.mimo.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.mimo.border, lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                
-                Text(appState.appTheme.rawValue)
-                    .interfaceFont(size: 12)
-                    .foregroundColor(Color.mimo.textSecondary)
-                
-                Text(appState.appLanguage.rawValue)
-                    .interfaceFont(size: 12)
-                    .foregroundColor(Color.mimo.textSecondary)
-            }
-            
             SettingsCard {
                 SettingsRow(
                     title: AppLocalization.string(.settingsAppThemeTitle, language: language),
@@ -95,6 +73,7 @@ struct GeneralSettingsView: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(HandCursorButtonStyle())
+                            .help(zoom.rawValue)
                         }
                     }
                     .padding(4)

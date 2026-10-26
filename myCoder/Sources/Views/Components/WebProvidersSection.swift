@@ -46,6 +46,7 @@ struct WebProvidersSection: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(HandCursorButtonStyle())
+                    .help(providers.contains { $0.vendor == vendor } ? L.t(AppLocalizationKey.locAddAnotherAccount) : L.t(AppLocalizationKey.locAdd))
                 }
             }
 
@@ -312,6 +313,7 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                 if !isConnected {
                     Button(L.t(AppLocalizationKey.locLogin)) { onLogin() }
                         .interfaceFont(size: 12).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
+                        .help(L.t(AppLocalizationKey.locLogin))
                 } else {
                     HStack(spacing: 8) {
                         if !storedSessions.isEmpty {
@@ -345,12 +347,8 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                         .help(L.t(AppLocalizationKey.locChangeLoginSession))
 
                         // The complete catalog is rendered below as a full-width
-                        // accordion; the header only reports the current count.
-                        if !isRefreshing && !config.discoveredModels.isEmpty {
-                            Text(L.t(AppLocalizationKey.locDetectedCount, config.discoveredModels.count))
-                                .interfaceFont(size: 10)
-                                .foregroundColor(Color.mimo.success)
-                        } else if !isRefreshing && lastRefreshError != nil {
+                        // accordion; the header only reports refresh errors.
+                        if !isRefreshing && lastRefreshError != nil {
                             Label(L.t(AppLocalizationKey.locDetectionFailed), systemImage: "exclamationmark.triangle")
                                 .interfaceFont(size: 10).foregroundColor(Color.mimo.warning)
                         }
@@ -418,19 +416,22 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: showDiscoveredModels ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
-                            .interfaceFont(size: 12, weight: .semibold)
-                            .foregroundColor(Color.mimo.brand)
-                        Image(systemName: "cube.fill")
-                            .interfaceFont(size: 11)
-                            .foregroundColor(Color.mimo.textMuted)
-                        Text(L.t(AppLocalizationKey.locDetectedModelsCount, config.discoveredModels.count))
+                        Text(L.t(AppLocalizationKey.locDetectedModels))
                             .interfaceFont(size: 11, weight: .semibold)
                             .foregroundColor(Color.mimo.textSecondary)
-                        Spacer()
-                        Text(showDiscoveredModels ? L.t(AppLocalizationKey.locHide) : L.t(AppLocalizationKey.locShow))
-                            .interfaceFont(size: 10, weight: .medium)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 8)
+                        Text("\(config.discoveredModels.count)")
+                            .interfaceFont(size: 10, weight: .semibold, design: .monospaced)
                             .foregroundColor(Color.mimo.brand)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.mimo.brand.opacity(0.10))
+                            .clipShape(Capsule())
+                        Image(systemName: showDiscoveredModels ? "chevron.up" : "chevron.down")
+                            .interfaceFont(size: 10, weight: .semibold)
+                            .foregroundColor(Color.mimo.textSecondary)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
@@ -533,6 +534,7 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                         Spacer()
                         Button(L.t(AppLocalizationKey.locClear)) { config.systemPrompt = "" }
                             .interfaceFont(size: 10).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.error)
+                            .help(L.t(AppLocalizationKey.locClear))
                     }
                     TextEditor(text: $config.systemPrompt)
                         .font(.system(size: 12))
@@ -653,6 +655,7 @@ struct CustomModelEditor: View {
                                 .foregroundColor(Color.mimo.textMuted)
                         }
                         .buttonStyle(HandCursorButtonStyle())
+                        .help(L.t(AppLocalizationKey.locRemove))
                     }
                 }
             }
@@ -672,6 +675,7 @@ struct CustomModelEditor: View {
                 .buttonStyle(HandCursorButtonStyle())
                 .foregroundColor(Color.mimo.brand)
                 .disabled(newModelName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .help(L.t(AppLocalizationKey.locAddModel))
             }
         }
     }

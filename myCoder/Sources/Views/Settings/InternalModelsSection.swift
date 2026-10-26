@@ -124,6 +124,7 @@ struct InternalModelsSection: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .buttonStyle(HandCursorButtonStyle())
+        .help(L.t(AppLocalizationKey.locAddInternalModel))
     }
 
     private func groupedUnselected() -> [(title: String, refs: [InternalModelRef])] {

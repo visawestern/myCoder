@@ -151,7 +151,7 @@ enum InternalModelResolver {
             return custom.name
         }
         if let local = localProviders.first(where: { $0.id == ref.providerID }) {
-            return local.kind.displayName
+            return local.displayName
         }
         return ref.providerID
     }

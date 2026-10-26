@@ -122,6 +122,7 @@ struct StorageSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .help(L.t(AppLocalizationKey.locArchiveNow))
                     }
                 }
                 .padding(4)
@@ -153,6 +154,7 @@ struct StorageSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .help(L.t(AppLocalizationKey.locDeleteChatsOlderThan))
                     }
 
                     Divider()
@@ -163,6 +165,7 @@ struct StorageSettingsView: View {
                     .buttonStyle(HandCursorButtonStyle())
                     .foregroundColor(Color.mimo.error)
                     .interfaceFont(size: 12)
+                    .help(L.t(AppLocalizationKey.deleteAllArchivedChats))
 
                     Divider()
 
@@ -173,6 +176,7 @@ struct StorageSettingsView: View {
                     .buttonStyle(HandCursorButtonStyle())
                     .foregroundColor(Color.mimo.brand)
                     .interfaceFont(size: 12)
+                    .help(L.t(AppLocalizationKey.compressDatabase))
                     
                     Divider()
                     
@@ -188,6 +192,20 @@ struct StorageSettingsView: View {
                         pendingResetScope = .appCacheOnly; showResetConfirmation = true
                     }
                     .buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.error).interfaceFont(size: 12)
+                    .help(AppLocalization.string(.resetAppCacheWarning, language: appState.appLanguage))
+
+                    Button {
+                        pendingResetScope = .fullDatabase; showResetConfirmation = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(AppLocalization.string(.resetFullDatabase, language: appState.appLanguage))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Color.mimo.error)
+                    .controlSize(.small)
+                    .help(AppLocalization.string(.resetFullDatabaseWarning, language: appState.appLanguage))
                 }
             }
                 }
@@ -214,7 +232,10 @@ struct StorageSettingsView: View {
             .alert(resetAlertTitle, isPresented: $showResetConfirmation) {
                 Button(L.t(AppLocalizationKey.locCancel), role: .cancel) {}
                 Button(L.t(AppLocalizationKey.locResetButton), role: .destructive) {
-                    appState.resetStorage(scope: pendingResetScope)
+                    appState.resetStorage(
+                        scope: pendingResetScope,
+                        projectPaths: projectEntries.map(\.path)
+                    )
                     refreshStats()
                 }
             } message: {
@@ -295,13 +316,26 @@ struct StorageSettingsView: View {
     }
 
     private var resetAlertTitle: String {
-        L.t(AppLocalizationKey.locClearAppCache)
+        switch pendingResetScope {
+        case .appCacheOnly:
+            return AppLocalization.string(.resetAppCacheConfirmTitle, language: appState.appLanguage)
+        case .fullDatabase:
+            return AppLocalization.string(.resetFullDatabaseConfirmTitle, language: appState.appLanguage)
+        }
     }
 
     private var resetAlertMessage: String {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let plan = StorageResetLogic.plan(for: pendingResetScope, homeDirectory: home)
-        return StorageResetLogic.summary(for: plan)
+        let plan = StorageResetLogic.plan(
+            for: pendingResetScope,
+            homeDirectory: home,
+            projectPaths: projectEntries.map(\.path)
+        )
+        let warning = pendingResetScope == .fullDatabase
+            ? AppLocalization.string(.resetFullDatabaseWarning, language: appState.appLanguage)
+            : AppLocalization.string(.resetAppCacheWarning, language: appState.appLanguage)
+        let heading = AppLocalization.string(.resetPlanPathsTitle, language: appState.appLanguage)
+        return warning + "\n\n" + heading + "\n" + StorageResetLogic.summary(for: plan)
     }
     
     private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
@@ -317,10 +351,12 @@ struct StorageSettingsView: View {
                     exportAppConfiguration()
                 }
                 .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
+                .help(L.t(AppLocalizationKey.locStorageExportConfiguration))
                 Button(L.t(AppLocalizationKey.locStorageImportConfiguration)) {
                     importAppConfiguration()
                 }
                 .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
+                .help(L.t(AppLocalizationKey.locStorageImportConfiguration))
                 Button(L.t(AppLocalizationKey.locArchiveInactiveDays).replacingOccurrences(of: "{0}", with: "\(Int(archiveDays))")) {
                     mutateProjects { ProjectStorageAdmin.archiveAllInactive(days: Int(archiveDays), in: $0) }
                 }
@@ -344,6 +380,7 @@ struct StorageSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .disabled(deletionCancelRequested)
+                        .help(L.t(AppLocalizationKey.locCancelDeletion))
                     }
                     Text(L.t(AppLocalizationKey.locProjectRegistryDeletionWarning))
                         .interfaceFont(size: 10)
@@ -376,6 +413,7 @@ struct StorageSettingsView: View {
                     .interfaceFont(size: 11)
                     .buttonStyle(.borderedProminent)
                     .tint(Color.mimo.warning)
+                    .help(L.t(AppLocalizationKey.locArchiveInactive))
                 }
                 .padding(10)
                 .background(Color.mimo.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
@@ -420,6 +458,7 @@ struct StorageSettingsView: View {
             Spacer()
             Button(L.t(AppLocalizationKey.locFindNewPath2)) { relinkProject(entry) }
                 .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
+                .help(L.t(AppLocalizationKey.locFindNewPath2))
             Button(action: {
                 deleteConfirmName = ""
                 pendingDeleteEntry = entry
@@ -460,9 +499,11 @@ struct StorageSettingsView: View {
             if archived {
                 Button(L.t(AppLocalizationKey.locRestore)) { mutateProjects { ProjectRegistryLogic.restore(id: entry.id, in: $0) } }
                     .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand)
+                    .help(L.t(AppLocalizationKey.locRestore))
             } else {
                 Button(L.t(AppLocalizationKey.locArchive)) { mutateProjects { ProjectRegistryLogic.archive(id: entry.id, at: Date(), in: $0) } }
                     .interfaceFont(size: 11).buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.textSecondary)
+                    .help(L.t(AppLocalizationKey.locArchive))
             }
             Button(action: {
                 deleteConfirmName = ""
