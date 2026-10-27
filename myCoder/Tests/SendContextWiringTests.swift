@@ -39,4 +39,21 @@ struct SendContextWiringTests {
         #expect(source.contains("var isPointContextEnabled: Bool = true"))
         #expect(source.contains("com.mycoder.pointContextEnabled"))
     }
+
+    @Test("Память проекта загружается перед компиляцией и передаётся в пакет")
+    func sendPassesMemories() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        #expect(source.contains("ProjectMemoryStore.loadChunks("))
+        #expect(source.contains("memories: projectMemories"))
+        #expect(source.contains("case .remember(let fact)"))
+        #expect(source.contains("rememberProjectFact"))
+    }
+
+    @Test("Ключи памяти переведены на все языки")
+    func memoryKeysAreLocalized() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Services/AppLocalization.swift")
+        for key in ["locMemorySaved", "locMemoryFailed", "locMemoryUsage", "locMemoryLoadFailed"] {
+            #expect(source.contains("\"\(key)\""))
+        }
+    }
 }

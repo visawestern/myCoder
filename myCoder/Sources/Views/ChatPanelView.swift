@@ -413,6 +413,54 @@ struct ChatPanelView: View {
         }.value
     }
 
+    /// `/remember <text>`: store the fact in the project database and confirm
+    /// it in chat. A write failure is reported, never swallowed.
+    @MainActor
+    private func rememberProjectFact(_ text: String) async {
+        let projectPath = appState.selectedWorkspace?.path ?? ""
+        guard !projectPath.isEmpty else {
+            messageStore.append(Message(
+                role: .assistant,
+                content: L.t(AppLocalizationKey.locMemoryFailed),
+                isFinished: true
+            ))
+            return
+        }
+        guard let chunk = ProjectMemoryExtraction.chunk(text: text, projectPath: projectPath) else {
+            messageStore.append(Message(
+                role: .assistant,
+                content: L.t(AppLocalizationKey.locMemoryUsage),
+                isFinished: true
+            ))
+            return
+        }
+
+        let saved: Result<Void, Error> = await Task.detached(priority: .utility) {
+            do {
+                let store = try ProjectDatabaseManager.manager(forProjectPath: projectPath).makeMemoryStore()
+                try store.upsert(chunk)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }.value
+
+        switch saved {
+        case .success:
+            messageStore.append(Message(
+                role: .assistant,
+                content: "\(L.t(AppLocalizationKey.locMemorySaved)): \(chunk.text)",
+                isFinished: true
+            ))
+        case .failure:
+            messageStore.append(Message(
+                role: .assistant,
+                content: L.t(AppLocalizationKey.locMemoryFailed),
+                isFinished: true
+            ))
+        }
+    }
+
     // MARK: - Body event handlers
     //
     // These live outside `body` on purpose: the view body is large enough that
@@ -863,6 +911,10 @@ struct ChatPanelView: View {
                 messageText = ""
                 Task { await self.compactConversation(reason: "manual /compact") }
                 return
+            case .remember(let fact):
+                messageText = ""
+                Task { await self.rememberProjectFact(fact) }
+                return
             case .gitRequiredError(let cmd):
                 messageText = ""
                 messageStore.append(Message(role: .assistant, content: "Command /\(cmd) needs a git repository in this workspace.", isFinished: true))
@@ -1268,18 +1320,30 @@ struct ChatPanelView: View {
         // the raw message instead of blocking the send.
         let pointContextProjectRoot = appState.selectedWorkspace?.path ?? ""
         // Do not scan the project or flash the loader when the feature is off.
-        let pointContextRecords: [FileIndexRecord]
+        var pointContextRecords: [FileIndexRecord] = []
+        var projectMemories: [ProjectMemoryChunk] = []
+        var memoryWarning: String?
         if appState.isPointContextEnabled {
             await MainActor.run { appState.isCompilingContext = true }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
-        } else {
-            pointContextRecords = []
+            // Memory lives in the project database. A read failure must be
+            // visible: sending without the facts the user saved would answer
+            // from a wrong assumption.
+            do {
+                projectMemories = try await Task.detached(priority: .utility) {
+                    try ProjectMemoryStore.loadChunks(projectPath: pointContextProjectRoot)
+                }.value
+            } catch {
+                memoryWarning = L.t(AppLocalizationKey.locMemoryLoadFailed)
+            }
         }
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
             projectPath: pointContextProjectRoot,
-            isEnabled: appState.isPointContextEnabled
+            isEnabled: appState.isPointContextEnabled,
+            memories: projectMemories,
+            extraWarning: memoryWarning
         )
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText

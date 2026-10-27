@@ -22,7 +22,7 @@ struct SlashCommand: Identifiable, Equatable {
 /// Built-in commands modeled on Cursor/Claude Code/Codex (plan Раздел 5 Блок 2).
 enum BuiltInSlashCommand: String, CaseIterable, Identifiable {
     case goal, plan, review, test, commit, pr, explain, fix, refactor
-    case document, todo, summarize, compact, context, debug, verify
+    case document, todo, summarize, compact, context, debug, verify, remember
 
     var id: String { rawValue }
 
@@ -46,6 +46,7 @@ enum BuiltInSlashCommand: String, CaseIterable, Identifiable {
         case .context: return "Show the current context (open files, git branch, model/provider)."
         case .debug: return "Run a systematic debugging workflow (suggests the skill if installed)."
         case .verify: return "Verify the last change for real (run/test) before declaring done."
+        case .remember: return "Save a durable fact about the project (decision, preference, task) and reuse it on later turns."
         }
     }
 
@@ -67,6 +68,7 @@ enum BuiltInSlashCommand: String, CaseIterable, Identifiable {
         case .context: return "info.circle"
         case .debug: return "ant"
         case .verify: return "checkmark.shield"
+        case .remember: return "brain"
         }
     }
 

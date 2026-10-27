@@ -814,6 +814,15 @@ final class ProjectDatabaseManager {
         return ProjectSpecStore(db: db)
     }
 
+    /// Project memory lives in the same database as sessions and the spec
+    /// wizard. The table is created on first use, so an existing project
+    /// database gains it without a migration step.
+    func makeMemoryStore() throws -> ProjectMemoryStore {
+        touch()
+        try ProjectMemoryStore.createSchema(db)
+        return ProjectMemoryStore(db: db)
+    }
+
     // MARK: - Session Operations
 
     func insertSession(

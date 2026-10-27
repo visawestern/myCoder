@@ -113,6 +113,8 @@ struct CompiledContextPack: Equatable, Sendable {
     let manifest: ContextManifest
     let estimatedTokens: Int
     let text: String
+    /// Ids of the stored project memories that made it into the pack.
+    let memoryIDs: [String]
 }
 
 /// Assembles the context for one user message: plan → candidates → real code
@@ -127,6 +129,7 @@ enum TurnContextCompiler {
     static func compile(message: String,
                         board: ContextBoard,
                         projectRoot: String,
+                        memories: [ProjectMemoryChunk] = [],
                         budgetTokens: Int = defaultBudgetTokens,
                         maxFiles: Int = 8) -> CompiledContextPack {
         let plan = ContextQueryPlanner.plan(for: message)
@@ -159,6 +162,24 @@ enum TurnContextCompiler {
         var unknowns: [String] = []
         var included: [String] = []
         var dropped: [DroppedSource] = []
+
+        // Durable facts the user wrote with /remember. They are ranked against
+        // the same query as the code, and each line keeps its source, so a
+        // stale memory can be traced back and removed.
+        let relevantMemories = ProjectMemoryRanker.rank(memories, query: message, limit: 5)
+        let memoryIDs = relevantMemories.map(\.id)
+        if !relevantMemories.isEmpty {
+            let lines = relevantMemories.map { chunk -> String in
+                let source: String
+                if let messageID = chunk.sourceMessageID, !messageID.isEmpty {
+                    source = "сообщение \(messageID)"
+                } else {
+                    source = "id \(chunk.id)"
+                }
+                return "- [\(chunk.kind)] \(chunk.text) (источник: \(source))"
+            }
+            sections.append(ContextSection(title: "Память проекта", body: lines.joined(separator: "\n")))
+        }
 
         if candidates.isEmpty {
             unknowns.append("в индексе проекта нет файлов, подходящих под запрос")
@@ -213,7 +234,8 @@ enum TurnContextCompiler {
             unknowns: unknowns,
             manifest: ContextManifest(included: included, dropped: dropped, considered: candidates.count),
             estimatedTokens: (text.utf8.count + bytesPerToken - 1) / bytesPerToken,
-            text: text
+            text: text,
+            memoryIDs: memoryIDs
         )
     }
 

@@ -22,6 +22,8 @@ enum SlashCommandAction: Equatable {
     case showContext
     /// Replace the model-bound history with a factual summary (context shrink).
     case compactConversation
+    /// Store a durable project fact from `/remember <text>`.
+    case remember(String)
     /// The command needs a git repo but none is present.
     case gitRequiredError(command: String)
     /// Unknown command; suggest available ones.
@@ -86,6 +88,8 @@ struct SlashCommandExecutor {
             return .requestReview
         case .context:
             return .showContext
+        case .remember:
+            return .remember(parsed.argument)
         case .test:
             return .injectInstruction("Run the project's tests and show the result. \(parsed.argument)".trimmingCharacters(in: .whitespaces))
         case .explain:

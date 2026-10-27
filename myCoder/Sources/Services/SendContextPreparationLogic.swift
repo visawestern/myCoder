@@ -18,16 +18,18 @@ enum SendContextPreparationLogic {
                         records: [FileIndexRecord],
                         projectPath: String,
                         isEnabled: Bool,
+                        memories: [ProjectMemoryChunk] = [],
+                        extraWarning: String? = nil,
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
-            return SendContextPreparation(modelText: message, pack: nil, warning: nil)
+            return SendContextPreparation(modelText: message, pack: nil, warning: extraWarning)
         }
-        guard !records.isEmpty, !projectPath.isEmpty else {
+        guard !projectPath.isEmpty, !records.isEmpty || !memories.isEmpty else {
             return SendContextPreparation(
                 modelText: message,
                 pack: nil,
-                warning: L.t(AppLocalizationKey.locContextCompilationFailed)
+                warning: combinedWarning(L.t(AppLocalizationKey.locContextCompilationFailed), extraWarning)
             )
         }
 
@@ -36,18 +38,31 @@ enum SendContextPreparationLogic {
             message: trimmed,
             board: board,
             projectRoot: projectPath,
+            memories: memories,
             budgetTokens: budgetTokens
         )
-        guard !pack.citations.isEmpty else {
+        guard !pack.citations.isEmpty || !pack.memoryIDs.isEmpty else {
             // No evidence means no context: send the raw message and say why,
             // instead of pretending a pack was built.
             return SendContextPreparation(
                 modelText: message,
                 pack: pack,
-                warning: L.t(AppLocalizationKey.locContextCompilationFailed)
+                warning: combinedWarning(L.t(AppLocalizationKey.locContextCompilationFailed), extraWarning)
             )
         }
-        return SendContextPreparation(modelText: pack.text, pack: pack, warning: nil)
+        return SendContextPreparation(
+            modelText: pack.text,
+            pack: pack,
+            warning: combinedWarning(nil, extraWarning)
+        )
+    }
+
+    private static func combinedWarning(_ first: String?, _ second: String?) -> String? {
+        let parts = [first, second].compactMap { value -> String? in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
     /// The chat part that carries the pack behind the "Контекст" button.
@@ -64,6 +79,8 @@ enum SendContextPreparationLogic {
                             records: [FileIndexRecord],
                             projectPath: String,
                             isEnabled: Bool,
+                            memories: [ProjectMemoryChunk] = [],
+                            extraWarning: String? = nil,
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
@@ -71,6 +88,8 @@ enum SendContextPreparationLogic {
                 records: records,
                 projectPath: projectPath,
                 isEnabled: isEnabled,
+                memories: memories,
+                extraWarning: extraWarning,
                 budgetTokens: budgetTokens
             )
         }.value
