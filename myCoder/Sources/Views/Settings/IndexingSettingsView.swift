@@ -25,6 +25,15 @@ struct IndexingSettingsView: View {
             set: { newValue in appState.isPointContextEnabled = newValue }
         )
     }
+
+    /// The local planner only makes sense with point context: without a
+    /// compiled pack there is nothing to plan.
+    private var localPlannerBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isLocalQueryPlannerEnabled },
+            set: { newValue in appState.isLocalQueryPlannerEnabled = newValue }
+        )
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -49,6 +58,9 @@ struct IndexingSettingsView: View {
                     .disabled(!IndexingSettingsLogic.automaticIndexingIsAvailable)
 
                 SettingsToggleRow(title: L.t(AppLocalizationKey.locPointContext), description: L.t(AppLocalizationKey.locPointContextDescription), isOn: pointContextBinding)
+
+                SettingsToggleRow(title: L.t(AppLocalizationKey.locLocalQueryPlanner), description: L.t(AppLocalizationKey.locLocalQueryPlannerDescription), isOn: localPlannerBinding)
+                    .disabled(!appState.isPointContextEnabled)
             }
         }
     }

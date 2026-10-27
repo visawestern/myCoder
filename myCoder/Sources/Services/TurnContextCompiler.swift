@@ -117,6 +117,9 @@ struct CompiledContextPack: Equatable, Sendable {
     let memoryIDs: [String]
     /// The task state that replaced the raw transcript, when one was built.
     let ledgerSummary: String?
+    /// How the query plan was produced, when the optional local planner ran.
+    /// `.fallback` stays visible in the pack instead of being hidden.
+    let planStatus: LocalQueryPlanStatus?
 }
 
 /// Assembles the context for one user message: plan → candidates → real code
@@ -134,8 +137,10 @@ enum TurnContextCompiler {
                         memories: [ProjectMemoryChunk] = [],
                         ledger: TaskLedger? = nil,
                         budgetTokens: Int = defaultBudgetTokens,
-                        maxFiles: Int = 8) -> CompiledContextPack {
-        let plan = ContextQueryPlanner.plan(for: message)
+                        maxFiles: Int = 8,
+                        localPlan: LocalQueryPlanResult? = nil) -> CompiledContextPack {
+        let deterministic = ContextQueryPlanner.plan(for: message)
+        let plan = merged(deterministic, with: localPlan?.plan)
         let query = (plan.terms + plan.symbols).joined(separator: " ")
         var candidates = CandidateRanker.rank(
             board: board,
@@ -161,6 +166,15 @@ enum TurnContextCompiler {
         var sections: [ContextSection] = [
             ContextSection(title: "Запрос", body: request)
         ]
+        // The plan that steered retrieval is stated in one line. On fallback
+        // the reason is shown instead of silently pretending the local model
+        // planned the turn.
+        if let localPlan {
+            sections.append(ContextSection(
+                title: "План запроса",
+                body: planTraceText(localPlan)
+            ))
+        }
         var citations: [ContextCitation] = []
         var unknowns: [String] = []
         var included: [String] = []
@@ -175,8 +189,13 @@ enum TurnContextCompiler {
 
         // Durable facts the user wrote with /remember. They are ranked against
         // the same query as the code, and each line keeps its source, so a
-        // stale memory can be traced back and removed.
-        let relevantMemories = ProjectMemoryRanker.rank(memories, query: message, limit: 5)
+        // stale memory can be traced back and removed. Tags the planner
+        // recognised widen the memory query without inventing facts.
+        var memoryQuery = message
+        if let tags = localPlan?.plan?.memoryTags, !tags.isEmpty {
+            memoryQuery += " " + tags.joined(separator: " ")
+        }
+        let relevantMemories = ProjectMemoryRanker.rank(memories, query: memoryQuery, limit: 5)
         let memoryIDs = relevantMemories.map(\.id)
         if !relevantMemories.isEmpty {
             let lines = relevantMemories.map { chunk -> String in
@@ -246,8 +265,51 @@ enum TurnContextCompiler {
             estimatedTokens: (text.utf8.count + bytesPerToken - 1) / bytesPerToken,
             text: text,
             memoryIDs: memoryIDs,
-            ledgerSummary: ledgerSummary
+            ledgerSummary: ledgerSummary,
+            planStatus: localPlan?.status
         )
+    }
+
+    // MARK: - Local plan
+
+    /// Deterministic terms come first, then whatever the local planner added.
+    /// The model can only widen the query; it can never remove a term the
+    /// user's own words produced.
+    static func merged(_ base: ContextQueryPlan, with hint: LocalQueryPlan?) -> ContextQueryPlan {
+        guard let hint else { return base }
+        var terms = base.terms
+        for term in hint.terms where !terms.contains(term) { terms.append(term) }
+        var symbols = base.symbols
+        for symbol in hint.symbols where !symbols.contains(symbol) { symbols.append(symbol) }
+        var files = base.files
+        for file in hint.files where !files.contains(file) { files.append(file) }
+        return ContextQueryPlan(
+            terms: terms,
+            symbols: symbols,
+            files: files,
+            lineNumbers: base.lineNumbers
+        )
+    }
+
+    /// One visible line: which model planned the turn, and what it added.
+    /// The fallback case names the reason, so a degraded turn is never
+    /// presented as a planned one.
+    static func planTraceText(_ result: LocalQueryPlanResult) -> String {
+        switch result.status {
+        case .local(let model):
+            guard let plan = result.plan else { return "источник: \(model)" }
+            var parts: [String] = [
+                "источник: \(model)",
+                "намерение: \(plan.intent.rawValue)"
+            ]
+            if !plan.files.isEmpty { parts.append("файлы: \(plan.files.joined(separator: ", "))") }
+            if !plan.symbols.isEmpty { parts.append("символы: \(plan.symbols.joined(separator: ", "))") }
+            if !plan.terms.isEmpty { parts.append("термины: \(plan.terms.joined(separator: ", "))") }
+            if !plan.memoryTags.isEmpty { parts.append("теги памяти: \(plan.memoryTags.joined(separator: ", "))") }
+            return parts.joined(separator: "; ")
+        case .fallback(let reason):
+            return "детерминированный план (локальный планировщик: \(reason))"
+        }
     }
 
     // MARK: - Pieces

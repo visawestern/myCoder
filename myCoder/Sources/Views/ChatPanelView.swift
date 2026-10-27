@@ -413,6 +413,37 @@ struct ChatPanelView: View {
         }.value
     }
 
+    /// One bounded local planning pass (R9). The model sees only the top-K
+    /// entities and answers with a JSON plan; a missing local model, an empty
+    /// candidate set, a timeout or a rejected answer all become a visible
+    /// fallback that the deterministic plan then replaces.
+    private static func planLocally(message: String,
+                                    board: ContextBoard,
+                                    memories: [ProjectMemoryChunk],
+                                    localProviders: [LocalProviderConfig]) async -> LocalQueryPlanResult {
+        let directory = LocalModelDirectoryBuilder.build(localProviders: localProviders)
+        guard !directory.isEmpty else {
+            return LocalQueryPlanResult(
+                plan: nil,
+                status: .fallback(reason: LocalQueryPlannerError.noLocalModel.localizedDescription),
+                dropped: []
+            )
+        }
+        let context = LocalPlannerContextBuilder.build(
+            message: message,
+            board: board,
+            memories: memories
+        )
+        let planner = LocalQueryPlanner(
+            runner: LocalModelRunner(
+                directory: directory,
+                transport: LiveLocalCompilerTransport(timeout: LocalQueryPlanner.defaultTimeout)
+            ),
+            timeout: LocalQueryPlanner.defaultTimeout
+        )
+        return await planner.plan(message: message, context: context)
+    }
+
     /// `/remember <text>`: store the fact in the project database and confirm
     /// it in chat. A write failure is reported, never swallowed.
     @MainActor
@@ -1379,6 +1410,25 @@ struct ChatPanelView: View {
                 }
             }
         }
+        // The optional local planner runs before compilation and only widens
+        // the deterministic plan: it names entities from a bounded list, and
+        // any failure is reported as a fallback instead of blocking the send.
+        var localPlan: LocalQueryPlanResult?
+        var preparedBoard: ContextBoard?
+        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled {
+            let board = ContextBoardBuilder.build(
+                projectPath: pointContextProjectRoot,
+                records: pointContextRecords
+            )
+            preparedBoard = board
+            await MainActor.run { appState.isCompilingContext = true }
+            localPlan = await Self.planLocally(
+                message: text,
+                board: board,
+                memories: projectMemories,
+                localProviders: localProviders
+            )
+        }
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -1386,7 +1436,9 @@ struct ChatPanelView: View {
             isEnabled: appState.isPointContextEnabled,
             memories: projectMemories,
             ledger: taskLedger,
-            extraWarning: contextWarning
+            extraWarning: contextWarning,
+            localPlan: localPlan,
+            board: preparedBoard
         )
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText

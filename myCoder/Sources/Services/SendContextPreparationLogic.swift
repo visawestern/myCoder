@@ -21,6 +21,8 @@ enum SendContextPreparationLogic {
                         memories: [ProjectMemoryChunk] = [],
                         ledger: TaskLedger? = nil,
                         extraWarning: String? = nil,
+                        localPlan: LocalQueryPlanResult? = nil,
+                        board preparedBoard: ContextBoard? = nil,
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
@@ -34,14 +36,15 @@ enum SendContextPreparationLogic {
             )
         }
 
-        let board = ContextBoardBuilder.build(projectPath: projectPath, records: records)
+        let board = preparedBoard ?? ContextBoardBuilder.build(projectPath: projectPath, records: records)
         let pack = TurnContextCompiler.compile(
             message: trimmed,
             board: board,
             projectRoot: projectPath,
             memories: memories,
             ledger: ledger,
-            budgetTokens: budgetTokens
+            budgetTokens: budgetTokens,
+            localPlan: localPlan
         )
         guard !pack.citations.isEmpty || !pack.memoryIDs.isEmpty || pack.ledgerSummary != nil else {
             // No evidence means no context: send the raw message and say why,
@@ -94,6 +97,8 @@ enum SendContextPreparationLogic {
                             memories: [ProjectMemoryChunk] = [],
                             ledger: TaskLedger? = nil,
                             extraWarning: String? = nil,
+                            localPlan: LocalQueryPlanResult? = nil,
+                            board: ContextBoard? = nil,
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
@@ -104,6 +109,8 @@ enum SendContextPreparationLogic {
                 memories: memories,
                 ledger: ledger,
                 extraWarning: extraWarning,
+                localPlan: localPlan,
+                board: board,
                 budgetTokens: budgetTokens
             )
         }.value

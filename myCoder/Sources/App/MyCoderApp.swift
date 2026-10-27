@@ -148,6 +148,14 @@ class AppState: ObservableObject {
             defaults.set(isPointContextEnabled, forKey: "com.mycoder.pointContextEnabled")
         }
     }
+    /// Whether the optional local model plans the query before the host
+    /// compiles the context. Off by default: the local model may be slow or
+    /// absent, while the deterministic plan always works.
+    @Published var isLocalQueryPlannerEnabled: Bool = LocalPlannerSettings.defaultEnabled {
+        didSet {
+            defaults.set(isLocalQueryPlannerEnabled, forKey: LocalPlannerSettings.storageKey)
+        }
+    }
     @Published var selectedModel = ""
     @Published var selectedProviderID = ""
     @Published private(set) var providerConnectivity: [String: Bool] = [:]
@@ -512,6 +520,7 @@ class AppState: ObservableObject {
         selectedModel = defaults.string(forKey: "com.mycoder.selectedModel") ?? ""
         selectedProviderID = defaults.string(forKey: "com.mycoder.selectedProviderID") ?? ""
         isPointContextEnabled = defaults.object(forKey: "com.mycoder.pointContextEnabled") as? Bool ?? true
+        isLocalQueryPlannerEnabled = LocalPlannerSettings.isEnabled(in: defaults)
         showGoal = defaults.bool(forKey: "com.mycoder.showGoal")
         selectedVariant = {
             if let saved = defaults.string(forKey: "com.mycoder.selectedVariant"), !saved.isEmpty {
