@@ -471,7 +471,7 @@ struct ModelSettingsProviderColumns: View {
                     Button {
                         selectProvider(option)
                     } label: {
-                        Label(L.t("Edit provider"), systemImage: "pencil")
+                        Label(L.t(AppLocalizationKey.locEditProvider), systemImage: "pencil")
                     }
                     Button {
                         refreshProvider(option)
@@ -510,7 +510,7 @@ struct ModelSettingsProviderColumns: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .opacity(enabled ? 1 : 0.78)
         .contextMenu {
-            Button(L.t("Edit provider")) { selectProvider(option) }
+            Button(L.t(AppLocalizationKey.locEditProvider)) { selectProvider(option) }
             if isMutableProvider(option) {
                 Button(L.t(AppLocalizationKey.locRefreshModels)) { refreshProvider(option) }
                 Divider()
@@ -1075,7 +1075,7 @@ struct ModelSettingsProviderColumns: View {
             if customProvider(for: providerID) != nil {
                 HStack(spacing: 6) {
                     if newModelProviderID == providerID {
-                        TextField(L.t("Model ID"), text: $newModelDraft)
+                        TextField(L.t(AppLocalizationKey.locModelID), text: $newModelDraft)
                             .textFieldStyle(.plain)
                             .interfaceFont(size: 11, design: .monospaced)
                             .foregroundColor(Color.mimo.textPrimary)
@@ -1106,12 +1106,12 @@ struct ModelSettingsProviderColumns: View {
                             newModelProviderID = providerID
                             newModelDraft = ""
                         } label: {
-                            Label(L.t("Add custom model"), systemImage: "plus")
+                            Label(L.t(AppLocalizationKey.locAddCustomModel), systemImage: "plus")
                                 .interfaceFont(size: 11, weight: .medium)
                                 .foregroundColor(Color.mimo.brand)
                         }
                         .buttonStyle(HandCursorButtonStyle())
-                        .help(L.t("Add custom model"))
+                        .help(L.t(AppLocalizationKey.locAddCustomModel))
                         Spacer()
                     }
                 }
@@ -1216,7 +1216,7 @@ struct ModelSettingsProviderColumns: View {
 
     private func modelCloneRow(sourceModelID: String, providerID: String) -> some View {
         HStack(spacing: 6) {
-            TextField(L.t("Model ID"), text: $cloneModelDraft)
+            TextField(L.t(AppLocalizationKey.locModelID), text: $cloneModelDraft)
                 .textFieldStyle(.plain)
                 .interfaceFont(size: 11, design: .monospaced)
                 .foregroundColor(Color.mimo.textPrimary)
@@ -1252,7 +1252,7 @@ struct ModelSettingsProviderColumns: View {
 
     private func modelEditRow(modelID: String, providerID: String) -> some View {
         HStack(spacing: 6) {
-            TextField(L.t("Model ID"), text: $editingModelDraft)
+            TextField(L.t(AppLocalizationKey.locModelID), text: $editingModelDraft)
                 .textFieldStyle(.plain)
                 .interfaceFont(size: 11, design: .monospaced)
                 .foregroundColor(Color.mimo.textPrimary)
@@ -1315,8 +1315,8 @@ struct ModelSettingsProviderColumns: View {
             .frame(width: 22, height: 18)
             .contentShape(Rectangle())
             .help(isDisabled
-                ? L.t("Enable model")
-                : L.t("Disable model"))
+                ? L.t(AppLocalizationKey.locEnableModel)
+                : L.t(AppLocalizationKey.locDisableModel))
 
             // Model name
             Text(shortName)
@@ -1387,12 +1387,12 @@ struct ModelSettingsProviderColumns: View {
                     Button(action: {
                         beginRename(modelID, providerID: providerID)
                     }) {
-                        Label(L.t("Rename model"), systemImage: "pencil")
+                        Label(L.t(AppLocalizationKey.locRenameModel), systemImage: "pencil")
                     }
                     Button(action: {
                         beginClone(modelID, providerID: providerID)
                     }) {
-                        Label(L.t("Clone model"), systemImage: "plus.square.on.square")
+                        Label(L.t(AppLocalizationKey.locCloneModel), systemImage: "plus.square.on.square")
                     }
                 }
 
@@ -1400,7 +1400,7 @@ struct ModelSettingsProviderColumns: View {
                     toggleModelDisabled(modelID, providerID: providerID)
                 }) {
                     Label(
-                        isDisabled ? L.t("Enable model") : L.t("Disable model"),
+                        isDisabled ? L.t(AppLocalizationKey.locEnableModel) : L.t(AppLocalizationKey.locDisableModel),
                         systemImage: isDisabled ? "checkmark.circle" : "slash.circle"
                     )
                 }
@@ -1410,7 +1410,7 @@ struct ModelSettingsProviderColumns: View {
                     Button(role: .destructive) {
                         deleteModel(modelID, from: providerID)
                     } label: {
-                        Label(L.t("Delete model"), systemImage: "trash")
+                        Label(L.t(AppLocalizationKey.locDeleteModel), systemImage: "trash")
                     }
                 }
 

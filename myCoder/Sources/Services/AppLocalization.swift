@@ -409,6 +409,16 @@ enum AppLocalizationKey: String, CaseIterable {
     case locModels1
     case locModelsForThisProvider
     case locModelsLoaded
+    case locModelID
+    case locRenameModel
+    case locCloneModel
+    case locEnableModel
+    case locDisableModel
+    case locDeleteModel
+    case locAddCustomModel
+    case locEditProvider
+    case locAllModelsAssigned
+    case locUnavailable
     case locName
     case locNewProject
     case locNext
@@ -1119,6 +1129,16 @@ enum AppLocalization {
         "locChanges1": ["en": "No changes", "ru": "Нет изменений", "es": "Sin cambios", "fr": "Aucune modification", "de": "Keine Änderungen", "zh": "无更改", "ja": "変更なし", "ko": "변경 사항 없음", "pt": "Sem alterações", "ar": "لا توجد تغييرات"],
         "locModelsForThisProvider": ["en": "No models for this provider", "ru": "Нет моделей для этого провайдера", "es": "No hay modelos para este proveedor", "fr": "Aucun modèle pour ce fournisseur", "de": "Keine Modelle für diesen Anbieter", "zh": "此提供商没有模型", "ja": "このプロバイダーのモデルはありません", "ko": "이 공급자에 대한 모델이 없습니다", "pt": "Nenhum modelo para este provedor", "ar": "لا توجد نماذج لهذا المزود"],
         "locModelsLoaded": ["en": "No models loaded", "ru": "Модели не загружены", "es": "No se cargaron modelos", "fr": "Aucun modèle chargé", "de": "Keine Modelle geladen", "zh": "未加载模型", "ja": "モデルが読み込まれていません", "ko": "로드된 모델 없음", "pt": "Nenhum modelo carregado", "ar": "لم يتم تحميل أي نماذج"],
+        "locModelID": ["en": "Model ID", "ru": "ID модели", "es": "ID del modelo", "fr": "ID du modèle", "de": "Modell-ID", "zh": "模型 ID", "ja": "モデル ID", "ko": "모델 ID", "pt": "ID do modelo", "ar": "معرف النموذج"],
+        "locRenameModel": ["en": "Rename model", "ru": "Переименовать модель", "es": "Renombrar modelo", "fr": "Renommer le modèle", "de": "Modell umbenennen", "zh": "重命名模型", "ja": "モデル名変更", "ko": "모델 이름 변경", "pt": "Renomear modelo", "ar": "إعادة تسمية النموذج"],
+        "locCloneModel": ["en": "Clone model", "ru": "Клонировать модель", "es": "Clonar modelo", "fr": "Cloner le modèle", "de": "Modell klonen", "zh": "克隆模型", "ja": "モデルを複製", "ko": "모델 복제", "pt": "Clonar modelo", "ar": "استنساخ النموذج"],
+        "locEnableModel": ["en": "Enable model", "ru": "Включить модель", "es": "Habilitar modelo", "fr": "Activer le modèle", "de": "Modell aktivieren", "zh": "启用模型", "ja": "モデルを有効化", "ko": "모델 활성화", "pt": "Ativar modelo", "ar": "تفعيل النموذج"],
+        "locDisableModel": ["en": "Disable model", "ru": "Отключить модель", "es": "Deshabilitar modelo", "fr": "Désactiver le modèle", "de": "Modell deaktivieren", "zh": "禁用模型", "ja": "モデルを無効化", "ko": "모델 비활성화", "pt": "Desativar modelo", "ar": "تعطيل النموذج"],
+        "locDeleteModel": ["en": "Delete model", "ru": "Удалить модель", "es": "Eliminar modelo", "fr": "Supprimer le modèle", "de": "Modell löschen", "zh": "删除模型", "ja": "モデルを削除", "ko": "모델 삭제", "pt": "Excluir modelo", "ar": "حذف النموذج"],
+        "locAddCustomModel": ["en": "Add custom model", "ru": "Добавить пользовательскую модель", "es": "Añadir modelo personalizado", "fr": "Ajouter un modèle personnalisé", "de": "Benutzerdefiniertes Modell hinzufügen", "zh": "添加自定义模型", "ja": "カスタムモデルを追加", "ko": "사용자 정의 모델 추가", "pt": "Adicionar modelo personalizado", "ar": "إضافة نموذج مخصص"],
+        "locEditProvider": ["en": "Edit provider", "ru": "Редактировать провайдера", "es": "Editar proveedor", "fr": "Modifier le fournisseur", "de": "Anbieter bearbeiten", "zh": "编辑提供商", "ja": "プロバイダーを編集", "ko": "공급자 편집", "pt": "Editar provedor", "ar": "تعديل المزود"],
+        "locAllModelsAssigned": ["en": "All available models are already assigned", "ru": "Все доступные модели уже назначены", "es": "Todos los modelos disponibles ya están asignados", "fr": "Tous les modèles disponibles sont déjà affectés", "de": "Alle verfügbaren Modelle sind bereits zugewiesen", "zh": "所有可用模型已分配", "ja": "すべての利用可能なモデルが割り当て済み", "ko": "모든 사용 가능한 모델이 이미 할당됨", "pt": "Todos os modelos disponíveis já estão atribuídos", "ar": "تم تعيين جميع النماذج المتاحة بالفعل"],
+        "locUnavailable": ["en": "Unavailable", "ru": "Недоступно", "es": "No disponible", "fr": "Indisponible", "de": "Nicht verfügbar", "zh": "不可用", "ja": "利用不可", "ko": "사용 불가", "pt": "Indisponível", "ar": "غير متاح"],
         "locNotifications": ["en": "No notifications", "ru": "Нет уведомлений", "es": "Sin notificaciones", "fr": "Aucune notification", "de": "Keine Benachrichtigungen", "zh": "暂无通知", "ja": "通知なし", "ko": "알림 없음", "pt": "Sem notificações", "ar": "لا توجد إشعارات"],
         "locParametersAvailable": ["en": "No parameters available", "ru": "Нет доступных параметров", "es": "Sin parámetros disponibles", "fr": "Aucun paramètre disponible", "de": "Keine Parameter verfügbar", "zh": "没有可用参数", "ja": "利用可能なパラメーターはありません", "ko": "사용 가능한 매개변수 없음", "pt": "Nenhum parâmetro disponível", "ar": "لا توجد معلمات متاحة"],
         "locProjectsRegisteredYet": ["en": "No projects registered yet.", "ru": "Проекты ещё не зарегистрированы.", "es": "Aún no hay proyectos registrados.", "fr": "Aucun projet enregistré pour le moment.", "de": "Noch keine Projekte registriert.", "zh": "尚未注册项目。", "ja": "まだプロジェクトが登録されていません。", "ko": "등록된 프로젝트가 아직 없습니다.", "pt": "Nenhum projeto registrado ainda.", "ar": "لم يتم تسجيل مشاريع بعد."],

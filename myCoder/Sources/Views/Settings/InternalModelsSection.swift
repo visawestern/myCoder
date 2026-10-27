@@ -97,7 +97,7 @@ struct InternalModelsSection: View {
         Menu {
             let groups = groupedUnselected()
             if groups.isEmpty {
-                Text(L.t("All available models are already assigned"))
+                Text(L.t(AppLocalizationKey.locAllModelsAssigned))
             } else {
                 ForEach(groups, id: \.title) { group in
                     Section(group.title) {
@@ -194,7 +194,7 @@ struct InternalModelsSection: View {
                             .clipShape(Capsule())
                     }
                     if !isAvailable {
-                        Text(L.t("Unavailable"))
+                        Text(L.t(AppLocalizationKey.locUnavailable))
                             .interfaceFont(size: 8, weight: .medium)
                             .foregroundColor(Color.mimo.warning)
                     }
