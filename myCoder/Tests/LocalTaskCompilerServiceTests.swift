@@ -98,6 +98,47 @@ struct LocalTaskCompilerServiceTests {
         }
     }
 
+    // MARK: - Compile pipeline
+
+    private final class StubTransport: LocalCompilerTransporting, @unchecked Sendable {
+        let answer: String
+        init(answer: String) { self.answer = answer }
+        func complete(candidate: LocalModelCandidate, prompt: String, system: String?) async throws -> String {
+            answer
+        }
+    }
+
+    @Test("Компиляция возвращает материализованный код с номерами строк")
+    func compileMaterializesContext() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mimo-compile-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = (1...12).map { "line \($0)" }.joined(separator: "\n")
+        try source.write(to: root.appendingPathComponent("Sample.swift"), atomically: true, encoding: .utf8)
+
+        let board = ContextBoardBuilder.build(
+            projectPath: root.path,
+            records: [
+                FileIndexRecord(path: "Sample.swift", hash: "h", size: 10,
+                                lastModified: 1, language: "swift", searchableText: source)
+            ]
+        )
+        let answer = #"{"atomicTask": "Task", "refs": [{"path": "Sample.swift", "startLine": 2, "endLine": 3}]}"#
+        let runner = LocalModelRunner(
+            directory: LocalModelDirectory(candidates: [
+                LocalModelCandidate(providerID: "p", providerName: "P", baseURL: "http://x", apiKey: nil, model: "m")
+            ]),
+            transport: StubTransport(answer: answer)
+        )
+        let service = LocalTaskCompilerService(board: board, runner: runner)
+
+        let compiled = try await service.compile(userRequest: "продолжай", planNode: nil, projectRoot: root.path)
+        #expect(compiled.context.contains("2 | line 2"))
+        #expect(compiled.context.contains("Sample.swift:2-3"))
+        #expect(compiled.task.atomicTask == "Task")
+    }
+
     // MARK: - Prompt
 
     @Test("Промпт компилятора содержит запрос, доску и запрет писать код")

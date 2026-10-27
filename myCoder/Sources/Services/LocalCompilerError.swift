@@ -17,6 +17,8 @@ enum LocalCompilerError: Error, Equatable, LocalizedError {
     case unknownReference(path: String)
     /// A referenced file could not be read.
     case materializationFailed(path: String, reason: String)
+    /// A reference points outside the project root.
+    case outsideProject(path: String)
     /// The prompt does not fit the remote model window and cannot be split.
     case promptDoesNotFit(model: String, bytes: Int, limit: Int)
 
@@ -36,6 +38,8 @@ enum LocalCompilerError: Error, Equatable, LocalizedError {
             return "Local model pointed at a file that is not in the project: \(path)"
         case .materializationFailed(let path, let reason):
             return "Cannot read '\(path)': \(reason)"
+        case .outsideProject(let path):
+            return "Reference points outside the project: \(path)"
         case .promptDoesNotFit(let model, let bytes, let limit):
             return "Context does not fit the window of '\(model)' (\(bytes) > \(limit) bytes)"
         }

@@ -7,12 +7,14 @@ struct LocalTaskCompilerService {
         let task: AtomicTask
         /// The local model that produced the task.
         let model: String
+        /// The real code the task points at, with the file's own line numbers.
+        let context: String
     }
 
     let board: ContextBoard
     let runner: LocalModelRunner
 
-    func compile(userRequest: String, planNode: PlanTodoItem?) async throws -> CompiledTask {
+    func compile(userRequest: String, planNode: PlanTodoItem?, projectRoot: String) async throws -> CompiledTask {
         let prompt = LocalCompilerPromptBuilder.build(
             userRequest: userRequest,
             board: board,
@@ -21,7 +23,8 @@ struct LocalTaskCompilerService {
         let outcome = try await runner.run(prompt: prompt.user, system: prompt.system)
         let task = try AtomicTaskParser.parse(outcome.text)
         try Self.validate(task: task, board: board)
-        return CompiledTask(task: task, model: outcome.candidate.model)
+        let context = try ContextMaterializer.materialize(task: task, projectRoot: projectRoot)
+        return CompiledTask(task: task, model: outcome.candidate.model, context: context)
     }
 
     /// The local model must point at files that really exist in the project.
