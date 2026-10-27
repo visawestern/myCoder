@@ -59,10 +59,10 @@ struct EmptyChatStateView: View {
                         showFilePicker: $showFilePicker,
                         messageQueue: messageQueue,
                         requestInputFocus: true,
-                        onForceSendQueued: onForceSendQueued,
-                        onEditQueued: onEditQueued,
                         autoGrow: true,
-                        maxTextHeight: maxTextHeight
+                        maxTextHeight: maxTextHeight,
+                        onForceSendQueued: onForceSendQueued,
+                        onEditQueued: onEditQueued
                     )
                     .frame(maxWidth: InputLayout.cardMaxWidth)
                 }

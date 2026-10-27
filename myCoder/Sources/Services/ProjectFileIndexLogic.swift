@@ -75,10 +75,32 @@ enum ProjectFileIndexLogic {
                            gitignorePatterns: [String] = [],
                            maxFileSize: Int = defaultMaxFileSize) -> Bool {
         if size < 0 || size > maxFileSize { return false }
+        if isSecretFile(relativePath: relativePath) { return false }
         if shouldExclude(relativePath: relativePath, excludes: excludes, gitignorePatterns: gitignorePatterns) {
             return false
         }
         return true
+    }
+
+    /// Files that hold credentials must never enter the project index: the
+    /// index feeds the auto-context block that is sent to a model, so a
+    /// `.env` excerpt would leak secrets to the provider.
+    static let secretFileNames: Set<String> = [
+        ".env", ".netrc", ".npmrc", ".pypirc", ".git-credentials",
+        ".htpasswd", ".pgpass", "credentials.json", "secrets.json", "secrets.yml",
+        "id_rsa", "id_ed25519", "master.key"
+    ]
+
+    static let secretExtensions: Set<String> = [
+        "pem", "key", "p12", "pfx", "mobileprovision", "keystore", "jks"
+    ]
+
+    static func isSecretFile(relativePath: String) -> Bool {
+        let name = (relativePath as NSString).lastPathComponent.lowercased()
+        if name.hasPrefix(".env") { return true }
+        if secretFileNames.contains(name) { return true }
+        let ext = (relativePath as NSString).pathExtension.lowercased()
+        return secretExtensions.contains(ext)
     }
 
     /// Compute the incremental delta between the current index and freshly

@@ -132,21 +132,7 @@ struct ChatPanelView: View {
             #endif
 
             if ChatPanelLayoutLogic.shouldUseCenteredInput(messageCount: messageStore.messages.count) {
-                EmptyChatStateView(
-                    messageText: $messageText,
-                    attachmentStore: attachmentStore,
-                    showFilePicker: $showFilePicker,
-                    messageQueue: messageQueue,
-                    onSend: sendMessage,
-                    onStop: stopGeneration,
-                    isLoading: appState.isLoading,
-                    onForceSendQueued: forceSendQueued,
-                    onEditQueued: editQueuedMessage,
-                    isLoadingChat: ChatLoadingIndicatorLogic.presentation(
-                        isLoading: messageStore.isLoadingMessages,
-                        messageCount: messageStore.messages.count
-                    ) == .centered
-                )
+                centeredInputState
             } else {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
@@ -224,47 +210,16 @@ struct ChatPanelView: View {
                             updateCurrentVisibleUserMessage()
                         }
                         .onChange(of: ChatScrollLogic.revision(messages: displayMessages)) { _ in
-                            guard ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else {
-                                return
-                            }
-                            DispatchQueue.main.async {
-                                withAnimation(.easeOut(duration: 0.15)) {
-                                    proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
-                                }
-                            }
+                            autoScrollIfPinned(proxy: proxy)
                         }
                         .onChange(of: messageStore.currentSessionID) { newID in
-                            guard ChatScrollLogic.shouldScrollOnSessionChange(
-                                oldSessionID: scrolledSessionID,
-                                newSessionID: newID
-                            ) else { return }
-                            scrolledSessionID = newID
-                            DispatchQueue.main.async {
-                                proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
-                            }
-                            // Load draft for new session
-                            loadDraft(for: newID)
+                            handleSessionChange(newID, proxy: proxy)
                         }
                         .onChange(of: messageText) { newText in
-                            // Debounced draft save
-                            draftSaveTask?.cancel()
-                            draftSaveTask = Task {
-                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
-                                guard !Task.isCancelled else { return }
-                                await MainActor.run {
-                                    saveDraft(newText)
-                                }
-                            }
+                            scheduleDraftSave(newText)
                         }
                         .onAppear {
-                            guard ChatScrollLogic.shouldScrollOnSessionChange(
-                                oldSessionID: scrolledSessionID,
-                                newSessionID: messageStore.currentSessionID
-                            ) else { return }
-                            scrolledSessionID = messageStore.currentSessionID
-                            DispatchQueue.main.async {
-                                proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
-                            }
+                            scrollToBottomOnAppear(proxy: proxy)
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if ChatScrollLogic.showsScrollToBottomButton(
@@ -354,31 +309,7 @@ struct ChatPanelView: View {
         }
         #endif
         .onChange(of: appState.selectedSession?.id) { newSessionID in
-            if let sessionID = newSessionID {
-                guard SessionReloadLogic.shouldReloadMessages(
-                    newSessionID: sessionID,
-                    currentSessionID: messageStore.currentSessionID,
-                    localMessageCount: messageStore.messages.count,
-                    isLoading: appState.isLoading
-                ) else { return }
-                loadSessionMessages(sessionID: sessionID)
-                #if canImport(WebKit)
-                // User directive 2026-09-09: moving to another chat/project
-                // surfaces THAT chat's pooled webview ("another tab of the
-                // same site") when one exists; otherwise the panel keeps
-                // showing whatever it showed.
-                let projectID = appState.selectedWorkspace?.id
-                    ?? appState.selectedWorkspace?.path ?? "global"
-                appState.showPanelForChatIfPooled(projectID: projectID, chatID: sessionID)
-                #endif
-            } else {
-                messageStore.clear()
-                messageText = ""
-                attachmentStore.clear()
-                stashedComposerDraft = nil
-                restoreStashedDraftAfterSend = false
-                composerHoldsQueuedMessage = false
-            }
+            handleSelectedSessionChange(newSessionID)
         }
         .onChange(of: appState.isLoading) { loading in
             if !loading {
@@ -390,47 +321,19 @@ struct ChatPanelView: View {
             flushPendingSpecNodePrompt()
         }
         .onChange(of: messageStore.loadedSessionID) { sessionID in
-            if let sessionID {
-                reattachPendingApprovals(sessionID: sessionID)
-            }
-            flushPendingSpecNodePrompt()
+            handleLoadedSessionChange(sessionID)
         }
         .onChange(of: messageStore.loadingSessionID) { _ in
             flushPendingSpecNodePrompt()
         }
         .onAppear {
-            ChatPasteCoordinator.shared.register(store: attachmentStore) { text in
-                if messageText.isEmpty {
-                    messageText = text
-                } else {
-                    messageText += text
-                }
-            }
-            messageQueue.setOnProcess { queued in
-                Task {
-                    await self.sendDirectly(
-                        text: queued.text,
-                        files: queued.files,
-                        images: queued.images,
-                        agentModeOverride: queued.type.toAgentMode
-                    )
-                }
-            }
-            if let sessionID = appState.selectedSession?.id {
-                previousSessionID = sessionID
-                loadSessionMessages(sessionID: sessionID)
-            }
-            flushPendingSpecNodePrompt()
+            handleViewAppear()
         }
         .onReceive(NotificationCenter.default.publisher(for: .editMessage)) { notification in
-            guard let messageID = notification.userInfo?["messageId"] as? String,
-                  let message = messageStore.messages.first(where: { $0.id == messageID }) else { return }
-            loadMessageIntoComposer(message)
+            editMessageFromNotification(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .resendMessage)) { notification in
-            guard let messageID = notification.userInfo?["messageId"] as? String,
-                  let message = messageStore.messages.first(where: { $0.id == messageID }) else { return }
-            resendMessage(message)
+            resendMessageFromNotification(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .retryMessage)) { notification in
             guard let messageID = notification.userInfo?["messageId"] as? String else { return }
@@ -440,73 +343,245 @@ struct ChatPanelView: View {
             stopGeneration()
         }
         .onReceive(NotificationCenter.default.publisher(for: .apiSendRequested)) { notification in
-            guard let message = notification.userInfo?["message"] as? String, !message.isEmpty else { return }
-            if let chatId = notification.userInfo?["chatId"] as? String, !chatId.isEmpty {
-                messageStore.currentSessionID = chatId
-            }
-            messageText = message
-            sendMessage()
+            handleAPISendRequest(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .submitPlanQuestionAnswers)) { notification in
             guard let answers = notification.userInfo?["answers"] as? [[String]] else { return }
             submitQuestionAnswers(answers)
         }
         .onReceive(NotificationCenter.default.publisher(for: .localToolApprovalResolved)) { notification in
-            guard let approvalID = notification.userInfo?["approvalID"] as? String,
-                  let approved = notification.userInfo?["approved"] as? Bool else { return }
-            Task { @MainActor in
-                let assistantID = ToolApprovalCenter.shared.assistantID(for: approvalID)
-                ToolApprovalCenter.shared.resolve(id: approvalID, approved: approved)
-                appState.notificationService.remove(approvalID)
-                if let assistantID {
-                    messageStore.update(id: assistantID) { msg in
-                        msg.pendingApprovals.removeAll { $0.id == approvalID }
-                    }
-                }
-                MyCoderAPIServer.appendLog(
-                    "⏸ local tool approval tapped: id=\(approvalID) approved=\(approved)"
-                )
-            }
+            handleLocalToolApprovalResolved(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .webToolApprovalResolved)) { notification in
-            guard let approvalID = notification.userInfo?["approvalID"] as? String,
-                  let approved = notification.userInfo?["approved"] as? Bool else { return }
-            activeApprovalBox?.resolve(id: approvalID, approved: approved)
-            // Clear the card from the assistant message: the driver resumes
-            // with the verdict and the turn continues.
-            if let idx = messageStore.messages.firstIndex(where: {
-                $0.pendingApprovalID == approvalID
-            }) {
-                messageStore.update(id: messageStore.messages[idx].id) { m in
-                    m.pendingApprovalID = nil
-                    m.pendingApprovalTool = nil
-                    m.pendingApprovalMessage = nil
-                }
-            }
+            handleWebToolApprovalResolved(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .copyEntireChat)) { _ in
-            switch ChatCopyLogic.result(from: messageStore.messages) {
-            case .empty:
-                NotificationCenter.default.post(name: .copyEntireChatUnavailable, object: nil)
-            case .copied(let transcript):
-                NSPasteboard.general.clearContents()
-                let didCopy = NSPasteboard.general.setString(transcript, forType: .string)
-                NotificationCenter.default.post(
-                    name: didCopy ? .copyEntireChatCompleted : .copyEntireChatUnavailable,
-                    object: nil
+            copyEntireChat()
+        }
+        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            handleImportedFiles(result)
+        }
+    }
+
+    /// Imports the files chosen in the file picker.
+    ///
+    /// Kept out of the view body on purpose: the body expression is large
+    /// enough that the Swift type-checker times out ("unable to type-check
+    /// this expression in reasonable time") when this closure is inlined.
+    private func handleImportedFiles(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result else { return }
+        for url in urls {
+            let name = url.lastPathComponent
+            let ext = url.pathExtension
+            let type = FileType.from(ext: ext)
+            let path = url.path
+            attachmentStore.appendFile(FileInfo(name: name, type: type, path: path))
+        }
+    }
+
+    /// Empty-chat state with the centered composer.
+    ///
+    /// Kept as a separate view property so `body` stays within the Swift
+    /// type-checker's budget.
+    @ViewBuilder
+    private var centeredInputState: some View {
+        let presentation = ChatLoadingIndicatorLogic.presentation(
+            isLoading: messageStore.isLoadingMessages,
+            messageCount: messageStore.messages.count
+        )
+        EmptyChatStateView(
+            messageText: $messageText,
+            attachmentStore: attachmentStore,
+            showFilePicker: $showFilePicker,
+            messageQueue: messageQueue,
+            onSend: sendMessage,
+            onStop: stopGeneration,
+            isLoading: appState.isLoading,
+            isLoadingChat: presentation == .centered,
+            onForceSendQueued: forceSendQueued,
+            onEditQueued: editQueuedMessage
+        )
+    }
+
+    // MARK: - Body event handlers
+    //
+    // These live outside `body` on purpose: the view body is large enough that
+    // inlining the closures makes the Swift type-checker time out
+    // ("unable to type-check this expression in reasonable time").
+
+    /// Auto-scrolls to the newest message unless the reader scrolled away.
+    private func autoScrollIfPinned(proxy: ScrollViewProxy) {
+        guard ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.15)) {
+                proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
+    /// Keeps the visible message and the persisted draft in sync with the
+    /// session the chat is now showing.
+    private func handleSessionChange(_ newID: String?, proxy: ScrollViewProxy) {
+        guard ChatScrollLogic.shouldScrollOnSessionChange(
+            oldSessionID: scrolledSessionID,
+            newSessionID: newID
+        ) else { return }
+        scrolledSessionID = newID
+        DispatchQueue.main.async {
+            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+        }
+        loadDraft(for: newID)
+    }
+
+    /// Debounced draft persistence: typing must not write on every keystroke.
+    private func scheduleDraftSave(_ newText: String) {
+        draftSaveTask?.cancel()
+        draftSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                saveDraft(newText)
+            }
+        }
+    }
+
+    private func scrollToBottomOnAppear(proxy: ScrollViewProxy) {
+        guard ChatScrollLogic.shouldScrollOnSessionChange(
+            oldSessionID: scrolledSessionID,
+            newSessionID: messageStore.currentSessionID
+        ) else { return }
+        scrolledSessionID = messageStore.currentSessionID
+        DispatchQueue.main.async {
+            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+        }
+    }
+
+    private func handleSelectedSessionChange(_ newSessionID: String?) {
+        guard let sessionID = newSessionID else {
+            messageStore.clear()
+            messageText = ""
+            attachmentStore.clear()
+            stashedComposerDraft = nil
+            restoreStashedDraftAfterSend = false
+            composerHoldsQueuedMessage = false
+            return
+        }
+        guard SessionReloadLogic.shouldReloadMessages(
+            newSessionID: sessionID,
+            currentSessionID: messageStore.currentSessionID,
+            localMessageCount: messageStore.messages.count,
+            isLoading: appState.isLoading
+        ) else { return }
+        loadSessionMessages(sessionID: sessionID)
+        #if canImport(WebKit)
+        // User directive 2026-09-09: moving to another chat/project surfaces
+        // THAT chat's pooled webview ("another tab of the same site") when one
+        // exists; otherwise the panel keeps showing whatever it showed.
+        let projectID = appState.selectedWorkspace?.id
+            ?? appState.selectedWorkspace?.path ?? "global"
+        appState.showPanelForChatIfPooled(projectID: projectID, chatID: sessionID)
+        #endif
+    }
+
+    private func handleLoadedSessionChange(_ sessionID: String?) {
+        if let sessionID {
+            reattachPendingApprovals(sessionID: sessionID)
+        }
+        flushPendingSpecNodePrompt()
+    }
+
+    private func handleViewAppear() {
+        ChatPasteCoordinator.shared.register(store: attachmentStore) { text in
+            if messageText.isEmpty {
+                messageText = text
+            } else {
+                messageText += text
+            }
+        }
+        messageQueue.setOnProcess { queued in
+            Task {
+                await self.sendDirectly(
+                    text: queued.text,
+                    files: queued.files,
+                    images: queued.images,
+                    agentModeOverride: queued.type.toAgentMode
                 )
             }
         }
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                for url in urls {
-                    let name = url.lastPathComponent
-                    let ext = url.pathExtension
-                    let type = FileType.from(ext: ext)
-                    let path = url.path
-                    attachmentStore.appendFile(FileInfo(name: name, type: type, path: path))
+        if let sessionID = appState.selectedSession?.id {
+            previousSessionID = sessionID
+            loadSessionMessages(sessionID: sessionID)
+        }
+        flushPendingSpecNodePrompt()
+    }
+
+    private func editMessageFromNotification(_ notification: Notification) {
+        guard let messageID = notification.userInfo?["messageId"] as? String,
+              let message = messageStore.messages.first(where: { $0.id == messageID }) else { return }
+        loadMessageIntoComposer(message)
+    }
+
+    private func resendMessageFromNotification(_ notification: Notification) {
+        guard let messageID = notification.userInfo?["messageId"] as? String,
+              let message = messageStore.messages.first(where: { $0.id == messageID }) else { return }
+        resendMessage(message)
+    }
+
+    private func handleAPISendRequest(_ notification: Notification) {
+        guard let message = notification.userInfo?["message"] as? String, !message.isEmpty else { return }
+        if let chatId = notification.userInfo?["chatId"] as? String, !chatId.isEmpty {
+            messageStore.currentSessionID = chatId
+        }
+        messageText = message
+        sendMessage()
+    }
+
+    private func handleLocalToolApprovalResolved(_ notification: Notification) {
+        guard let approvalID = notification.userInfo?["approvalID"] as? String,
+              let approved = notification.userInfo?["approved"] as? Bool else { return }
+        Task { @MainActor in
+            let assistantID = ToolApprovalCenter.shared.assistantID(for: approvalID)
+            ToolApprovalCenter.shared.resolve(id: approvalID, approved: approved)
+            appState.notificationService.remove(approvalID)
+            if let assistantID {
+                messageStore.update(id: assistantID) { msg in
+                    msg.pendingApprovals.removeAll { $0.id == approvalID }
                 }
             }
+            MyCoderAPIServer.appendLog(
+                "⏸ local tool approval tapped: id=\(approvalID) approved=\(approved)"
+            )
+        }
+    }
+
+    private func handleWebToolApprovalResolved(_ notification: Notification) {
+        guard let approvalID = notification.userInfo?["approvalID"] as? String,
+              let approved = notification.userInfo?["approved"] as? Bool else { return }
+        activeApprovalBox?.resolve(id: approvalID, approved: approved)
+        // Clear the card from the assistant message: the driver resumes with
+        // the verdict and the turn continues.
+        if let idx = messageStore.messages.firstIndex(where: {
+            $0.pendingApprovalID == approvalID
+        }) {
+            messageStore.update(id: messageStore.messages[idx].id) { m in
+                m.pendingApprovalID = nil
+                m.pendingApprovalTool = nil
+                m.pendingApprovalMessage = nil
+            }
+        }
+    }
+
+    private func copyEntireChat() {
+        switch ChatCopyLogic.result(from: messageStore.messages) {
+        case .empty:
+            NotificationCenter.default.post(name: .copyEntireChatUnavailable, object: nil)
+        case .copied(let transcript):
+            NSPasteboard.general.clearContents()
+            let didCopy = NSPasteboard.general.setString(transcript, forType: .string)
+            NotificationCenter.default.post(
+                name: didCopy ? .copyEntireChatCompleted : .copyEntireChatUnavailable,
+                object: nil
+            )
         }
     }
     
@@ -3419,7 +3494,7 @@ struct ChatPanelView: View {
             switch part {
             case .toolCall, .stepStart, .stepFinish:
                 return true
-            case .text, .reasoning, .image, .routeInfo:
+            case .text, .reasoning, .image, .routeInfo, .compiledContext:
                 return false
             }
         } ?? false

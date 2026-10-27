@@ -122,16 +122,41 @@ R<n> | <статус> | <оценка>/100 | <commit sha> | <ключевой в
 - Приёмка: документ лежит в репозитории, раздел прогресса пуст, следующий раунд определён.
 
 ### R1 — Зелёная база (другой агент оставил дерево в нерабочем состоянии)
-- [ ] T1: тест-пакет `swift build` / `swift test` фиксирует текущую поломку
-      (как регрессия: `MessagePartContent` закрыт корректно, тест сюита компилируется).
-- [ ] T2: убрать лишнюю `}` в `myCoder/Sources/Models/Message.swift`.
-- [ ] T3: исправить `AtomicTaskCompilerService` → `LocalTaskCompilerService`
+- [x] T1: зафиксировано красное состояние: `swift build` падал в 6 независимых точках
+      (лишняя `}`, неисчерпывающие `switch`, порядок аргументов, type-check timeout,
+      неверный символ в тесте, отсутствующий аргумент `range`). Ни одна не была
+      «одной опечаткой».
+- [x] T2: убрана лишняя `}` в `myCoder/Sources/Models/Message.swift`.
+- [x] T3: исправлен `AtomicTaskCompilerService` → `LocalTaskCompilerService`
       в `myCoder/Tests/LocalTaskCompilerServiceTests.swift`.
-- [ ] T4: `swift build` зелёный; `swift test` — все сюиты нового кода зелёные.
-- [ ] T5: `./build-app.sh --skip-tests` собирает `.app`.
-- [ ] Коммит + пуш.
-- Приёмка: `swift build` без ошибок; `swift test` зелёный; в UI уже есть кнопка
+- [x] T4: `switch` по `MessagePartContent` дополнен случаем `.compiledContext`
+      (`SessionTranscriptLogic`, `ChatPanelView.finishStreaming`).
+- [x] T5: `SymbolNameExtractor`: `NSRegularExpression.matches(in:options:range:)` —
+      добавлен обязательный `range` (иначе модуль не компилировался).
+- [x] T6: `EmptyChatStateView`: аргументы приведены к порядку memberwise-инициализатора.
+- [x] T7: `ChatPanelView.body` разгружен: замыкания вынесены в приватные методы
+      (`handleViewAppear`, `handleSelectedSessionChange`, `autoScrollIfPinned`,
+      `scheduleDraftSave`, `handle*Approval*`, `copyEntireChat`, `centeredInputState`).
+      Это устранило `unable to type-check this expression in reasonable time`.
+- [x] T8: `FakeTransport` в `LocalModelDirectoryTests` стал reference-типом
+      (структура не могла мутировать `attempted`).
+- [x] T9: `ContextMaterializer` больше не падает: диапазон строк 1-based переведён
+      в 0-based индексы, добавлены проверки `startLine > файла` и `endLine < startLine`.
+      (Падение было реальным: `Fatal error: Array index is out of range`.)
+- [x] T10: `swift build` зелёный; `swift test --filter` по 6 сюитам нового кода —
+      46 тестов зелёные.
+- [x] T11: `./build-app.sh --skip-tests` собирает `.app`.
+- [ ] T12: полный `swift test` — заблокирован чужими незакоммиченными правками
+      web-tool/spec-wizard в том же рабочем дереве (другой агент пишет параллельно).
+      Проверяется отдельно, после стабилизации дерева.
+- [x] Коммит + пуш (только файлы контекст-компилятора; чужие изменения не коммитятся).
+- Приёмка: `swift build` без ошибок; сюиты нового кода зелёные; в UI уже есть кнопка
   «Контекст», но она ничего не показывает (это ожидаемо до R5).
+
+**Пробелы R1, которые переходят в R2:**
+- `swift test` целиком не прогнан по объективной причине (параллельный агент).
+- Материализатор пока не проверяет выход за корень проекта, symlink, дедуп ссылок
+  и не печатает номера строк в теле блока — это R2.
 
 ### R2 — Починка `ContextMaterializer` (безопасность и корректность)
 - [ ] T1: тест: `startLine` за пределами файла → типизированная ошибка, не падение.

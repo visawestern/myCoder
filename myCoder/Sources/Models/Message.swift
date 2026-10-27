@@ -202,6 +202,9 @@ enum MessagePartContent: Identifiable {
     /// shown in the message header — NOT part of the answer text
     /// (user directive 2026-09-08: the footer must not pollute the answer).
     case routeInfo(chips: [String])
+    /// The full point context that was compiled locally and sent with this
+    /// message (user directive D2: the button shows it in full, no summary).
+    case compiledContext(String)
 
     var id: String {
         switch self {
@@ -214,6 +217,7 @@ enum MessagePartContent: Identifiable {
         case .stepFinish: return "step-finish"
         case .image(let b64, _): return "image-\(b64.hashValue)"
         case .routeInfo(let chips): return "route-\(chips.joined(separator: "|").hashValue)"
+        case .compiledContext(let text): return "compiled-context-\(text.hashValue)"
         }
     }
 }

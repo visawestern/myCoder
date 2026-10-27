@@ -54,6 +54,25 @@ struct ProjectFileIndexLogicTests {
         #expect(!ProjectFileIndexLogic.shouldIndex(relativePath: "src/a.swift", size: -1))
     }
 
+    // MARK: - Secrets
+
+    @Test func secretFilesAreDetected() {
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: ".env"))
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: "config/.env.local"))
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: "certs/server.pem"))
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: "id_rsa"))
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: "app/secrets.json"))
+        #expect(ProjectFileIndexLogic.isSecretFile(relativePath: "home/id_ed25519"))
+        #expect(!ProjectFileIndexLogic.isSecretFile(relativePath: "src/main.swift"))
+        #expect(!ProjectFileIndexLogic.isSecretFile(relativePath: "Sources/Keyboard.swift"))
+    }
+
+    @Test func secretFilesAreNeverIndexed() {
+        #expect(!ProjectFileIndexLogic.shouldIndex(relativePath: ".env", size: 10))
+        #expect(!ProjectFileIndexLogic.shouldIndex(relativePath: "certs/server.pem", size: 10))
+        #expect(!ProjectFileIndexLogic.shouldIndex(relativePath: "app/secrets.json", size: 10))
+    }
+
     // MARK: - Delta
 
     private func rec(_ path: String, hash: String, mtime: TimeInterval = 1) -> FileIndexRecord {

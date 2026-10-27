@@ -43,7 +43,7 @@ enum SessionTranscriptLogic {
                 chunks.append(line)
             case .image:
                 chunks.append("[image]")
-            case .text, .reasoning, .stepStart, .stepFinish, .routeInfo:
+            case .text, .reasoning, .stepStart, .stepFinish, .routeInfo, .compiledContext:
                 break
             }
         }
