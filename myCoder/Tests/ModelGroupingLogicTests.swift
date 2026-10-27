@@ -136,6 +136,45 @@ struct ModelGroupingLogicTests {
         #expect(!ModelGroupingLogic.isVersionToken("o1"))
     }
 
+    @Test func userReportedGroupingGraniteGlmGptOss() {
+        // User screenshot showed: granite inside glm group, gpt-oss among glm,
+        // and a duplicate "granite" header. The fix ensures each model maps to
+        // exactly its own family, and groupedByFamily produces one header per
+        // distinct family in the input order.
+        let models = [
+            "granite-3.0-3b-a800m-instruct",
+            "gpt-oss-20b",
+            "glm-4-9b-chat",
+            "glm-4-32b",
+            "granite-3.0-8b-instruct",
+            "glm-4v-9b"
+        ]
+        let grouped = ModelGroupingLogic.groupedByFamily(models)
+        #expect(grouped.count == 3)
+        #expect(grouped[0].family == "granite")
+        #expect(grouped[0].models == ["granite-3.0-3b-a800m-instruct", "granite-3.0-8b-instruct"])
+        #expect(grouped[1].family == "gpt-oss")
+        #expect(grouped[1].models == ["gpt-oss-20b"])
+        #expect(grouped[2].family == "glm")
+        #expect(grouped[2].models == ["glm-4-9b-chat", "glm-4-32b", "glm-4v-9b"])
+
+        // No family appears twice.
+        let families = grouped.map(\.family)
+        #expect(Set(families).count == families.count)
+
+        // Every model ends up in exactly one group (no cross-contamination).
+        let allModels = grouped.flatMap(\.models)
+        #expect(allModels.count == models.count)
+        #expect(Set(allModels).count == models.count)
+    }
+
+    @Test func familyHeadersAreNotEmptyOrDuplicated() {
+        let groups = ModelGroupingLogic.groupedByFamily(["a-1b", "a-2b", "b-1b"])
+        #expect(groups.allSatisfy { !$0.family.isEmpty })
+        let families = groups.map(\.family)
+        #expect(Set(families).count == families.count)
+    }
+
     @Test func effectiveLimitsFallBackToTheDefaults() {
         let providers = [
             MimoProviderResponse(

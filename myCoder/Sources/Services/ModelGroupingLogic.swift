@@ -62,15 +62,22 @@ enum ModelGroupingLogic {
             .split(separator: "-", omittingEmptySubsequences: true)
             .map { String($0) }
             .filter { !quantizationTokens.contains($0) }
+            .filter { !roleTokens.contains($0) }
 
-        while let last = tokens.last, roleTokens.contains(last) {
-            tokens.removeLast()
-        }
-        while let last = tokens.last, isSizeToken(last) {
-            tokens.removeLast()
-        }
-        while tokens.count > 1, let last = tokens.last, isVersionToken(last) {
-            tokens.removeLast()
+        // Size and version markers are only meaningful at the tail.
+        // Iterate: drop trailing size, then trailing version, then trailing
+        // size again (in case a version removal exposed a size).
+        var changed = true
+        while changed {
+            changed = false
+            while let last = tokens.last, isSizeToken(last) {
+                tokens.removeLast()
+                changed = true
+            }
+            while tokens.count > 1, let last = tokens.last, isVersionToken(last) {
+                tokens.removeLast()
+                changed = true
+            }
         }
 
         guard !tokens.isEmpty else { return lowered }
@@ -92,11 +99,12 @@ enum ModelGroupingLogic {
         return order.map { (family: $0, models: buckets[$0] ?? []) }
     }
 
-    /// `7b`, `1.5b`, `30b-a3b` style parameter markers.
+    /// `7b`, `1.5b`, `30b-a3b` style parameter markers. Also accepts `m`
+    /// (millions) suffix and optional `a` prefix (e.g. `a800m`).
     static func isSizeToken(_ token: String) -> Bool {
         var candidate = token
         if candidate.hasPrefix("a") { candidate.removeFirst() }
-        guard candidate.hasSuffix("b") else { return false }
+        guard candidate.hasSuffix("b") || candidate.hasSuffix("m") else { return false }
         candidate.removeLast()
         guard !candidate.isEmpty else { return false }
         let parts = candidate.split(separator: ".", omittingEmptySubsequences: true)
@@ -106,10 +114,12 @@ enum ModelGroupingLogic {
         }
     }
 
-    /// `1.1`, `v2`, `v4.1` style version markers.
+    /// `1.1`, `v2`, `v4.1`, `4v`, `3.1v` style version markers.
     static func isVersionToken(_ token: String) -> Bool {
         var candidate = token
         if candidate.hasPrefix("v") { candidate.removeFirst() }
+        // Allow an optional single trailing letter (e.g. "4v" → "4").
+        if candidate.last?.isLetter == true { candidate.removeLast() }
         guard !candidate.isEmpty else { return false }
         let parts = candidate.split(separator: ".", omittingEmptySubsequences: true)
         guard !parts.isEmpty else { return false }
