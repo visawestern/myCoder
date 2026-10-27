@@ -320,6 +320,9 @@ enum MessageDisplayLogic {
                 case .routeInfo:
                     // Route metadata renders in the header chips only.
                     continue
+                case .compiledContext:
+                    // The point context has its own button under the message.
+                    continue
                 }
             }
         }

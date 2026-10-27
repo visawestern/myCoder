@@ -59,6 +59,8 @@ enum ContextUsageLogic {
                 if let result { total += estimateTokens(result) }
             case .image:
                 total += tokensPerImage
+            case .compiledContext(let text):
+                total += estimateTokens(text)
             case .stepStart, .stepFinish, .routeInfo:
                 break
             }

@@ -687,6 +687,8 @@ class DatabaseBridge: ObservableObject {
             partId = "\(messageId)-step-finish-\(sequenceOrder)"
         case .image(let base64, _):
             partId = "\(messageId)-image-\(base64.hashValue)-\(sequenceOrder)"
+        case .compiledContext(let text):
+            partId = "\(messageId)-compiled-context-\(text.hashValue)-\(sequenceOrder)"
         }
 
         switch part {
@@ -713,6 +715,10 @@ class DatabaseBridge: ObservableObject {
                 ?? Data("[]".utf8)
             try insert(partId, messageId, "route_info",
                        String(data: data, encoding: .utf8) ?? "[]",
+                       nil, nil, nil, nil, sequenceOrder)
+
+        case .compiledContext(let text):
+            try insert(partId, messageId, "compiled_context", text,
                        nil, nil, nil, nil, sequenceOrder)
         }
     }
@@ -918,6 +924,8 @@ class DatabaseBridge: ObservableObject {
                 return .routeInfo(chips: chips)
             }
             return .routeInfo(chips: [])
+        case "compiled_context":
+            return .compiledContext(content ?? "")
         default:
             return .text("")
         }

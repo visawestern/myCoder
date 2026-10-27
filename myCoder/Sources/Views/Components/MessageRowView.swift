@@ -70,6 +70,8 @@ struct MessageRow: View {
     var projectRoot: String = ""
     @State private var copied = false
     @State private var showRawText = false
+    @State private var showCompiledContext = false
+    @State private var compiledContextText = ""
 
     private var displayTexts: [String] {
         let partTexts = message.parts.compactMap { part -> String? in
@@ -377,9 +379,38 @@ struct MessageRow: View {
             EmptyView()
         case .routeInfo:
             EmptyView()
+        case .compiledContext(let text):
+            compiledContextButton(text)
         case .image(let base64, let mimeType):
             if !base64.isEmpty {
                 TappableChatImage(image: ClipboardImage(base64: base64, mimeType: mimeType))
+            }
+        }
+    }
+
+    /// The point context that was compiled locally for this message — the
+    /// button opens it in full (user directive D2: no summary).
+    @ViewBuilder
+    private func compiledContextButton(_ text: String) -> some View {
+        if !text.isEmpty {
+            Button {
+                compiledContextText = text
+                showCompiledContext = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                    Text(L.t(AppLocalizationKey.locShowCompiledContext))
+                }
+                .interfaceFont(size: 11, weight: .medium)
+                .foregroundColor(Color.mimo.brand)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.mimo.brand.opacity(0.12))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(HandCursorButtonStyle())
+            .sheet(isPresented: $showCompiledContext) {
+                CompiledContextSheet(text: compiledContextText)
             }
         }
     }
@@ -1018,5 +1049,62 @@ struct WebToolApprovalCardView: View {
                 ]
             )
         }
+    }
+}
+
+/// The full point context that was compiled locally for a message.
+/// Shows the text as-is (no summary) with a copy button.
+struct CompiledContextSheet: View {
+    let text: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text(L.t(AppLocalizationKey.locCompiledContextTitle))
+                    .interfaceFont(size: 13, weight: .semibold)
+                    .foregroundColor(Color.mimo.textPrimary)
+                Spacer(minLength: 8)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    copied = true
+                } label: {
+                    Label(L.t(AppLocalizationKey.locCopyAll), systemImage: "doc.on.doc")
+                        .interfaceFont(size: 11)
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                .foregroundColor(copied ? Color.mimo.success : Color.mimo.textSecondary)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .interfaceFont(size: 11, weight: .semibold)
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                .foregroundColor(Color.mimo.textSecondary)
+            }
+
+            ScrollView {
+                Text(text)
+                    .interfaceFont(size: 11, design: .monospaced)
+                    .foregroundColor(Color.mimo.textSecondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(10)
+            .background(Color.mimo.codeBg)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.mimo.border.opacity(0.55), lineWidth: 1)
+            )
+        }
+        .padding(16)
+        .frame(minWidth: 640, minHeight: 420)
+        .background(Color.mimo.background)
     }
 }
