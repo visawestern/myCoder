@@ -7,10 +7,15 @@ struct ContextBoardEntry: Equatable, Identifiable {
     let path: String
     let language: String
     let size: Int
+    /// File modification time — newer files win ties in `CandidateRanker`.
+    let lastModified: TimeInterval
     let symbols: [SymbolDeclaration]
     let imports: [String]
     /// First documentation line of the file, when there is one.
     let doc: String?
+    /// Lowercased identifiers of the file, for cheap full-text matching
+    /// without keeping the whole source in the board.
+    let searchTokens: Set<String>
     /// Stable id — the relative path.
     var id: String { path }
 }
@@ -49,12 +54,32 @@ enum ContextBoardBuilder {
                 path: record.path,
                 language: record.language,
                 size: record.size,
+                lastModified: record.lastModified,
                 symbols: symbols,
                 imports: imports,
-                doc: documentation(in: text, language: record.language)
+                doc: documentation(in: text, language: record.language),
+                searchTokens: tokens(in: text)
             )
         }
         return ContextBoard(projectPath: projectPath, entries: entries, builtAt: now)
+    }
+
+    /// Unique lowercased identifiers of the file, capped so the board stays a
+    /// map rather than a copy of the sources.
+    static func tokens(in text: String, limit: Int = 400) -> Set<String> {
+        var result = Set<String>()
+        var current = ""
+        for scalar in text.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) || scalar == "_" {
+                current.unicodeScalars.append(scalar)
+            } else if !current.isEmpty {
+                if current.count >= 3 { result.insert(current.lowercased()) }
+                current = ""
+                if result.count >= limit { return result }
+            }
+        }
+        if !current.isEmpty, current.count >= 3 { result.insert(current.lowercased()) }
+        return result
     }
 
     /// The text the local model reads. One compact block per file.
@@ -71,7 +96,10 @@ enum ContextBoardBuilder {
                 lines.append("imports: " + entry.imports.joined(separator: ", "))
             }
             if !entry.symbols.isEmpty {
-                let rendered = entry.symbols.map { "\($0.name)(\($0.kind))" }.joined(separator: ", ")
+                // `name@line` — the model must cite real lines, so the board
+                // has to show them. Without a line every range is a guess.
+                let rendered = entry.symbols.map { "\($0.name)@\($0.line)(\($0.kind))" }
+                    .joined(separator: ", ")
                 lines.append("symbols: " + rendered)
             }
         }
