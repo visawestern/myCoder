@@ -67,17 +67,16 @@ private struct SpecWizardContent: View {
     @ObservedObject var session: SpecWizardSession
 
     @State private var answerText = ""
+    @State private var clarifyText = ""
     @State private var specEditorText = ""
     @State private var isEditingSpec = false
     @State private var saveTask: Task<Void, Never>?
     @State private var saveState: SaveState = .idle
     @State private var showFinishConfirmation = false
     @State private var showSettingsHint = false
-    @State private var showSetup: Bool
 
     init(session: SpecWizardSession) {
         self.session = session
-        _showSetup = State(initialValue: session.draft.step == .setup)
     }
 
     private enum SaveState: Equatable {
@@ -95,18 +94,29 @@ private struct SpecWizardContent: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    phaseContent
-                    if let error = session.errorMessage {
-                        errorBanner(error)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header
+                            .id("wizardTop")
+                        if session.isLoading {
+                            busyBanner
+                        }
+                        phaseContent
+                        if let error = session.errorMessage {
+                            errorBanner(error)
+                        }
+                        footer
                     }
-                    footer
+                    .padding(28)
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(28)
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
+                // Jumping to another step must not leave the user in the
+                // middle of a long task list.
+                .onChange(of: visibleStep) { _ in
+                    proxy.scrollTo("wizardTop", anchor: .top)
+                }
             }
 
             Divider()
@@ -116,7 +126,7 @@ private struct SpecWizardContent: View {
         }
         .background(Color.mimo.background)
         .onChange(of: session.draft) { _ in scheduleSave() }
-        .onChange(of: session.draft.step) { step in
+        .onChange(of: session.draft.visibleStep) { step in
             if step == .interview {
                 Task { await session.startInterviewIfNeeded() }
             }
@@ -144,7 +154,13 @@ private struct SpecWizardContent: View {
     // MARK: Header
 
     private var visibleStep: SpecWizardStep {
-        showSetup ? .setup : draft.step
+        let furthest = draft.furthestStep
+        guard let active = draft.activeStep, active.rank <= furthest.rank else { return furthest }
+        guard draft.status != .draft else { return active }
+        // A finished project opens on its task board, but an explicit return
+        // to an earlier phase is still honored.
+        if active.rank < SpecWizardStep.ready.rank { return active }
+        return session.nodes.isEmpty ? .ready : .decomposition
     }
 
     private var stepNumber: Int {
@@ -234,29 +250,17 @@ private struct SpecWizardContent: View {
 
     @ViewBuilder
     private var phaseContent: some View {
-        if draft.status != .draft {
-            // A finished project reopens as its task board, so the next node
-            // can be started without rerunning setup.
-            if session.nodes.isEmpty {
-                readyPhase
-            } else {
-                decompositionPhase
-            }
-        } else if showSetup && draft.step == .setup {
+        switch visibleStep {
+        case .setup:
             setupPhase
-        } else {
-            switch draft.step {
-            case .setup:
-                setupPhase
-            case .interview:
-                interviewPhase
-            case .specification:
-                specificationPhase
-            case .decomposition:
-                decompositionPhase
-            case .ready:
-                readyPhase
-            }
+        case .interview:
+            interviewPhase
+        case .specification:
+            specificationPhase
+        case .decomposition:
+            decompositionPhase
+        case .ready:
+            readyPhase
         }
     }
 
@@ -266,7 +270,7 @@ private struct SpecWizardContent: View {
             briefCard
             HStack {
                 Spacer()
-                primaryButton(L.t("Continue to questions"), icon: "arrow.right") {
+                primaryButton(L.t("Continue to questions"), icon: "arrow.right", isBusy: session.isLoading) {
                     guard draft.hasModels else {
                         session.errorMessage = L.t("Choose both models")
                         return
@@ -275,9 +279,7 @@ private struct SpecWizardContent: View {
                         session.errorMessage = L.t("Goal and technologies are required")
                         return
                     }
-                    session.errorMessage = nil
-                    showSetup = false
-                    _ = session.saveDraft()
+                    guard session.go(to: .interview) else { return }
                     Task { await session.startInterviewIfNeeded() }
                 }
                 .disabled(!draft.hasModels || !draft.hasBrief || session.isLoading)
@@ -425,11 +427,58 @@ private struct SpecWizardContent: View {
 
     // MARK: Questions
 
+    /// One visible progress line for every long step (interview, summary,
+    /// specification, decomposition), so the wizard never looks frozen.
+    private var busyBanner: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(L.t("Working…"))
+                .interfaceFont(size: 11, weight: .medium)
+                .foregroundColor(Color.mimo.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.mimo.controlBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private var interviewPhase: some View {
         VStack(alignment: .leading, spacing: 16) {
-            card(title: L.t("Project questions"), icon: "bubble.left.and.bubble.right") {
-                VStack(alignment: .leading, spacing: 12) {
-                    if session.turns.isEmpty {
+            ForEach(SpecWizardInterviewLayoutLogic.blocks(
+                hasQuestion: session.currentQuestion != nil,
+                isQuestionCardVisible: session.isQuestionCardVisible,
+                hasCompletedSummary: session.completedSummary != nil,
+                interviewComplete: draft.interviewComplete
+            ), id: \.self) { block in
+                switch block {
+                case .question:
+                    if let question = session.currentQuestion, !question.done {
+                        questionCard(question)
+                    }
+                case .summary:
+                    if let summary = session.completedSummary {
+                        completionCard(summary)
+                    }
+                case .feed:
+                    feedCard
+                }
+            }
+        }
+    }
+
+    /// The transcript of the interview. It always closes the screen and grows
+    /// downward: oldest turn first, newest — including the model's current
+    /// thinking indicator — last.
+    private var feedCard: some View {
+        card(title: L.t("Project questions"), icon: "bubble.left.and.bubble.right") {
+            VStack(alignment: .leading, spacing: 12) {
+                if session.turns.isEmpty {
+                    // A spinner that can never resolve looks like a frozen app
+                    // (the exact bug from the 2026-10-27 screenshot). Show the
+                    // progress only while a request is really in flight, and
+                    // an honest retry otherwise.
+                    if session.isLoading {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text(L.t("Preparing the first question…"))
@@ -437,37 +486,90 @@ private struct SpecWizardContent: View {
                                 .foregroundColor(Color.mimo.textMuted)
                         }
                     } else {
-                        ForEach(Array(session.turns.enumerated()), id: \.offset) { _, turn in
-                            interviewTurn(turn)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(L.t("The interview did not start. Check the planning model and try again."))
+                                .interfaceFont(size: 12)
+                                .foregroundColor(Color.mimo.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            secondaryButton(L.t("Retry"), icon: "arrow.clockwise") {
+                                Task { await session.startInterviewIfNeeded() }
+                            }
                         }
                     }
+                } else {
+                    ForEach(Array(session.turns.enumerated()), id: \.offset) { _, turn in
+                        interviewTurn(turn)
+                    }
+                }
 
-                    if session.isLoading {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(L.t("The model is thinking…"))
-                                .interfaceFont(size: 12)
-                                .foregroundColor(Color.mimo.textMuted)
-                        }
+                if session.isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(L.t("The model is thinking…"))
+                            .interfaceFont(size: 12)
+                            .foregroundColor(Color.mimo.textMuted)
                     }
                 }
             }
+        }
+    }
 
-            if let question = session.currentQuestion, !question.done {
-                questionCard(question)
-            } else if let summary = session.completedSummary, draft.interviewComplete {
-                card(title: L.t("Questions complete"), icon: "checkmark.seal") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(summary)
-                            .interfaceFont(size: 12)
-                            .foregroundColor(Color.mimo.textPrimary)
-                        HStack {
-                            Spacer()
-                            primaryButton(L.t("Create specification"), icon: "doc.badge.plus") {
-                                Task { await session.generateSpecification() }
-                            }
-                            .disabled(session.isLoading)
+    /// What the planner understood, with a way to correct it before the
+    /// specification is written.
+    private func completionCard(_ summary: String) -> some View {
+        card(title: L.t("Questions complete"), icon: "checkmark.seal") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(summary)
+                    .interfaceFont(size: 13)
+                    .foregroundColor(Color.mimo.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(L.t("This is what I understood must be built. If something is missing or wrong, tell me what to clarify."))
+                    .interfaceFont(size: 11)
+                    .foregroundColor(Color.mimo.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    TextField(L.t("What should be clarified?"), text: $clarifyText)
+                        .textFieldStyle(.plain)
+                        .interfaceFont(size: 12)
+                        .padding(8)
+                        .background(Color.mimo.controlBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .stroke(Color.mimo.border, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .onSubmit { submitClarification() }
+
+                    primaryButton(
+                        L.t("Clarify"),
+                        icon: "questionmark.bubble",
+                        isBusy: session.isLoading && !clarifyText.isEmpty
+                    ) {
+                        submitClarification()
+                    }
+                    .disabled(session.isLoading || clarifyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                HStack {
+                    Spacer()
+                    if draft.specVersion > 0 {
+                        // The spec already exists — never offer a silent
+                        // regeneration here; the tasks screen owns that action.
+                        primaryButton(L.t("Continue to tasks"), icon: "arrow.right") {
+                            session.go(to: .decomposition)
                         }
+                        .disabled(session.isLoading)
+                    } else {
+                        primaryButton(
+                            L.t("Create specification"),
+                            icon: "doc.badge.plus",
+                            isBusy: session.isLoading
+                        ) {
+                            Task { await session.generateSpecification() }
+                        }
+                        .disabled(session.isLoading)
                     }
                 }
             }
@@ -562,23 +664,59 @@ private struct SpecWizardContent: View {
         let clean = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         answerText = ""
-        Task { await session.submitAnswer(clean) }
+        Task {
+            let ok = await session.submitAnswer(clean)
+            // A failed turn stores nothing — put the text back so the user can
+            // retry without retyping the answer. A double-send race (the
+            // session is still busy, no error) must not resurrect it.
+            if !ok, session.errorMessage != nil, answerText.isEmpty { answerText = clean }
+        }
+    }
+
+    /// Sends the user's correction for the collected summary and lets the
+    /// planner decide whether the task is clear enough now.
+    private func submitClarification() {
+        let clean = clarifyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        clarifyText = ""
+        Task {
+            let ok = await session.clarify(clean)
+            if !ok, session.errorMessage != nil, clarifyText.isEmpty { clarifyText = clean }
+        }
     }
 
     // MARK: Specification
 
+    @ViewBuilder
     private var specificationPhase: some View {
-        card(title: L.t("Technical specification"), icon: "doc.richtext") {
+        if draft.specVersion > 0 {
             VStack(alignment: .leading, spacing: 14) {
-                Text(L.t("The model will write a versioned specification from your answers."))
-                    .interfaceFont(size: 12)
-                    .foregroundColor(Color.mimo.textSecondary)
+                specificationCard
                 HStack {
                     Spacer()
-                    primaryButton(L.t("Create specification"), icon: "doc.badge.plus") {
-                        Task { await session.generateSpecification() }
+                    primaryButton(L.t("Continue to tasks"), icon: "arrow.right") {
+                        session.go(to: .decomposition)
                     }
                     .disabled(session.isLoading)
+                }
+            }
+        } else {
+            card(title: L.t("Technical specification"), icon: "doc.richtext") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(L.t("The model will write a versioned specification from your answers."))
+                        .interfaceFont(size: 12)
+                        .foregroundColor(Color.mimo.textSecondary)
+                    HStack {
+                        Spacer()
+                        primaryButton(
+                            L.t("Create specification"),
+                            icon: "doc.badge.plus",
+                            isBusy: session.isLoading
+                        ) {
+                            Task { await session.generateSpecification() }
+                        }
+                        .disabled(session.isLoading)
+                    }
                 }
             }
         }
@@ -660,7 +798,11 @@ private struct SpecWizardContent: View {
                             .foregroundColor(Color.mimo.textSecondary)
                         HStack {
                             Spacer()
-                            primaryButton(L.t("Break into tasks"), icon: "square.stack.3d.up") {
+                            primaryButton(
+                                L.t("Break into tasks"),
+                                icon: "square.stack.3d.up",
+                                isBusy: session.isLoading
+                            ) {
                                 Task { await session.generateDecomposition() }
                             }
                             .disabled(session.isLoading)
@@ -1000,26 +1142,43 @@ private struct SpecWizardContent: View {
         .background(Color.mimo.backgroundAlt)
     }
 
+    /// Every checklist row is also navigation: clicking it reopens that step,
+    /// so a restart on a late step can never trap the user there.
     private func checklistRow(id: SpecWizardChecklistLogic.ItemID) -> some View {
         let state = checklist.first(where: { $0.id == id })?.state ?? .pending
-        return HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon(for: state))
-                .interfaceFont(size: 12)
-                .foregroundColor(color(for: state))
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title(for: id))
-                    .interfaceFont(size: 12, weight: state == .done ? .semibold : .regular)
-                    .foregroundColor(state == .upcoming ? Color.mimo.textMuted : Color.mimo.textPrimary)
-                if let detail = detail(for: id, state: state) {
-                    Text(detail)
-                        .interfaceFont(size: 10)
-                        .foregroundColor(Color.mimo.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+        let target = SpecWizardChecklistLogic.step(for: id)
+        let isCurrent = visibleStep == target
+        let isNavigable = SpecWizardChecklistLogic.isNavigable(id, in: draft)
+        return Button {
+            session.go(to: target)
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: icon(for: state))
+                    .interfaceFont(size: 12)
+                    .foregroundColor(color(for: state))
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title(for: id))
+                        .interfaceFont(size: 12, weight: state == .done ? .semibold : .regular)
+                        .foregroundColor(state == .upcoming ? Color.mimo.textMuted : Color.mimo.textPrimary)
+                    if let detail = detail(for: id, state: state) {
+                        Text(detail)
+                            .interfaceFont(size: 10)
+                            .foregroundColor(Color.mimo.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isCurrent ? Color.mimo.cyan.opacity(0.1) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(HandCursorButtonStyle())
+        .disabled(!isNavigable || session.isLoading)
+        .help(isNavigable ? L.t("Open this step") : L.t("Next setup step"))
     }
 
     private func title(for id: SpecWizardChecklistLogic.ItemID) -> String {
@@ -1091,12 +1250,19 @@ private struct SpecWizardContent: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private func primaryButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func primaryButton(_ title: String, icon: String, isBusy: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .interfaceFont(size: 10, weight: .semibold)
-                Text(title)
+                if isBusy {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                        .tint(.white)
+                } else {
+                    Image(systemName: icon)
+                        .interfaceFont(size: 10, weight: .semibold)
+                }
+                Text(isBusy ? L.t("Working…") : title)
                     .interfaceFont(size: 12, weight: .semibold)
             }
             .padding(.horizontal, 13)

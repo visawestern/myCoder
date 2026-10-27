@@ -131,14 +131,16 @@ struct SpecPlannerService {
                                brief: SpecWizardDraft,
                                turns: [SpecPlannerTurn],
                                route: SpecPlannerRoute,
-                               language: AppLanguage = .english) async throws -> SpecInterviewQuestion {
+                               language: AppLanguage = .english,
+                               requireMoreQuestions: Bool = false) async throws -> SpecInterviewQuestion {
         let raw = try await complete(
             route: route,
             messages: SpecPlannerPrompts.interviewMessages(
                 projectName: projectName,
                 brief: brief,
                 turns: turns,
-                language: language
+                language: language,
+                requireMoreQuestions: requireMoreQuestions
             )
         )
         return try SpecInterviewLogic.decode(raw)
@@ -204,19 +206,37 @@ enum SpecPlannerPrompts {
     static func interviewMessages(projectName: String,
                                   brief: SpecWizardDraft,
                                   turns: [SpecPlannerTurn],
-                                  language: AppLanguage = .english) -> [DirectChatMessage] {
-        let system = """
+                                  language: AppLanguage = .english,
+                                  requireMoreQuestions: Bool = false) -> [DirectChatMessage] {
+        var system = """
         You are the specification planner for a software project.
         Ask exactly ONE question at a time to remove ambiguity from the brief.
+        Ask ONLY what you cannot infer from the brief and the previous answers:
+        never repeat a question, never ask what the user already answered, and
+        never ask a generic question whose answer cannot change the project.
+        Track your own uncertainty: `uncertainty` is a number from 0 to 1 that
+        says how much of the task is still unclear (0 = fully understood).
+        Keep asking while uncertainty > \(SpecInterviewLogic.uncertaintyThreshold).
         Prefer concrete, answerable questions. Do not write code and do not invent requirements.
         \(languageRule(language))
 
         Return ONLY a JSON object, with no prose around it:
-        {"id":"short_stable_id","question":"...","suggested_answers":["..."],"done":false}
+        {"id":"short_stable_id","question":"...","suggested_answers":["..."],"uncertainty":0.4,"done":false}
         suggested_answers must contain 1-5 short options, or be empty.
-        When the brief and answers are sufficient, return:
-        {"id":"final","done":true,"summary":"one sentence describing what is clear"}
+        As soon as uncertainty is \(SpecInterviewLogic.uncertaintyThreshold) or lower, stop asking and return:
+        {"id":"final","done":true,"uncertainty":0.05,"summary":"what exactly must be built, in 2-4 sentences"}
+        The summary must restate what you understood: the goal, the stack, the
+        concrete behaviour and the constraints — short, no new requirements.
         """
+        if requireMoreQuestions {
+            system += """
+
+
+            Your previous answer was done:true while uncertainty was still above
+            \(SpecInterviewLogic.uncertaintyThreshold) — the task is not clear enough yet.
+            Ask the next single question that removes the most remaining ambiguity.
+            """
+        }
         return [
             DirectChatMessage(role: "system", content: system),
             DirectChatMessage(role: "user", content: interviewUserText(

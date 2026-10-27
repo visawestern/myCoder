@@ -72,6 +72,91 @@ struct SpecWizardDraftTests {
         #expect(draft.step == .ready)
     }
 
+    @Test("A restart restores the exact step the user was looking at")
+    func activeStepIsRestored() {
+        var draft = SpecWizardDraft()
+        draft.plannerModel = "planner"
+        draft.coderModel = "coder"
+        draft.goal = "Goal"
+        draft.stack = "Swift"
+        draft.interviewComplete = true
+        draft.specVersion = 2
+        draft.decompositionNodeCount = 3
+
+        // Data unlocks every step, the user sits on the interview.
+        draft.activeStep = .interview
+        #expect(draft.furthestStep == .ready)
+        #expect(draft.visibleStep == .interview)
+
+        // Going back to the very first step is allowed and survives.
+        draft.activeStep = .setup
+        #expect(draft.visibleStep == .setup)
+
+        // Checklist availability follows the data, not the current view.
+        #expect(SpecWizardChecklistLogic.items(for: draft).allSatisfy { $0.state == .done })
+        #expect(SpecWizardChecklistLogic.progress(for: draft) == 1)
+    }
+
+    @Test("A step the data has not unlocked cannot be shown")
+    func activeStepClampsToFurthest() {
+        var draft = SpecWizardDraft()
+        draft.plannerModel = "planner"
+        draft.coderModel = "coder"
+        draft.goal = "Goal"
+        draft.stack = "Swift"
+        draft.activeStep = .decomposition
+
+        #expect(draft.furthestStep == .interview)
+        #expect(draft.visibleStep == .interview)
+    }
+
+    @Test("A draft without a stored position opens at the furthest reached step")
+    func legacyDraftWithoutActiveStepOpensAtFurthest() {
+        var draft = SpecWizardDraft()
+        draft.plannerModel = "planner"
+        draft.coderModel = "coder"
+        draft.goal = "Goal"
+        draft.stack = "Swift"
+        draft.interviewComplete = true
+
+        #expect(draft.activeStep == nil)
+        #expect(draft.visibleStep == .specification)
+    }
+
+    @Test("The stored position round-trips through JSON")
+    func activeStepRoundTrips() throws {
+        var draft = SpecWizardDraft()
+        draft.goal = "Goal"
+        draft.stack = "Swift"
+        draft.plannerModel = "planner"
+        draft.coderModel = "coder"
+        draft.activeStep = .setup
+
+        let restored = try JSONDecoder().decode(
+            SpecWizardDraft.self,
+            from: JSONEncoder().encode(draft)
+        )
+        #expect(restored.activeStep == .setup)
+        #expect(restored == draft)
+    }
+
+    @Test("Checklist rows map to the wizard step they open")
+    func checklistRowsMapToSteps() {
+        #expect(SpecWizardChecklistLogic.step(for: .models) == .setup)
+        #expect(SpecWizardChecklistLogic.step(for: .brief) == .setup)
+        #expect(SpecWizardChecklistLogic.step(for: .interview) == .interview)
+        #expect(SpecWizardChecklistLogic.step(for: .specification) == .specification)
+        #expect(SpecWizardChecklistLogic.step(for: .decomposition) == .decomposition)
+    }
+
+    @Test("An unknown stored position falls back to the furthest reached step")
+    func unknownActiveStepIsIgnored() throws {
+        let json = #"{"status":"draft","goal":"G","stack":"S","plannerModel":"p","coderModel":"c","interviewComplete":true,"activeStep":"teleport"}"#
+        let draft = try JSONDecoder().decode(SpecWizardDraft.self, from: Data(json.utf8))
+        #expect(draft.activeStep == nil)
+        #expect(draft.visibleStep == .specification)
+    }
+
     @Test("Legacy draft JSON without new fields still decodes")
     func legacyDraftDecodes() throws {
         let legacy = """

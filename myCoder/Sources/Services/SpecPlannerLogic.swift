@@ -67,6 +67,10 @@ struct SpecInterviewQuestion: Codable, Equatable {
     var suggestedAnswers: [String]
     var done: Bool
     var summary: String?
+    /// How much of the task is still unclear (0 = fully understood, 1 = no
+    /// idea). The planner must keep asking while this is above
+    /// `SpecInterviewLogic.uncertaintyThreshold`. Absent in older turns.
+    var uncertainty: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -74,18 +78,21 @@ struct SpecInterviewQuestion: Codable, Equatable {
         case suggestedAnswers = "suggested_answers"
         case done
         case summary
+        case uncertainty
     }
 
     init(id: String,
          question: String,
          suggestedAnswers: [String] = [],
          done: Bool = false,
-         summary: String? = nil) {
+         summary: String? = nil,
+         uncertainty: Double? = nil) {
         self.id = id
         self.question = question
         self.suggestedAnswers = suggestedAnswers
         self.done = done
         self.summary = summary
+        self.uncertainty = uncertainty
     }
 }
 
@@ -97,10 +104,29 @@ extension SpecInterviewQuestion {
         suggestedAnswers = try container.decodeIfPresent([String].self, forKey: .suggestedAnswers) ?? []
         done = try container.decodeIfPresent(Bool.self, forKey: .done) ?? false
         summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        uncertainty = try container.decodeIfPresent(Double.self, forKey: .uncertainty)
     }
 }
 
 enum SpecInterviewLogic {
+    /// The interview stops only when the planner's own uncertainty about the
+    /// task drops below this value. The host enforces it: `done:true` above the
+    /// threshold is bounced back with "ask the next question".
+    static let uncertaintyThreshold = 0.1
+
+    /// How many times a planner that answers `done` while still uncertain is
+    /// sent back for the decisive question. Two extra asks are enough for a
+    /// cooperating model and cannot spin the loop forever; after the budget a
+    /// stubborn `done` is accepted and the user can still use Clarify.
+    static let maxUncertaintyRetries = 2
+
+    static func needsMoreQuestions(_ question: SpecInterviewQuestion) -> Bool {
+        guard question.done else { return false }
+        guard let uncertainty = question.uncertainty else { return false }
+        return uncertainty > uncertaintyThreshold
+    }
+
+
     /// Validates the planner turn. A finished interview may omit the question
     /// text; an unfinished one must carry both a stable id and a question.
     static func decode(_ raw: String) throws -> SpecInterviewQuestion {

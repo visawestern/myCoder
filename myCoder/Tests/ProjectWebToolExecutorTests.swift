@@ -43,6 +43,52 @@ struct ProjectWebToolExecutorTests {
         #expect(e.contains("not found"))
     }
 
+    @Test func editFileIdenticalOldAndNewReportsNoChange() async throws {
+        let root = try makeRoot()
+        let exec = makeExecutor(root: root)
+        _ = await exec.execute(WebToolCall(name: "write_file", arguments: ["path": "d.txt", "content": "same text"]))
+        let e = await exec.execute(WebToolCall(
+            name: "edit_file",
+            arguments: ["path": "d.txt", "old": "same text", "new": "same text"]
+        ))
+        #expect(e.contains("No changes to apply"))
+        let r = await exec.execute(WebToolCall(name: "read_file", arguments: ["path": "d.txt"]))
+        #expect(r == "same text")
+    }
+
+    @Test func editFileEmptyOldReportsError() async throws {
+        let root = try makeRoot()
+        let exec = makeExecutor(root: root)
+        _ = await exec.execute(WebToolCall(name: "write_file", arguments: ["path": "e.txt", "content": "body"]))
+        let e = await exec.execute(WebToolCall(name: "edit_file", arguments: ["path": "e.txt", "old": "", "new": "x"]))
+        #expect(e.contains("'old' is empty"))
+        let r = await exec.execute(WebToolCall(name: "read_file", arguments: ["path": "e.txt"]))
+        #expect(r == "body")
+    }
+
+    @Test func editFileAmbiguousOldAsksForMoreContext() async throws {
+        let root = try makeRoot()
+        let exec = makeExecutor(root: root)
+        _ = await exec.execute(WebToolCall(name: "write_file", arguments: ["path": "f.txt", "content": "tok\nmid\ntok\n"]))
+        let e = await exec.execute(WebToolCall(name: "edit_file", arguments: ["path": "f.txt", "old": "tok", "new": "new"]))
+        #expect(e.contains("matches 2 places"))
+        let r = await exec.execute(WebToolCall(name: "read_file", arguments: ["path": "f.txt"]))
+        #expect(r == "tok\nmid\ntok\n")
+    }
+
+    @Test func editFileUniqueMatchStillReplaces() async throws {
+        let root = try makeRoot()
+        let exec = makeExecutor(root: root)
+        _ = await exec.execute(WebToolCall(name: "write_file", arguments: ["path": "g.txt", "content": "alpha beta gamma"]))
+        let e = await exec.execute(WebToolCall(
+            name: "edit_file",
+            arguments: ["path": "g.txt", "old": "beta", "new": "delta"]
+        ))
+        #expect(e.hasPrefix("ok"))
+        let r = await exec.execute(WebToolCall(name: "read_file", arguments: ["path": "g.txt"]))
+        #expect(r == "alpha delta gamma")
+    }
+
     @Test func listDir() async throws {
         let root = try makeRoot()
         let exec = makeExecutor(root: root)

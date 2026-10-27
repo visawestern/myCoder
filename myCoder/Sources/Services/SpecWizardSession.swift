@@ -10,6 +10,9 @@ final class SpecWizardSession: ObservableObject {
     @Published var draft: SpecWizardDraft
     @Published private(set) var turns: [SpecPlannerTurn] = []
     @Published private(set) var currentQuestion: SpecInterviewQuestion?
+    /// Whether the question card is on screen. It hides the moment an answer
+    /// is sent and comes back when the planner delivers the next question.
+    @Published private(set) var isQuestionCardVisible = false
     @Published private(set) var completedSummary: String?
     @Published private(set) var specification: String = ""
     @Published private(set) var latestRevision: ProjectSpecRevision?
@@ -48,6 +51,14 @@ final class SpecWizardSession: ObservableObject {
         self.store = database.makeSpecStore()
         self.draft = Self.loadDraft(from: database) ?? SpecWizardDraft()
         loadPersistedState()
+        // A run always has an explicit position: the furthest step reached,
+        // until the user navigates somewhere else. Without it a fresh draft
+        // would jump to the interview the moment the brief becomes valid —
+        // mid-typing. Kept in memory here (the view's autosave persists it),
+        // so opening a project never writes a wizard row just to look at it.
+        if draft.activeStep == nil {
+            draft.activeStep = draft.furthestStep
+        }
     }
 
     // MARK: - Loaded state
@@ -80,14 +91,17 @@ final class SpecWizardSession: ObservableObject {
               let data = lastPlannerTurn.content.data(using: .utf8),
               let question = try? JSONDecoder().decode(SpecInterviewQuestion.self, from: data) else {
             currentQuestion = nil
+            isQuestionCardVisible = false
             completedSummary = nil
             return
         }
         if question.done {
             currentQuestion = nil
+            isQuestionCardVisible = false
             completedSummary = question.summary
         } else {
             currentQuestion = question
+            isQuestionCardVisible = true
             completedSummary = nil
         }
     }
@@ -110,7 +124,7 @@ final class SpecWizardSession: ObservableObject {
                 coderProviderID: providerID,
                 coderModelID: draft.coderModel,
                 status: draft.status.rawValue,
-                currentStep: draft.step.rawValue,
+                currentStep: draft.visibleStep.rawValue,
                 briefGoal: draft.goal,
                 briefStack: draft.stack,
                 briefConstraints: draft.constraints,
@@ -183,43 +197,80 @@ final class SpecWizardSession: ObservableObject {
         try? store.appendHistory(entry)
     }
 
+    // MARK: - Navigation
+
+    /// Opens a wizard step. Any phase the data has already unlocked can be
+    /// reopened — that is how the user gets back to models/stack after a
+    /// restart. The furthest reached step is never skipped, and the position
+    /// is written to the project database before the view shows it.
+    @discardableResult
+    func go(to step: SpecWizardStep) -> Bool {
+        guard !isLoading else { return false }
+        guard step.rank <= draft.furthestStep.rank else {
+            errorMessage = "That step unlocks after the previous ones are complete"
+            return false
+        }
+        guard draft.activeStep != step else { return true }
+        let previous = draft.activeStep
+        draft.activeStep = step
+        guard saveDraft() else {
+            draft.activeStep = previous
+            return false
+        }
+        errorMessage = nil
+        appendHistory(action: "wizard_step_opened",
+                      entityType: "wizard",
+                      entityID: projectID,
+                      payloadJSON: "{\"step\":\"\(step.rawValue)\"}")
+        return true
+    }
+
     // MARK: - Questions
 
     /// Sends one answer (or an empty string to fetch the first question) and
     /// appends both turns. The planner's JSON turn is stored verbatim so the
     /// question survives a restart with the same options.
-    func submitAnswer(_ answer: String) async {
-        guard !isLoading else { return }
+    ///
+    /// The answer only reaches the transcript together with the planner's
+    /// reply: a failed turn stores nothing, so retrying cannot duplicate it.
+    @discardableResult
+    func submitAnswer(_ answer: String) async -> Bool {
+        guard !isLoading else { return false }
         let clean = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let route = route(for: draft.plannerModel) else { return }
+        guard let route = route(for: draft.plannerModel) else { return false }
 
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
+        // The answered block leaves the screen at once; the next planner
+        // question puts it back.
+        let cardWasVisible = isQuestionCardVisible
+        if !clean.isEmpty {
+            isQuestionCardVisible = false
+        }
+
+        var pendingTurns = turns
+        if !clean.isEmpty {
+            pendingTurns.append(SpecPlannerTurn(role: "user", content: clean))
+        }
+
         do {
+            let question = try await nextQuestion(route: route, turns: pendingTurns)
+            let encoded = try JSONEncoder().encode(question)
+            let raw = String(data: encoded, encoding: .utf8) ?? ""
+            let suggestions = try JSONEncoder().encode(question.suggestedAnswers)
+            let suggestionsRaw = String(data: suggestions, encoding: .utf8)
             if !clean.isEmpty {
-                let turn = try store.appendTurn(
+                let userTurn = try store.appendTurn(
                     projectID: projectID,
                     role: "user",
                     content: clean,
                     suggestedAnswersJSON: nil,
                     createdAt: Int64(Date().timeIntervalSince1970)
                 )
-                turns.append(SpecPlannerTurn(role: turn.role, content: turn.content))
+                turns.append(SpecPlannerTurn(role: userTurn.role, content: userTurn.content))
             }
-
-            let question = try await planner.nextInterviewQuestion(
-                projectName: projectName,
-                brief: draft,
-                turns: turns,
-                route: route,
-                language: languageProvider()
-            )
-            let encoded = try JSONEncoder().encode(question)
-            let raw = String(data: encoded, encoding: .utf8) ?? ""
-            let suggestions = try JSONEncoder().encode(question.suggestedAnswers)
-            let suggestionsRaw = String(data: suggestions, encoding: .utf8)
             let turn = try store.appendTurn(
                 projectID: projectID,
                 role: "planner",
@@ -229,6 +280,7 @@ final class SpecWizardSession: ObservableObject {
             )
             turns.append(SpecPlannerTurn(role: turn.role, content: turn.content))
             currentQuestion = question.done ? nil : question
+            isQuestionCardVisible = !question.done
             completedSummary = question.done ? question.summary : nil
 
             if question.done && !draft.interviewComplete {
@@ -240,16 +292,79 @@ final class SpecWizardSession: ObservableObject {
             } else {
                 _ = saveDraft()
             }
+            return true
         } catch {
+            isQuestionCardVisible = cardWasVisible
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
     /// Starts the interview on first entry. A restart with stored turns never
     /// asks the first question twice.
     func startInterviewIfNeeded() async {
-        guard turns.isEmpty, !draft.interviewComplete, draft.step == .interview else { return }
+        guard turns.isEmpty, !draft.interviewComplete, draft.visibleStep == .interview else { return }
         await submitAnswer("")
+    }
+
+    /// Reopens a finished interview with the user's correction. The planner
+    /// re-checks how well the task is understood and either asks the next
+    /// question or returns an updated summary. A failed request restores the
+    /// completed state so the summary does not vanish.
+    @discardableResult
+    func clarify(_ text: String) async -> Bool {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !isLoading else { return false }
+        let wasComplete = draft.interviewComplete
+        let previousSummary = completedSummary
+        draft.interviewComplete = false
+        draft.activeStep = .interview
+        completedSummary = nil
+        isQuestionCardVisible = false
+        _ = saveDraft()
+
+        let ok = await submitAnswer(clean)
+        if !ok {
+            draft.interviewComplete = wasComplete
+            completedSummary = previousSummary
+            if wasComplete {
+                isQuestionCardVisible = false
+            } else if currentQuestion != nil {
+                isQuestionCardVisible = true
+            }
+            _ = saveDraft()
+        }
+        return ok
+    }
+
+    /// One planner turn, with the host's stop rule applied: `done` is accepted
+    /// only when the planner reports uncertainty at or below the threshold.
+    /// A planner that keeps answering `done` while uncertain is sent back a
+    /// bounded number of times, then its answer is accepted (the user can
+    /// still Clarify) — the loop can never spin forever.
+    private func nextQuestion(route: SpecPlannerRoute,
+                              turns: [SpecPlannerTurn]) async throws -> SpecInterviewQuestion {
+        var question = try await planner.nextInterviewQuestion(
+            projectName: projectName,
+            brief: draft,
+            turns: turns,
+            route: route,
+            language: languageProvider()
+        )
+        var retries = 0
+        while SpecInterviewLogic.needsMoreQuestions(question),
+              retries < SpecInterviewLogic.maxUncertaintyRetries {
+            retries += 1
+            question = try await planner.nextInterviewQuestion(
+                projectName: projectName,
+                brief: draft,
+                turns: turns,
+                route: route,
+                language: languageProvider(),
+                requireMoreQuestions: true
+            )
+        }
+        return question
     }
 
     // MARK: - Specification
@@ -288,6 +403,9 @@ final class SpecWizardSession: ObservableObject {
             draft.specVersion = Int(revision.version)
             nodes = (try? store.nodes(revisionID: revision.id)) ?? []
             draft.decompositionNodeCount = nodes.count
+            // A written spec means the next thing to do is the task breakdown;
+            // that screen also shows the spec itself.
+            draft.activeStep = .decomposition
             appendHistory(action: "spec_revision_created",
                           entityType: "spec_revision",
                           entityID: revision.id,
@@ -320,6 +438,7 @@ final class SpecWizardSession: ObservableObject {
             draft.specVersion = Int(revision.version)
             nodes = (try? store.nodes(revisionID: revision.id)) ?? []
             draft.decompositionNodeCount = nodes.count
+            draft.activeStep = .decomposition
             appendHistory(action: "spec_revision_edited",
                           entityType: "spec_revision",
                           entityID: revision.id,
@@ -394,6 +513,7 @@ final class SpecWizardSession: ObservableObject {
             try store.insertDecomposition(nodes: Array(nodeByKey.values), edges: edges)
             nodes = try store.nodes(revisionID: revision.id)
             draft.decompositionNodeCount = nodes.count
+            draft.activeStep = .ready
             appendHistory(action: "decomposition_created",
                           entityType: "decomposition",
                           entityID: revision.id,

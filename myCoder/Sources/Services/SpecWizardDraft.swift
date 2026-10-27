@@ -40,6 +40,10 @@ struct SpecWizardDraft: Codable, Equatable {
     var interviewComplete: Bool = false
     var specVersion: Int = 0
     var decompositionNodeCount: Int = 0
+    /// The step the user is looking at. Persisted, so a restart restores the
+    /// exact position — including a deliberate return to an earlier step.
+    /// `nil` in drafts written before this field existed.
+    var activeStep: SpecWizardStep?
     var updatedAt: TimeInterval = 0
 
     init(status: Status = .draft,
@@ -51,6 +55,7 @@ struct SpecWizardDraft: Codable, Equatable {
          interviewComplete: Bool = false,
          specVersion: Int = 0,
          decompositionNodeCount: Int = 0,
+         activeStep: SpecWizardStep? = nil,
          updatedAt: TimeInterval = 0) {
         self.status = status
         self.goal = goal
@@ -61,6 +66,7 @@ struct SpecWizardDraft: Codable, Equatable {
         self.interviewComplete = interviewComplete
         self.specVersion = specVersion
         self.decompositionNodeCount = decompositionNodeCount
+        self.activeStep = activeStep
         self.updatedAt = updatedAt
     }
 
@@ -78,6 +84,7 @@ struct SpecWizardDraft: Codable, Equatable {
         interviewComplete = try container.decodeIfPresent(Bool.self, forKey: .interviewComplete) ?? false
         specVersion = try container.decodeIfPresent(Int.self, forKey: .specVersion) ?? 0
         decompositionNodeCount = try container.decodeIfPresent(Int.self, forKey: .decompositionNodeCount) ?? 0
+        activeStep = (try? container.decodeIfPresent(SpecWizardStep.self, forKey: .activeStep)) ?? nil
         updatedAt = try container.decodeIfPresent(TimeInterval.self, forKey: .updatedAt) ?? 0
     }
 
@@ -91,9 +98,9 @@ struct SpecWizardDraft: Codable, Equatable {
             && !stack.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Derived, never stored: a stale `step` column must not be able to unlock
-    /// chat or skip a phase.
-    var step: SpecWizardStep {
+    /// The furthest phase the stored data unlocks. Navigation never goes past
+    /// it, so a stale position can neither skip a phase nor unlock chat.
+    var furthestStep: SpecWizardStep {
         if status != .draft { return .ready }
         guard hasModels, hasBrief else { return .setup }
         guard interviewComplete else { return .interview }
@@ -101,6 +108,19 @@ struct SpecWizardDraft: Codable, Equatable {
         guard decompositionNodeCount > 0 else { return .decomposition }
         return .ready
     }
+
+    /// Where the wizard actually renders: the persisted position, clamped to
+    /// what the data unlocks. A draft without a stored position opens at the
+    /// furthest reached step (the behaviour before `activeStep` existed).
+    var visibleStep: SpecWizardStep {
+        let furthest = furthestStep
+        guard let active = activeStep, active.rank <= furthest.rank else { return furthest }
+        return active
+    }
+
+    /// Data-derived progress. Kept as the public "how far has this project
+    /// got" value used by the checklist; the view uses `visibleStep`.
+    var step: SpecWizardStep { furthestStep }
 
     var isEmpty: Bool {
         goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -150,6 +170,23 @@ enum SpecWizardChecklistLogic {
 
     private static func phaseItem(id: ItemID, done: Bool, available: Bool) -> Item {
         Item(id: id, state: done ? .done : (available ? .pending : .upcoming))
+    }
+
+    /// The step a checklist row opens. Model and brief rows share the setup
+    /// step because they are edited on the same screen.
+    static func step(for id: ItemID) -> SpecWizardStep {
+        switch id {
+        case .models, .brief: return .setup
+        case .interview: return .interview
+        case .specification: return .specification
+        case .decomposition: return .decomposition
+        }
+    }
+
+    /// A row is clickable as soon as its phase is reachable. Returning to a
+    /// finished phase is allowed — that is the whole point of navigation.
+    static func isNavigable(_ id: ItemID, in draft: SpecWizardDraft) -> Bool {
+        items(for: draft).first(where: { $0.id == id })?.state != .upcoming
     }
 
     /// All five phases count. Upcoming phases contribute zero rather than

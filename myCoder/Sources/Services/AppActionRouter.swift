@@ -560,7 +560,11 @@ final class AppActionRouter {
             "active": appState.activeSpecWizardProjectPath == session.projectPath,
             "draft": [
                 "status": draft.status.rawValue,
+                // `step` is how far the project has got; `visibleStep` is the
+                // screen the user is looking at (they may have navigated back).
                 "step": draft.step.rawValue,
+                "visibleStep": draft.visibleStep.rawValue,
+                "activeStep": draft.activeStep?.rawValue ?? NSNull(),
                 "goal": draft.goal,
                 "stack": draft.stack,
                 "constraints": draft.constraints,

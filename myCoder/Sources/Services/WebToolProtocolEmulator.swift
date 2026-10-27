@@ -7,6 +7,19 @@ struct WebToolCall: Equatable {
     let arguments: [String: String]
 }
 
+/// A tool block the model emitted that could not become an executable call.
+/// The driver feeds it back as a `tool_result` error instead of dropping it,
+/// so one malformed call never stalls the turn.
+struct WebToolCallParseIssue: Equatable {
+    /// The tool name recovered from the broken block, or "tool" when unknown.
+    let toolName: String
+    /// What exactly is wrong with the block (unclosed brace, unterminated
+    /// string, unknown tool name, ...).
+    let reason: String
+    /// The offending block, truncated for logs and feedback.
+    let raw: String
+}
+
 /// The set of tools we teach a plain web chat to "call" so it behaves like a
 /// real coding agent (plan Блок 2 п.12). These map 1:1 to the app's real
 /// tool executors (read_file/write_file/etc.).
@@ -254,7 +267,18 @@ enum WebToolProtocolEmulator {
     /// models actually emit (e.g. `[tool call: LS with path "."]`), so the
     /// agentic loop never stalls on a well-meant but non-strict call.
     static func parseToolCalls(from responseText: String) -> [WebToolCall] {
+        parseToolCallsWithIssues(from: responseText).calls
+    }
+
+    /// Same parser, plus one report per tool block that could not become an
+    /// executable call. A malformed block is never silently dropped: the
+    /// driver turns each issue into a `tool_result` error for the model, so a
+    /// single broken call cannot kill the rest of the turn.
+    static func parseToolCallsWithIssues(
+        from responseText: String
+    ) -> (calls: [WebToolCall], issues: [WebToolCallParseIssue]) {
         var calls: [WebToolCall] = []
+        var issues: [WebToolCallParseIssue] = []
         // Find ```tool ... ``` fenced blocks. The closing fence may directly
         // follow the JSON (no trailing newline) — tolerate that too.
         let scanner = responseText as NSString
@@ -265,7 +289,19 @@ enum WebToolProtocolEmulator {
                 let jsonString = scanner.substring(with: match.range(at: 1))
                 if let call = parseSingleCall(jsonString) {
                     calls.append(call)
+                    continue
                 }
+                // A stream cut off mid-JSON is answered with "re-emit the
+                // complete block" by the driver's truncated-call branch.
+                if let stub = parseTruncatedToolCallStub(from: jsonString).first {
+                    calls.append(stub)
+                    continue
+                }
+                issues.append(WebToolCallParseIssue(
+                    toolName: recoveredToolName(from: jsonString) ?? "tool",
+                    reason: describeJSONProblem(jsonString),
+                    raw: String(jsonString.prefix(400))
+                ))
             }
         }
         // Then the informal `[tool call: NAME ...]` variant.
@@ -283,6 +319,8 @@ enum WebToolProtocolEmulator {
         // with no backticks at all. Scan for complete {"name": …, "args": {…}}
         // objects in the raw text (NBSP-normalized) before the truncated-stub
         // fallback, so a fully written call without fences still executes.
+        // A broken *fenced* block must not hide it: issues are reported
+        // separately and do not block recovery of a valid unfenced call.
         if calls.isEmpty {
             calls.append(contentsOf: parseUnfencedJSONToolCalls(from: responseText))
         }
@@ -295,10 +333,20 @@ enum WebToolProtocolEmulator {
         // feed back "incomplete call, re-emit" instead of showing the stub.
         // Only when no complete call parsed — the stub detector is a fallback,
         // never a second opinion on a well-formed call.
-        if calls.isEmpty {
+        if calls.isEmpty && issues.isEmpty {
             calls.append(contentsOf: parseTruncatedToolCallStub(from: responseText))
         }
-        return calls
+        return (calls, issues)
+    }
+
+    /// The tool name written inside a broken block, so the error result names
+    /// the tool the model meant to call.
+    private static func recoveredToolName(from block: String) -> String? {
+        let pattern = "\"name\"\\s*:\\s*\"([A-Za-z_][A-Za-z0-9_.-]*)\""
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: block, range: NSRange(location: 0, length: (block as NSString).length)),
+              match.numberOfRanges >= 2 else { return nil }
+        return (block as NSString).substring(with: match.range(at: 1))
     }
 
     /// Detect a stream-truncated tool call: a known tool name followed by an

@@ -139,7 +139,21 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             guard let content = try? String(contentsOf: url, encoding: .utf8) else {
                 return "error: cannot read \(path)"
             }
-            guard content.contains(oldStr) else { return "error: 'old' text not found in \(path)" }
+            // Every rejected edit answers with a specific reason instead of
+            // writing something the model did not intend (OpenCode parity).
+            guard !oldStr.isEmpty else {
+                return "error: 'old' is empty — nothing to match in \(path). Read the file and pass the exact text to replace."
+            }
+            guard oldStr != newStr else {
+                return "error: No changes to apply: 'old' and 'new' are identical in \(path). Read the file and re-emit the call with the intended change."
+            }
+            let occurrences = content.components(separatedBy: oldStr).count - 1
+            guard occurrences > 0 else {
+                return "error: 'old' text not found in \(path). The file changed or the text differs — read it with read_file and copy the exact current text, including indentation."
+            }
+            guard occurrences == 1 else {
+                return "error: 'old' matches \(occurrences) places in \(path). Include more surrounding context so the replacement targets exactly one place."
+            }
             let updated = content.replacingOccurrences(of: oldStr, with: newStr)
             do {
                 try performFileOperation(operation: "edit_file", fileURL: url, execute: {
