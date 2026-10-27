@@ -544,6 +544,8 @@ struct BottomInputBar: View {
     @Binding var showFilePicker: Bool
     @ObservedObject var messageQueue: MessageQueue
     var contextUsage: ContextUsage? = nil
+    /// True while the host compiles the point context for the outgoing message.
+    var isCompilingContext: Bool = false
     var onForceSendQueued: (QueuedMessage) -> Void = { _ in }
     var onEditQueued: (QueuedMessage) -> Void = { _ in }
     @EnvironmentObject var appState: AppState
@@ -568,6 +570,10 @@ struct BottomInputBar: View {
                 : appState.selectedProviderConnected
         )
     }
+
+    /// A second send while the context is still compiling would race with the
+    /// first. The composer keeps the text and the loader explains the wait.
+    private var canSendNow: Bool { canSend && !isCompilingContext }
 
     /// Round 8 P1: why sending is blocked, surfaced to the user.
     private var sendReason: String? {
@@ -609,11 +615,26 @@ struct BottomInputBar: View {
                 Divider()
             }
 
+            if isCompilingContext {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                    Text(L.t(AppLocalizationKey.locCompilingPointContext))
+                        .interfaceFont(size: 11)
+                        .foregroundColor(Color.mimo.textMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             CompactMessageTextField(
                 text: $messageText,
                 placeholder: MiMoCopy.followUpPlaceholder(language: appState.appLanguage),
                 onSubmit: {
-                    guard SendButtonActivationLogic.canInvokeSend(canSend: canSend, isLoading: isLoading) else { return }
+                    guard SendButtonActivationLogic.canInvokeSend(canSend: canSendNow, isLoading: isLoading) else { return }
                     onSend()
                 },
                 compactSingleLine: messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -666,7 +687,7 @@ struct BottomInputBar: View {
                 showPlusMenu: $showPlusMenu,
                 showPhotoPicker: $showPhotoPicker,
                 isLoading: isLoading,
-                canSend: canSend,
+                canSend: canSendNow,
                 onSend: onSend,
                 onStop: onStop,
                 disabledReason: sendReason

@@ -16,6 +16,15 @@ struct IndexingSettingsView: View {
             set: { newValue in appState.updateSettings { $0.indexRepositories = newValue } }
         )
     }
+
+    /// Point context is a per-user switch, not a workspace setting: it changes
+    /// what every send attaches, regardless of which project is open.
+    private var pointContextBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isPointContextEnabled },
+            set: { newValue in appState.isPointContextEnabled = newValue }
+        )
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -38,6 +47,8 @@ struct IndexingSettingsView: View {
 
                 SettingsToggleRow(title: L.t(AppLocalizationKey.locIndexRepositoriesForInstantGrepBeta), description: L.t(AppLocalizationKey.locAutomaticallyIndexRepositoriesSpeedGrepSearches), isOn: indexRepositoriesBinding)
                     .disabled(!IndexingSettingsLogic.automaticIndexingIsAvailable)
+
+                SettingsToggleRow(title: L.t(AppLocalizationKey.locPointContext), description: L.t(AppLocalizationKey.locPointContextDescription), isOn: pointContextBinding)
             }
         }
     }

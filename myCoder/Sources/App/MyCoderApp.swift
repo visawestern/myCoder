@@ -137,6 +137,17 @@ class AppState: ObservableObject {
     @Published var pendingSpecNodePrompt: PendingSpecNodePrompt?
     @Published var isStreaming = false
     @Published var isLoading = false
+    /// True while the host compiles the point context for the next send
+    /// (user directive D1: the loader says "собираем точечный контекст").
+    @Published var isCompilingContext = false
+    /// Whether the point context is compiled before every send. On by default:
+    /// compilation is deterministic and local, and without it the send carries
+    /// no evidence at all.
+    @Published var isPointContextEnabled: Bool = true {
+        didSet {
+            defaults.set(isPointContextEnabled, forKey: "com.mycoder.pointContextEnabled")
+        }
+    }
     @Published var selectedModel = ""
     @Published var selectedProviderID = ""
     @Published private(set) var providerConnectivity: [String: Bool] = [:]
@@ -500,6 +511,7 @@ class AppState: ObservableObject {
         // Load persisted values from the injected defaults domain
         selectedModel = defaults.string(forKey: "com.mycoder.selectedModel") ?? ""
         selectedProviderID = defaults.string(forKey: "com.mycoder.selectedProviderID") ?? ""
+        isPointContextEnabled = defaults.object(forKey: "com.mycoder.pointContextEnabled") as? Bool ?? true
         showGoal = defaults.bool(forKey: "com.mycoder.showGoal")
         selectedVariant = {
             if let saved = defaults.string(forKey: "com.mycoder.selectedVariant"), !saved.isEmpty {

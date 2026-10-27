@@ -2,7 +2,7 @@ import Foundation
 
 /// What the turn compiler understood from the user's message. Built from the
 /// text alone — no model, no network, same answer every time.
-struct ContextQueryPlan: Equatable {
+struct ContextQueryPlan: Equatable, Sendable {
     /// Lowercase terms used for ranking.
     let terms: [String]
     /// Identifiers that look like code (`UserStore`, `testLoad`).
@@ -80,24 +80,24 @@ enum ContextQueryPlanner {
 
 // MARK: - Pack
 
-struct ContextCitation: Equatable {
+struct ContextCitation: Equatable, Sendable {
     let path: String
     let startLine: Int
     let endLine: Int
     let symbol: String?
 }
 
-struct ContextSection: Equatable {
+struct ContextSection: Equatable, Sendable {
     let title: String
     let body: String
 }
 
-struct DroppedSource: Equatable {
+struct DroppedSource: Equatable, Sendable {
     let path: String
     let reason: String
 }
 
-struct ContextManifest: Equatable {
+struct ContextManifest: Equatable, Sendable {
     /// Paths that really made it into the pack, in order.
     let included: [String]
     /// Paths that were considered and left out, with the reason.
@@ -106,7 +106,7 @@ struct ContextManifest: Equatable {
     let considered: Int
 }
 
-struct CompiledContextPack: Equatable {
+struct CompiledContextPack: Equatable, Sendable {
     let sections: [ContextSection]
     let citations: [ContextCitation]
     let unknowns: [String]
@@ -149,8 +149,11 @@ enum TurnContextCompiler {
         }
 
         let budgetBytes = max(0, budgetTokens * bytesPerToken)
+        // The request is never shortened: the model must see every word the
+        // user typed. The budget applies to the evidence around it.
+        let request = message.trimmingCharacters(in: .whitespacesAndNewlines)
         var sections: [ContextSection] = [
-            ContextSection(title: "Запрос", body: truncated(message.trimmingCharacters(in: .whitespacesAndNewlines), 2_000))
+            ContextSection(title: "Запрос", body: request)
         ]
         var citations: [ContextCitation] = []
         var unknowns: [String] = []
@@ -195,19 +198,12 @@ enum TurnContextCompiler {
             included.append(candidate.path)
         }
 
+        // Never trim the request to fit the evidence budget: losing the user's
+        // words is worse than exceeding it. If the request alone is bigger,
+        // say so instead of cutting it.
         var text = render(sections: sections, unknowns: unknowns, dropped: dropped, detailedDrop: true)
-        // The budget also covers the fixed sections. Trim in a fixed order —
-        // echoed request first, then the dropped-source list becomes a count —
-        // so the pack never silently exceeds the limit.
-        while text.utf8.count > budgetBytes, sections[0].body.count > 0 {
-            let keep = max(0, sections[0].body.count - 80)
-            sections[0] = ContextSection(
-                title: sections[0].title,
-                body: String(sections[0].body.prefix(keep))
-            )
-            text = render(sections: sections, unknowns: unknowns, dropped: dropped, detailedDrop: true)
-        }
         if text.utf8.count > budgetBytes {
+            unknowns.append("запрос больше бюджета \(budgetTokens) токенов — отправлен целиком")
             text = render(sections: sections, unknowns: unknowns, dropped: dropped, detailedDrop: false)
         }
 
@@ -273,9 +269,5 @@ enum TurnContextCompiler {
             }
         }
         return parts.joined(separator: "\n\n")
-    }
-
-    private static func truncated(_ text: String, _ limit: Int) -> String {
-        text.count <= limit ? text : String(text.prefix(limit)) + "…"
     }
 }

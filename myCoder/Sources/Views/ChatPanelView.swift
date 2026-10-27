@@ -270,6 +270,7 @@ struct ChatPanelView: View {
                         showFilePicker: $showFilePicker,
                         messageQueue: messageQueue,
                         contextUsage: currentContextUsage,
+                        isCompilingContext: appState.isCompilingContext,
                         onForceSendQueued: forceSendQueued,
                         onEditQueued: editQueuedMessage
                     )
@@ -401,6 +402,15 @@ struct ChatPanelView: View {
             onForceSendQueued: forceSendQueued,
             onEditQueued: editQueuedMessage
         )
+    }
+
+    /// The send path must not depend on the user opening the @ picker first:
+    /// a missing index is built once (see `PointContextIndexLogic`).
+    private static func recordsForPointContext(projectPath: String) async -> [FileIndexRecord] {
+        guard !projectPath.isEmpty else { return [] }
+        return await Task.detached(priority: .utility) {
+            PointContextIndexLogic.records(projectPath: projectPath)
+        }.value
     }
 
     // MARK: - Body event handlers
@@ -894,6 +904,9 @@ struct ChatPanelView: View {
                 break
             }
         }
+        // A send is already preparing its context; a second one would race
+        // with it. The composer keeps the text and the input bar says why.
+        guard !appState.isCompilingContext else { return }
         if let error = SendReadinessLogic.connectionValidationError(
             serverConnected: appState.serverConnected,
             selectedProviderID: appState.selectedProviderID,
@@ -1249,15 +1262,28 @@ struct ChatPanelView: View {
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.
         await autoCompactIfNeeded(route: route)
-        // A/B: host-side project auto-search. Gather files matching the request
-        // from the stored index and prepend them to the MODEL-BOUND text only;
-        // the displayed bubble keeps the raw user text. A missing/stale index
-        // simply yields no block (never blocks the send).
-        let autoContextRecords = appState.selectedWorkspace.map {
-            ProjectFileIndexStore.load(projectPath: $0.path)
-        } ?? []
-        let autoContextBlock = ProjectContextGatherLogic.block(query: text, records: autoContextRecords)
-        let modelText = autoContextBlock.isEmpty ? text : autoContextBlock + "\n\n" + text
+        // The point context replaces the old auto-search block: the compiler
+        // ranks the index, cites real lines and reports what it could not get.
+        // It runs before the session is prepared, so a failure can degrade to
+        // the raw message instead of blocking the send.
+        let pointContextProjectRoot = appState.selectedWorkspace?.path ?? ""
+        // Do not scan the project or flash the loader when the feature is off.
+        let pointContextRecords: [FileIndexRecord]
+        if appState.isPointContextEnabled {
+            await MainActor.run { appState.isCompilingContext = true }
+            pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
+        } else {
+            pointContextRecords = []
+        }
+        let preparation = await SendContextPreparationLogic.prepareAsync(
+            message: text,
+            records: pointContextRecords,
+            projectPath: pointContextProjectRoot,
+            isEnabled: appState.isPointContextEnabled
+        )
+        await MainActor.run { appState.isCompilingContext = false }
+        let modelText = preparation.modelText
+        let contextParts = SendContextPreparationLogic.contextParts(preparation)
         let preparedSessionID: String?
         if let retryPlan {
             preparedSessionID = retryPlan.sessionID
@@ -1269,11 +1295,20 @@ struct ChatPanelView: View {
             role: .user,
             content: text,
             files: files.isEmpty ? nil : files,
-            parts: MessagePartsBuilder.displayParts(text: text, images: images)
+            parts: MessagePartsBuilder.displayParts(text: text, images: images) + contextParts
         )
         await MainActor.run {
             if retryPlan == nil {
                 messageStore.append(userMessage)
+                if let warning = preparation.warning {
+                    // Visible degradation: the send goes ahead with the raw
+                    // message, and the user is told why no context was added.
+                    messageStore.append(Message(
+                        role: .assistant,
+                        content: "⚠️ \(warning)",
+                        isFinished: true
+                    ))
+                }
             }
             if let preparedSessionID,
                let preparedSession = appState.sessions.first(where: { $0.id == preparedSessionID }) {

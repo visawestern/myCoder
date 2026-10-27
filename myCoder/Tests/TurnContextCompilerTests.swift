@@ -132,6 +132,22 @@ struct TurnContextCompilerTests {
         #expect(first.citations == second.citations)
     }
 
+    @Test("Длинный запрос не обрезается, даже если не влезает в бюджет")
+    func longRequestIsNeverTruncated() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let board = try board(for: root, files: ["UserStore.swift"])
+        let message = String(repeating: "почему падает UserStore ", count: 300)
+        let pack = TurnContextCompiler.compile(
+            message: message,
+            board: board,
+            projectRoot: root.path,
+            budgetTokens: 120
+        )
+        #expect(pack.text.contains(message.trimmingCharacters(in: .whitespacesAndNewlines)))
+        #expect(pack.unknowns.contains { $0.contains("запрос больше бюджета") })
+    }
+
     @Test("Без индекса пакет содержит пробелы и не падает")
     func emptyBoardGivesGaps() {
         let empty = ContextBoardBuilder.build(projectPath: "/tmp/mimo-empty", records: [])
