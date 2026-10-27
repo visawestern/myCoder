@@ -12,11 +12,14 @@ struct HarnessProfileTests {
 
     @Test func profileToolSets() {
         #expect(HarnessProfile.minimal.tools.count == 5)
-        #expect(HarnessProfile.standard.tools.count == 11)
+        #expect(HarnessProfile.standard.tools.count == 13)
         #expect(HarnessProfile.full.tools.count == WebEmulatedTool.allCases.count)
         #expect(HarnessProfile.unknown.tools.count == WebEmulatedTool.allCases.count)
         let standard = Set(HarnessProfile.standard.tools.map(\.rawValue))
-        #expect(standard.isSuperset(of: ["grep", "glob", "git_status", "git_diff", "todo_read", "todo_write"]))
+        #expect(standard.isSuperset(of: [
+            "grep", "glob", "git_status", "git_diff", "todo_read", "todo_write",
+            "code_search", "read_symbol"
+        ]))
         #expect(!standard.contains("git_push"))
     }
 

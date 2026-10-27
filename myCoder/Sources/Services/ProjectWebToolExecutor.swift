@@ -221,6 +221,47 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             let pattern = call.arguments["pattern"] ?? "*"
             let path = call.arguments["path"] ?? "."
             return glob(pattern: pattern, in: url(for: path))
+        case .codeSearch:
+            let query = (call.arguments["query"] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return "error: missing query" }
+            let requested = call.arguments["limit"].flatMap { Int($0.filter(\.isNumber)) } ?? 8
+            let limit = min(max(requested, 1), 20)
+            do {
+                let hits = try CodeIndexService.search(
+                    projectPath: projectRoot,
+                    query: query,
+                    limit: limit
+                )
+                return CodeIndexService.renderSearch(query: query, hits: hits)
+            } catch {
+                return "error: code index failed: \(error.localizedDescription)"
+            }
+        case .readSymbol:
+            let id = (call.arguments["id"] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                if !id.isEmpty {
+                    return CodeIndexService.renderSymbol(
+                        try CodeIndexService.readSymbol(projectPath: projectRoot, id: id)
+                    )
+                }
+                guard let path = call.arguments["path"],
+                      let name = call.arguments["name"] else {
+                    return "error: missing id (or path + name)"
+                }
+                let line = call.arguments["line"].flatMap { Int($0.filter(\.isNumber)) }
+                return CodeIndexService.renderSymbol(
+                    try CodeIndexService.readSymbol(
+                        projectPath: projectRoot,
+                        path: path,
+                        name: name,
+                        line: line
+                    )
+                )
+            } catch {
+                return "error: \(error.localizedDescription)"
+            }
         case .todoRead:
             return todoRead()
         case .todoWrite:

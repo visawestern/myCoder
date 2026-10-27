@@ -473,6 +473,16 @@ final class MyCoderAutoFreeClient {
             properties["pattern"] = .init(type: "string", description: "Glob pattern")
             properties["path"] = .init(type: "string", description: "Relative path")
             required = ["pattern"]
+        case .codeSearch:
+            properties["query"] = .init(type: "string", description: "Symbol name or code text to search")
+            properties["limit"] = .init(type: "integer", description: "Max hits (default 8)")
+            required = ["query"]
+        case .readSymbol:
+            properties["id"] = .init(type: "string", description: "Symbol id returned by code_search")
+            properties["path"] = .init(type: "string", description: "File path (alternative to id)")
+            properties["name"] = .init(type: "string", description: "Symbol name (with path)")
+            properties["line"] = .init(type: "integer", description: "Optional declaration line hint")
+            required = []
         case .todoRead:
             break
         case .todoWrite:

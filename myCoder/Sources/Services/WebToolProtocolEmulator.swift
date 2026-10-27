@@ -41,6 +41,9 @@ enum WebEmulatedTool: String, CaseIterable {
     case gitPull = "git_pull"
     // File search & glob
     case glob = "glob"
+    // Project code graph (symbols + edges), built by the host from source.
+    case codeSearch = "code_search"
+    case readSymbol = "read_symbol"
     case todoRead = "todo_read"
     case todoWrite = "todo_write"
     // Sub-agent / task tool
@@ -72,6 +75,8 @@ enum WebEmulatedTool: String, CaseIterable {
         case .gitPush: return #"{"remote": "<remote name>", "branch": "<branch name>"}"#
         case .gitPull: return #"{"remote": "<remote name>", "branch": "<branch name>"}"#
         case .glob: return #"{"pattern": "<glob pattern>", "path": "<relative path>"}"#
+        case .codeSearch: return #"{"query": "<symbol name or code text>", "limit": "<optional max hits>"}"#
+        case .readSymbol: return #"{"id": "<symbol id from code_search>", "path": "<optional file>", "name": "<optional symbol>", "line": "<optional 1-based line>"}"#
         case .todoRead: return #"{}"#
         case .todoWrite: return #"{"todos": [{"id": "<id>", "content": "<text>", "status": "<pending|in_progress|completed>"}]}"#
         case .task: return #"{"description": "<task description>", "prompt": "<detailed prompt>", "subagentType": "<general|code|debug|review>"}"#
@@ -100,6 +105,8 @@ enum WebEmulatedTool: String, CaseIterable {
         case .gitPush: return "Push commits to remote."
         case .gitPull: return "Pull commits from remote."
         case .glob: return "Find files matching a glob pattern."
+        case .codeSearch: return "Search the project code graph for functions, types and variables; returns exact line ranges and graph neighbors."
+        case .readSymbol: return "Read one indexed symbol by id (or path + name) with its exact line range; refuses stale line numbers."
         case .todoRead: return "Read the current execution plan and todo checklist."
         case .todoWrite: return "Write/update the todo checklist (replaces the whole list)."
         case .task: return "Launch a sub-agent for a complex task (runs in background, returns result)."
@@ -133,7 +140,10 @@ extension HarnessProfile {
         case .minimal:
             return WebEmulatedTool.allCases.filter { $0.isCore }
         case .standard:
-            let extra: Set<String> = ["grep", "glob", "git_status", "git_diff", "todo_read", "todo_write"]
+            let extra: Set<String> = [
+                "grep", "glob", "git_status", "git_diff", "todo_read", "todo_write",
+                "code_search", "read_symbol"
+            ]
             return WebEmulatedTool.allCases.filter { $0.isCore || extra.contains($0.rawValue) }
         case .full, .unknown:
             return WebEmulatedTool.allCases
@@ -640,6 +650,10 @@ enum WebToolProtocolEmulator {
         // File search & glob
         case "glob", "glob_search", "find_files":
             return WebEmulatedTool.glob.rawValue
+        case "code_search", "codesearch", "search_code", "find_symbol", "symbol_search":
+            return WebEmulatedTool.codeSearch.rawValue
+        case "read_symbol", "readsymbol", "symbol_read", "read_definition", "go_to_definition":
+            return WebEmulatedTool.readSymbol.rawValue
         case "todo_read", "todos", "todo", "todoread", "read_todos", "plan", "plan_read", "current_plan":
             return WebEmulatedTool.todoRead.rawValue
         case "todo_write", "todowrite", "write_todos", "set_todos":
@@ -692,6 +706,14 @@ enum WebToolProtocolEmulator {
         case .glob:
             table = ["pattern": ["pattern", "glob_pattern", "glob", "files", "file_pattern", "query"],
                      "path": ["path", "dir", "directory", "folder", "location"]]
+        case .codeSearch:
+            table = ["query": ["query", "q", "symbol", "name", "text", "search", "term", "pattern"],
+                     "limit": ["limit", "max", "count", "max_results"]]
+        case .readSymbol:
+            table = ["id": ["id", "symbol_id", "node_id", "symbolid"],
+                     "path": ["path", "file_path", "filepath", "file", "filename"],
+                     "name": ["name", "symbol", "function", "type", "declaration"],
+                     "line": ["line", "start_line", "startline"]]
         case .runCommand:
             table = ["command": ["command", "cmd", "cmdline", "bash_command", "shell_command", "command_line", "script"]]
         case .gitBranch, .gitCheckout:

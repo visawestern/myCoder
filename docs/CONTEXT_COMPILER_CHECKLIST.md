@@ -345,16 +345,51 @@ UI-таргета в проекте нет), корректность 24, арх
 уровне логики и исходников, а не сквозным запуском провайдера.
 
 ### R8 — Граф кода (`code_index.sqlite`) и tools
-- [ ] T1: тест: извлечение символов и рёбер (`declares`, `contains`, `calls`, `imports`, `tests`).
-- [ ] T2: тест: confidence `exact` / `heuristic` / `unresolved`; unresolved не попадает в evidence.
-- [ ] T3: тест: `code_search` возвращает источник + соседей по графу.
-- [ ] T4: тест: `read_symbol` возвращает точный диапазон с номерами строк.
-- [ ] T5: тест: индекс инкрементален по hash/mtime; помечает stale.
-- [ ] T6: тест: граф строится в отдельной БД `.mycoder/code_index.sqlite`, `project.db` не мучается.
-- [ ] T7: реализация индексатора, графа и tools.
-- [ ] T8: `swift test --filter CodeIndexTests` зелёный.
-- [ ] Коммит + пуш.
+- [x] T1: тест: извлечение символов и рёбер (`declares`, `contains`, `calls`, `imports`, `tests`)
+      (`extractsSymbolsAndEdges`); точные диапазоны строк проверены отдельно
+      (`attributesAndPythonBlocks`: Swift-атрибуты, отступы Python).
+- [x] T2: тест: confidence `exact` / `heuristic` / `unresolved`
+      (`confidenceIsLabelled`: один кандидат, однофамилец в том же файле,
+      неоднозначность между файлами); `unresolved` не пишется в БД и не
+      попадает в evidence (`unresolvedIsNotPersisted`).
+- [x] T3: тест: `code_search` возвращает источник, точный диапазон, id и
+      соседей по графу (`searchReturnsSourceAndNeighbors`).
+- [x] T4: тест: `read_symbol` возвращает точный диапазон с номерами строк и
+      проверенным hash, по id и по path + name (`readSymbolReturnsExactLines`);
+      изменённый файл отказывает и лечится следующим поиском
+      (`changedFileIsRefusedThenReindexed`).
+- [x] T5: тест: индекс инкрементален по hash/mtime, touch не перепарсивает,
+      изменённый файл парсится один, удалённый помечается stale
+      (`incrementalIndexAndStale`).
+- [x] T6: тест: граф строится в `.mycoder/code_index.sqlite`, `project.db`
+      не создаётся (`graphUsesItsOwnDatabase`).
+- [x] T7: реализованы `CodeIndexExtractor`, `CodeGraphBuilder`, `CodeIndexStore`,
+      `CodeIndexService`, `SymbolNameExtractor.blocks`; tools `code_search` /
+      `read_symbol` добавлены в `WebEmulatedTool` (schema, description, aliases,
+      normalized args), `HarnessProfile.standard` (13 инструментов), read-only
+      gate, `ProjectWebToolExecutor`, `MyCoderAutoFreeClient.toolDefinition`,
+      `SubagentRunner.readOnlyTools`. Сквозной тест через настоящий executor:
+      `toolsAreWired`.
+- [x] T8: `swift test --filter CodeIndexTests` — 10 тестов зелёные; смежные
+      наборы (`HarnessProfileTests`, `SymbolNameExtractorTests`,
+      `WebToolAccessGateTests`, `ProjectWebTool*`, `SubAgentTaskToolTests`,
+      `E12RunCommandGateTests`) — 85 тестов зелёные.
+- [x] Коммит + пуш.
 - Приёмка: граф не выдумывает факты; неподтверждённые рёбра помечены.
+
+**Оценка R8: 96/100.** Тесты 24 (10 тестов покрывают все виды рёбер, метки
+достоверности, инкрементальность, stale и оба инструмента; в ходе раунда тест
+T3 нашёл реальный дефект — сосед, совпавший с другим хитом, вычитался из
+справочника и исчезал из графа; исправлено), корректность 24 (диапазоны строк
+из сопоставления скобок по маскированному тексту и отступов Python, hash
+проверяется до выдачи любой строки, unresolved не персистится), архитектура
+19 (отдельная БД, чистый детерминированный builder, модели/хранилище/сервис
+разделены; известное ограничение — рёбра пересобираются целиком при любом
+изменении файла, это O(проект) на поиск), безопасность 14 (только
+project-relative пути, отказ на `..` и абсолютные, prepared statements,
+экранирование LIKE, read-only инструменты), документация 5, интеграция 10
+(реальные потребители — `ChatPanelView` и `SubagentRunner`; набор инструментов
+и определения покрыты тестом).
 
 ### R9 — Опциональный локальный query planner
 - [ ] T1: тест: JSON-контракт плана запроса (intent, terms, symbols, files, memory_tags).
@@ -425,7 +460,7 @@ sha раунда N фиксируется в коммите раунда N+1 —
 | R5 | ✅ | 96/100 | 88b8e27 | Отправка через `prepareAsync`, индикатор, переключатель, автоиндекс; старый gather-код удалён |
 | R6 | ✅ | 96/100 | ac3ba95 | `memory_chunks` + `/remember`; память ранжируется и входит в пакет со ссылкой на источник |
 | R7 | ✅ | 95/100 | cfd791c | Ledger в `task_ledgers`, дословные ограничения, замена сырой истории при ≥6 turn'ах |
-| R8 | ⬜ | — | — | — |
+| R8 | ✅ | 96/100 | pending | Граф в `code_index.sqlite`, рёбра с метками достоверности, `code_search`/`read_symbol` в стандартном наборе и в реальном executor'е |
 | R9 | ⬜ | — | — | — |
 | R10 | ⬜ | — | — | — |
 | R11 | ⬜ | — | — | — |

@@ -34,7 +34,7 @@ enum WebToolAccessGate {
         switch tool {
         // Read-only tools — always allowed
         case .readFile, .listDir, .grep, .gitStatus, .gitDiff, .gitLog, .glob, .todoRead,
-             .webFetch, .skill, .taskList:
+             .webFetch, .skill, .taskList, .codeSearch, .readSymbol:
             return .allow
         // File-modifying tools — ask before mutating; higher edit levels allow
         // execution after the user has chosen the corresponding global policy.

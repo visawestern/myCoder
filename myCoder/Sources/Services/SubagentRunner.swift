@@ -15,7 +15,8 @@ enum SubagentRunner {
     /// parent chat, where the user sees the Allow/Deny card.
     static let readOnlyTools: Set<String> = [
         "read_file", "list_dir", "grep", "glob", "todo_read", "task_list",
-        "git_status", "git_diff", "git_log", "web_fetch"
+        "git_status", "git_diff", "git_log", "web_fetch",
+        "code_search", "read_symbol"
     ]
 
     static let maxToolIterations = 6

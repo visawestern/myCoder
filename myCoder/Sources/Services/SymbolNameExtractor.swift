@@ -9,6 +9,15 @@ struct SymbolDeclaration: Equatable {
     let line: Int
 }
 
+/// A declaration with its real line span, used by the code graph so a tool can
+/// return exactly the body it cites instead of guessing an end line.
+struct SymbolBlock: Equatable {
+    let name: String
+    let kind: String
+    let startLine: Int
+    let endLine: Int
+}
+
 /// Extracts declared symbol names (functions, types, variables) from source
 /// text. This is what lets the LOCAL model name real functions and variables
 /// instead of guessing paths — the local model never writes code, it only
@@ -52,6 +61,162 @@ enum SymbolNameExtractor {
         }
     }
 
+    /// Declarations with their real line span. The span is derived from the
+    /// masked text, so a brace inside a string or comment never extends a
+    /// block, and an unclosed block honestly stops at its declaration line.
+    ///
+    /// Braced languages use brace matching (an opening `{` must appear before
+    /// the next declaration, otherwise the declaration has no body). Python
+    /// uses indentation, because it has no braces to match.
+    static func blocks(in text: String, language: String) -> [SymbolBlock] {
+        let rules = rules(for: language)
+        guard !rules.isEmpty, !text.isEmpty else { return [] }
+        let masked = mask(text, language: language)
+        let ns = masked as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        let lines = LineIndex(text: masked)
+
+        var raw: [(name: String, kind: String, matchStart: Int, matchEnd: Int, startLine: Int)] = []
+        var seen = Set<String>()
+        for rule in rules {
+            for match in rule.regex.matches(in: masked, options: [], range: fullRange) {
+                guard match.numberOfRanges > 1 else { continue }
+                let nameRange = match.range(at: 1)
+                guard nameRange.location != NSNotFound else { continue }
+                let name = ns.substring(with: nameRange)
+                guard !name.isEmpty, !blockedNames.contains(name) else { continue }
+                let startLine = lines.line(at: nameRange.location)
+                let key = "\(rule.kind):\(name):\(startLine)"
+                guard seen.insert(key).inserted else { continue }
+                raw.append((
+                    name: name,
+                    kind: rule.kind,
+                    matchStart: match.range.location,
+                    matchEnd: match.range.location + match.range.length,
+                    startLine: startLine
+                ))
+            }
+        }
+        raw.sort {
+            if $0.matchStart != $1.matchStart { return $0.matchStart < $1.matchStart }
+            if $0.name != $1.name { return $0.name < $1.name }
+            return $0.kind < $1.kind
+        }
+        guard !raw.isEmpty else { return [] }
+
+        if language == "python" {
+            let split = masked.components(separatedBy: "\n")
+            return raw.map { item in
+                SymbolBlock(
+                    name: item.name,
+                    kind: item.kind,
+                    startLine: item.startLine,
+                    endLine: pythonBlockEnd(startLine: item.startLine, lines: split)
+                )
+            }
+        }
+
+        let braces = BraceMap(text: masked)
+        var blocks: [SymbolBlock] = []
+        for (index, item) in raw.enumerated() {
+            // The opening brace must belong to THIS declaration, so it has to
+            // appear before the next declaration starts. A protocol
+            // requirement or a stored property has no brace and stays a
+            // single line.
+            let limit = index + 1 < raw.count ? raw[index + 1].matchStart : ns.length
+            var endLine = item.startLine
+            if let open = braces.firstOpen(from: item.matchEnd, before: limit),
+               let close = braces.close(forOpen: open) {
+                endLine = max(item.startLine, lines.line(at: close))
+            }
+            blocks.append(SymbolBlock(
+                name: item.name,
+                kind: item.kind,
+                startLine: item.startLine,
+                endLine: endLine
+            ))
+        }
+        return blocks
+    }
+
+    /// Last line of a Python block: blank lines are part of it, and the block
+    /// ends at the first non-blank line that is not indented deeper than the
+    /// declaration.
+    private static func pythonBlockEnd(startLine: Int, lines: [String]) -> Int {
+        guard startLine >= 1, startLine <= lines.count else { return startLine }
+        let base = indentation(of: lines[startLine - 1])
+        var end = startLine
+        var index = startLine
+        while index < lines.count {
+            let line = lines[index]
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                index += 1
+                continue
+            }
+            guard indentation(of: line) > base else { break }
+            end = index + 1
+            index += 1
+        }
+        return end
+    }
+
+    private static func indentation(of line: String) -> Int {
+        var depth = 0
+        for character in line {
+            if character == " " { depth += 1 }
+            else if character == "\t" { depth += 4 }
+            else { break }
+        }
+        return depth
+    }
+
+    /// Matching `{` / `}` offsets over masked text. Attached string and block
+    /// comment characters are blanked by `mask`, so they cannot join a pair.
+    private struct BraceMap {
+        private let opens: [Int]
+        private let closes: [Int: Int]
+
+        init(text: String) {
+            let ns = text as NSString
+            var stack: [Int] = []
+            var openOffsets: [Int] = []
+            var closeMap: [Int: Int] = [:]
+            var index = 0
+            while index < ns.length {
+                let character = ns.character(at: index)
+                if character == 0x7B {          // {
+                    stack.append(index)
+                    openOffsets.append(index)
+                } else if character == 0x7D {   // }
+                    if let open = stack.popLast() {
+                        closeMap[open] = index
+                    }
+                }
+                index += 1
+            }
+            self.opens = openOffsets
+            self.closes = closeMap
+        }
+
+        /// First opening brace at or after `offset`, and strictly before
+        /// `limit`. Binary search keeps this O(log n) per declaration.
+        func firstOpen(from offset: Int, before limit: Int) -> Int? {
+            guard !opens.isEmpty, offset < limit else { return nil }
+            var low = 0
+            var high = opens.count
+            while low < high {
+                let mid = (low + high) / 2
+                if opens[mid] < offset { low = mid + 1 } else { high = mid }
+            }
+            guard low < opens.count, opens[low] < limit else { return nil }
+            return opens[low]
+        }
+
+        func close(forOpen open: Int) -> Int? {
+            closes[open]
+        }
+    }
+
     /// Names that look like declarations but never are useful to point at.
     private static let blockedNames: Set<String> = [
         "if", "for", "while", "switch", "catch", "return", "else", "do",
@@ -70,10 +235,14 @@ enum SymbolNameExtractor {
         let patterns: [(kind: String, pattern: String)]
         switch language {
         case "swift":
+            // Attributes may precede declarations (`@Test`, `@MainActor`,
+            // `@discardableResult`); without them every annotated symbol was
+            // invisible to the graph.
+            let attributes = #"(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^)\n]*\))?[ \t]+)*"#
             patterns = [
-                ("func", #"^[ \t]*(?:(?:public|private|internal|fileprivate|open|static|final|override|mutating|nonisolated|convenience|required)[ \t]+)*func[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#),
-                ("type", #"^[ \t]*(?:(?:public|private|internal|fileprivate|open|final)[ \t]+)*(?:class|struct|enum|protocol|actor|extension)[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#),
-                ("var", #"^[ \t]*(?:(?:public|private|internal|fileprivate|open|static|final|lazy|weak|unowned|override|nonisolated)[ \t]+)*(?:var|let)[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#)
+                ("func", #"^[ \t]*"# + attributes + #"(?:(?:public|private|internal|fileprivate|open|static|final|override|mutating|nonisolated|convenience|required)[ \t]+)*func[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#),
+                ("type", #"^[ \t]*"# + attributes + #"(?:(?:public|private|internal|fileprivate|open|final)[ \t]+)*(?:class|struct|enum|protocol|actor|extension)[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#),
+                ("var", #"^[ \t]*"# + attributes + #"(?:(?:public|private|internal|fileprivate|open|static|final|lazy|weak|unowned|override|nonisolated)[ \t]+)*(?:var|let)[ \t]+([A-Za-z_][A-Za-z0-9_]*)"#)
             ]
         case "python":
             patterns = [
@@ -117,6 +286,13 @@ enum SymbolNameExtractor {
     }
 
     // MARK: - Masking (comments and strings keep their line numbers)
+
+    /// Comment/string-free view of the source. Call extraction needs the same
+    /// masking as symbol extraction, so a call-looking word inside a string or
+    /// comment is never recorded as an edge.
+    static func maskedText(_ text: String, language: String) -> String {
+        mask(text, language: language)
+    }
 
     /// Replaces comment and string contents with spaces so a declaration
     /// mentioned inside a comment or a string literal is not reported.
