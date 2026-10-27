@@ -550,6 +550,11 @@ enum AppLocalizationKey: String, CaseIterable {
     case locQueueMessage
     case locEditQueuedMessage
     case locDeleteQueuedMessage
+    case locPointContext
+    case locCompilingPointContext
+    case locShowCompiledContext
+    case locCompiledContextTitle
+    case locContextCompilationFailed
     case locAccessAskBefore
     case locAccessEditAuto
     case locAccessFull
@@ -1465,6 +1470,11 @@ enum AppLocalization {
         "locQueueMessage": ["en": "Add to queue", "ru": "Добавить в очередь", "es": "Añadir a la cola", "fr": "Ajouter à la file d'attente", "de": "Zur Warteschlange hinzufügen", "zh": "加入队列", "ja": "キューに追加", "ko": "대기열에 추가", "pt": "Adicionar à fila", "ar": "إضافة إلى قائمة الانتظار"],
         "locEditQueuedMessage": ["en": "Edit queued message", "ru": "Редактировать сообщение в очереди", "es": "Editar mensaje en cola", "fr": "Modifier le message en file d'attente", "de": "Wartende Nachricht bearbeiten", "zh": "编辑排队消息", "ja": "待機中のメッセージを編集", "ko": "대기 중인 메시지 편집", "pt": "Editar mensagem na fila", "ar": "تحرير الرسالة في قائمة الانتظار"],
         "locDeleteQueuedMessage": ["en": "Delete queued message", "ru": "Удалить сообщение из очереди", "es": "Eliminar mensaje en cola", "fr": "Supprimer le message en file d'attente", "de": "Wartende Nachricht löschen", "zh": "删除排队消息", "ja": "待機中のメッセージを削除", "ko": "대기 중인 메시지 삭제", "pt": "Eliminar mensagem na fila", "ar": "حذف الرسالة من قائمة الانتظار"],
+        "locPointContext": ["en": "Point context", "ru": "Точечный контекст", "es": "Contexto puntual", "fr": "Contexte ciblé", "de": "Gezielter Kontext", "zh": "精准上下文", "ja": "ポイントコンテキスト", "ko": "포인트 컨텍스트", "pt": "Contexto pontual", "ar": "سياق نقطي"],
+        "locCompilingPointContext": ["en": "Building point context…", "ru": "Собираем точечный контекст…", "es": "Preparando contexto puntual…", "fr": "Préparation du contexte ciblé…", "de": "Gezielter Kontext wird erstellt…", "zh": "正在构建精准上下文…", "ja": "ポイントコンテキストを準備中…", "ko": "포인트 컨텍스트 구성 중…", "pt": "Preparando contexto pontual…", "ar": "جارٍ تجهيز السياق النقطي…"],
+        "locShowCompiledContext": ["en": "Context", "ru": "Контекст", "es": "Contexto", "fr": "Contexte", "de": "Kontext", "zh": "上下文", "ja": "コンテキスト", "ko": "컨텍스트", "pt": "Contexto", "ar": "السياق"],
+        "locCompiledContextTitle": ["en": "Compiled point context", "ru": "Собранный точечный контекст", "es": "Contexto puntual compilado", "fr": "Contexte ciblé compilé", "de": "Kompilierter gezielter Kontext", "zh": "已编译的精准上下文", "ja": "コンパイル済みポイントコンテキスト", "ko": "컴파일된 포인트 컨텍스트", "pt": "Contexto pontual compilado", "ar": "السياق النقطي المُجمَّع"],
+        "locContextCompilationFailed": ["en": "Could not build the point context", "ru": "Не удалось собрать точечный контекст", "es": "No se pudo preparar el contexto puntual", "fr": "Impossible de préparer le contexte ciblé", "de": "Gezielter Kontext konnte nicht erstellt werden", "zh": "无法构建精准上下文", "ja": "ポイントコンテキストを構築できませんでした", "ko": "포인트 컨텍스트를 만들지 못했습니다", "pt": "Não foi possível preparar o contexto pontual", "ar": "تعذر تجهيز السياق النقطي"],
         "locWebNoSelectorYet": ["en": "This provider does not expose a model-list selector yet.", "ru": "У этого провайдера нет селектора списка моделей.", "es": "Este proveedor no expone un selector de lista de modelos.", "fr": "Ce fournisseur n'expose pas encore de sélecteur de liste de modèles.", "de": "Dieser Anbieter stellt noch keine Modellauswahl bereit.", "zh": "此提供商尚未公开模型列表选择器。", "ja": "このプロバイダーはモデルリストセレクターを公開していません。", "ko": "이 공급자는 모델 목록 선택기를 노출하지 않습니다.", "pt": "Este provedor aindaне expõe um seletor de lista de modelos.", "ar": "لا يعرض هذا الموفر محدد قائمة النماذج после."],
 
         "locWebLoginFirst": ["en": "Log in first, then capture the web session before refreshing models.", "ru": "Сначала войдите, затем захватите веб-сессию.", "es": "Inicia sesión primero, luego captura la sesión web.", "fr": "Connectез-vous d'abord, puis capturez la session web.", "de": "Melden Sie sich zuerst an, dann erfassen Sie die Web-Sitzунг.", "zh": "请先登录，然后捕获网络会话。", "ja": "最初にログインしてから、Webセッションをキャプチャしてください。", "ko": "먼저 로그인한 다음 웹 세션을 캡처하세요.", "pt": "Faça login primeiro, depois capture a sessão web.", "ar": "سجل الدخول أولاً، ثم التقط جلسة 的ويب."],
