@@ -823,6 +823,13 @@ final class ProjectDatabaseManager {
         return ProjectMemoryStore(db: db)
     }
 
+    /// The task ledger is one row per session in the same project database.
+    func makeLedgerStore() throws -> TaskLedgerStore {
+        touch()
+        try TaskLedgerStore.createSchema(db)
+        return TaskLedgerStore(db: db)
+    }
+
     // MARK: - Session Operations
 
     func insertSession(

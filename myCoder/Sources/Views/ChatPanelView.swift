@@ -1322,7 +1322,8 @@ struct ChatPanelView: View {
         // Do not scan the project or flash the loader when the feature is off.
         var pointContextRecords: [FileIndexRecord] = []
         var projectMemories: [ProjectMemoryChunk] = []
-        var memoryWarning: String?
+        var taskLedger: TaskLedger?
+        var contextWarning: String?
         if appState.isPointContextEnabled {
             await MainActor.run { appState.isCompilingContext = true }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
@@ -1334,7 +1335,48 @@ struct ChatPanelView: View {
                     try ProjectMemoryStore.loadChunks(projectPath: pointContextProjectRoot)
                 }.value
             } catch {
-                memoryWarning = L.t(AppLocalizationKey.locMemoryLoadFailed)
+                contextWarning = L.t(AppLocalizationKey.locMemoryLoadFailed)
+            }
+
+            // The ledger is append-only: it merges the persisted state with the
+            // messages still visible, so a pruned feed cannot forget an earlier
+            // constraint. Session ids are assigned before the first append, so
+            // a brand-new session simply has no ledger yet.
+            let ledgerSessionID = messageStore.currentSessionID ?? appState.selectedSession?.id ?? ""
+            if !ledgerSessionID.isEmpty {
+                var persisted: TaskLedger?
+                do {
+                    persisted = try await Task.detached(priority: .utility) {
+                        try TaskLedgerStore.load(
+                            projectPath: pointContextProjectRoot,
+                            sessionID: ledgerSessionID
+                        )
+                    }.value
+                } catch {
+                    contextWarning = [contextWarning, L.t(AppLocalizationKey.locLedgerFailed)]
+                        .compactMap { $0 }.joined(separator: "\n")
+                }
+
+                let ledger = TaskLedgerExtraction.build(
+                    sessionID: ledgerSessionID,
+                    projectPath: pointContextProjectRoot,
+                    goal: appState.currentSessionGoal,
+                    messages: messageStore.messages,
+                    memories: projectMemories,
+                    previous: persisted
+                )
+                taskLedger = ledger.isEmpty ? persisted : ledger
+
+                if let taskLedger {
+                    do {
+                        try await Task.detached(priority: .utility) {
+                            try TaskLedgerStore.save(taskLedger)
+                        }.value
+                    } catch {
+                        contextWarning = [contextWarning, L.t(AppLocalizationKey.locLedgerFailed)]
+                            .compactMap { $0 }.joined(separator: "\n")
+                    }
+                }
             }
         }
         let preparation = await SendContextPreparationLogic.prepareAsync(
@@ -1343,7 +1385,8 @@ struct ChatPanelView: View {
             projectPath: pointContextProjectRoot,
             isEnabled: appState.isPointContextEnabled,
             memories: projectMemories,
-            extraWarning: memoryWarning
+            ledger: taskLedger,
+            extraWarning: contextWarning
         )
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText
@@ -1500,6 +1543,12 @@ struct ChatPanelView: View {
                     let msgs = messageStore.messages
                     let modelHistory = ConversationCompactionLogic.historyForModel(msgs)
                     let history = modelHistory.count >= 2 ? Array(modelHistory.dropLast(2)) : []
+                    // A long transcript is replaced by the ledger inside
+                    // `modelText`; do not also send twenty raw turns.
+                    guard !SendContextPreparationLogic.replacesRawHistory(
+                        preparation,
+                        priorTurnCount: history.count
+                    ) else { return [] }
                     return history.map { ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished) }
                 }
                 // E01 (Раздел 9 п.10(c)): carry REAL image bytes to the direct
@@ -1714,6 +1763,12 @@ struct ChatPanelView: View {
                     let priorMessages = modelHistory.count >= 2
                         ? Array(modelHistory.dropLast(2))
                         : []
+                    // Same rule as the direct route: the ledger replaces a long
+                    // raw transcript instead of adding to it.
+                    guard !SendContextPreparationLogic.replacesRawHistory(
+                        preparation,
+                        priorTurnCount: priorMessages.count
+                    ) else { return [] }
                     return priorMessages.map {
                         MyCoderAutoFreeHistoryLogic.Turn(
                             role: roleString($0.role),

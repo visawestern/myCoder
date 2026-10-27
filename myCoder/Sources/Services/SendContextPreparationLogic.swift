@@ -19,13 +19,14 @@ enum SendContextPreparationLogic {
                         projectPath: String,
                         isEnabled: Bool,
                         memories: [ProjectMemoryChunk] = [],
+                        ledger: TaskLedger? = nil,
                         extraWarning: String? = nil,
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
             return SendContextPreparation(modelText: message, pack: nil, warning: extraWarning)
         }
-        guard !projectPath.isEmpty, !records.isEmpty || !memories.isEmpty else {
+        guard !projectPath.isEmpty, !records.isEmpty || !memories.isEmpty || ledger != nil else {
             return SendContextPreparation(
                 modelText: message,
                 pack: nil,
@@ -39,9 +40,10 @@ enum SendContextPreparationLogic {
             board: board,
             projectRoot: projectPath,
             memories: memories,
+            ledger: ledger,
             budgetTokens: budgetTokens
         )
-        guard !pack.citations.isEmpty || !pack.memoryIDs.isEmpty else {
+        guard !pack.citations.isEmpty || !pack.memoryIDs.isEmpty || pack.ledgerSummary != nil else {
             // No evidence means no context: send the raw message and say why,
             // instead of pretending a pack was built.
             return SendContextPreparation(
@@ -65,6 +67,16 @@ enum SendContextPreparationLogic {
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
+    /// True when the model should receive the ledger instead of the raw prior
+    /// turns. The ledger itself already lives in the pack text.
+    static func replacesRawHistory(_ preparation: SendContextPreparation,
+                                   priorTurnCount: Int) -> Bool {
+        TaskLedgerPolicy.replacesRawHistory(
+            summary: preparation.pack?.ledgerSummary,
+            priorTurnCount: priorTurnCount
+        )
+    }
+
     /// The chat part that carries the pack behind the "Контекст" button.
     /// Empty when no pack was built, so a plain message stays a plain message.
     static func contextParts(_ preparation: SendContextPreparation) -> [MessagePartContent] {
@@ -80,6 +92,7 @@ enum SendContextPreparationLogic {
                             projectPath: String,
                             isEnabled: Bool,
                             memories: [ProjectMemoryChunk] = [],
+                            ledger: TaskLedger? = nil,
                             extraWarning: String? = nil,
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
@@ -89,6 +102,7 @@ enum SendContextPreparationLogic {
                 projectPath: projectPath,
                 isEnabled: isEnabled,
                 memories: memories,
+                ledger: ledger,
                 extraWarning: extraWarning,
                 budgetTokens: budgetTokens
             )

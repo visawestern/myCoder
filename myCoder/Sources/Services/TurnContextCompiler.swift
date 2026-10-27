@@ -115,6 +115,8 @@ struct CompiledContextPack: Equatable, Sendable {
     let text: String
     /// Ids of the stored project memories that made it into the pack.
     let memoryIDs: [String]
+    /// The task state that replaced the raw transcript, when one was built.
+    let ledgerSummary: String?
 }
 
 /// Assembles the context for one user message: plan → candidates → real code
@@ -130,6 +132,7 @@ enum TurnContextCompiler {
                         board: ContextBoard,
                         projectRoot: String,
                         memories: [ProjectMemoryChunk] = [],
+                        ledger: TaskLedger? = nil,
                         budgetTokens: Int = defaultBudgetTokens,
                         maxFiles: Int = 8) -> CompiledContextPack {
         let plan = ContextQueryPlanner.plan(for: message)
@@ -162,6 +165,13 @@ enum TurnContextCompiler {
         var unknowns: [String] = []
         var included: [String] = []
         var dropped: [DroppedSource] = []
+
+        // Task state comes before evidence: the model must know what is being
+        // built and what was already decided before reading code.
+        let ledgerSummary = ledger?.summaryText
+        if let ledgerSummary, !ledgerSummary.isEmpty {
+            sections.append(ContextSection(title: "Состояние задачи", body: ledgerSummary))
+        }
 
         // Durable facts the user wrote with /remember. They are ranked against
         // the same query as the code, and each line keeps its source, so a
@@ -235,7 +245,8 @@ enum TurnContextCompiler {
             manifest: ContextManifest(included: included, dropped: dropped, considered: candidates.count),
             estimatedTokens: (text.utf8.count + bytesPerToken - 1) / bytesPerToken,
             text: text,
-            memoryIDs: memoryIDs
+            memoryIDs: memoryIDs,
+            ledgerSummary: ledgerSummary
         )
     }
 
