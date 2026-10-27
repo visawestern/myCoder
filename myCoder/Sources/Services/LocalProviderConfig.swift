@@ -225,6 +225,12 @@ enum LocalProviderLogic {
         save(providers, defaults: defaults)
     }
 
+    /// Current switch state of one local provider, read from the config so a
+    /// card never shows the value it was created with.
+    static func isEnabled(id: String, defaults: UserDefaults = .standard) -> Bool {
+        load(defaults: defaults).first(where: { $0.id == id })?.isEnabled ?? false
+    }
+
     /// Remove one model from a local provider's stored catalog.
     static func removeModel(_ modelID: String, from providerID: String, defaults: UserDefaults = .standard) {
         var providers = load(defaults: defaults)

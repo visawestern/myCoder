@@ -170,8 +170,12 @@ class AppState: ObservableObject {
         ProviderSettingsLogic.mergeModelIDs(
             serverProviders: serverProviders,
             customProviders: customProviders,
-            isDisabled: { providerID, modelID in
-                DisabledModelStore.isDisabled(providerID: providerID, modelID: modelID)
+            isDisabled: { [defaults] providerID, modelID in
+                DisabledModelStore.isDisabled(
+                    providerID: providerID,
+                    modelID: modelID,
+                    defaults: defaults
+                )
             }
         )
     }
@@ -782,6 +786,48 @@ class AppState: ObservableObject {
         validateAndReconcileSelections()
     }
 
+    /// Whether a model is switched on. Always derived from the persisted
+    /// disable list — a view never keeps its own copy, which is what made the
+    /// old row refresh only after the selection moved to another model.
+    func isModelEnabled(providerID: String, modelID: String) -> Bool {
+        !DisabledModelStore.isDisabled(
+            providerID: providerID,
+            modelID: modelID,
+            defaults: defaults
+        )
+    }
+
+    /// The only path that flips a model switch. Persists the flag, publishes
+    /// the catalog revision so the row, the composer and the model menu change
+    /// in the same pass, and keeps the selection valid when the model that was
+    /// selected is the one being switched off.
+    func setModelEnabled(providerID: String, modelID: String, isEnabled: Bool) {
+        guard isModelEnabled(providerID: providerID, modelID: modelID) != isEnabled else { return }
+        DisabledModelStore.setDisabled(
+            !isEnabled,
+            providerID: providerID,
+            modelID: modelID,
+            defaults: defaults
+        )
+        // A model leaving the catalog is a catalog change: the same revision
+        // the provider list already uses, so no view needs its own counter.
+        providerCatalogRevision &+= 1
+        guard !isEnabled else { return }
+        reconcileSelectionAfterModelDisabled(providerID: providerID, modelID: modelID)
+    }
+
+    private func reconcileSelectionAfterModelDisabled(providerID: String, modelID: String) {
+        guard selectedProviderID == providerID, selectedModel == modelID else { return }
+        if let replacement = modelsForSelectedProvider.first {
+            // Keep the stored preference: when the model is switched back on it
+            // may be restored explicitly, but nothing dead stays selected now.
+            selectModel(replacement, persistPreference: false)
+        } else {
+            selectedModel = ""
+            defaults.set("", forKey: "com.mycoder.selectedModel")
+        }
+    }
+
     /// Effective selected model — for web providers resolve from their config
     /// since AppState.selectedModel is empty for web providers.
     func effectiveSelectedModel() -> String {
@@ -799,9 +845,13 @@ class AppState: ObservableObject {
             return WebProviderConnectivity.models(for: cfg)
         }
         // Local provider selected → its loaded models.
-        if let local = LocalProviderLogic.load().first(where: { $0.id == selectedProviderID }) {
+        if let local = LocalProviderLogic.load(defaults: defaults).first(where: { $0.id == selectedProviderID }) {
             return local.models.filter {
-                !DisabledModelStore.isDisabled(providerID: local.id, modelID: $0)
+                !DisabledModelStore.isDisabled(
+                    providerID: local.id,
+                    modelID: $0,
+                    defaults: defaults
+                )
             }
         }
         return ProviderSettingsLogic.models(
@@ -809,7 +859,11 @@ class AppState: ObservableObject {
             in: serverProviders,
             customProviders: customProviders
         ).filter {
-            !DisabledModelStore.isDisabled(providerID: selectedProviderID, modelID: $0)
+            !DisabledModelStore.isDisabled(
+                providerID: selectedProviderID,
+                modelID: $0,
+                defaults: defaults
+            )
         }
     }
 

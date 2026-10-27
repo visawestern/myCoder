@@ -78,7 +78,6 @@ struct ModelSettingsProviderColumns: View {
     @State private var localRefreshMessage: String?
     @State private var providerPendingDelete: ProviderOption?
     @State private var providerRevision: Int = 0
-    @State private var disabledRevision: Int = 0
     @State private var didRefreshProvider = false
     @State private var localHostDraft: String = ""
     @State private var localPortDraft: String = ""
@@ -239,22 +238,21 @@ struct ModelSettingsProviderColumns: View {
     }
 
     private func isModelDisabled(_ modelID: String, providerID: String) -> Bool {
-        DisabledModelStore.isDisabled(providerID: providerID, modelID: modelID)
+        !appState.isModelEnabled(providerID: providerID, modelID: modelID)
     }
 
+    /// Delegates to the single mutation path in `AppState`: the store is
+    /// updated, the catalog revision is published and the selection is kept
+    /// valid. The row itself holds no copy of the flag.
     private func toggleModelDisabled(_ modelID: String, providerID: String, enabled: Bool? = nil) {
-        let disabled = enabled.map { !$0 } ?? !isModelDisabled(modelID, providerID: providerID)
-        guard disabled != isModelDisabled(modelID, providerID: providerID) else { return }
-        DisabledModelStore.setDisabled(disabled, providerID: providerID, modelID: modelID)
-        disabledRevision &+= 1
-        guard disabled,
-              appState.selectedProviderID == providerID,
-              appState.selectedModel == modelID else { return }
-        if let replacement = appState.modelsForSelectedProvider.first(where: { $0 != modelID }) {
-            appState.selectModel(replacement)
-        } else {
-            appState.selectModel("")
-        }
+        // Without an explicit value the switch flips: a disabled row becomes
+        // enabled. Both the row toggle and the menu use this one path.
+        let newValue = enabled ?? isModelDisabled(modelID, providerID: providerID)
+        appState.setModelEnabled(
+            providerID: providerID,
+            modelID: modelID,
+            isEnabled: newValue
+        )
     }
 
     private func isEditingModel(modelID: String, providerID: String) -> Bool {
@@ -1307,7 +1305,7 @@ struct ModelSettingsProviderColumns: View {
             // Selection is expressed by the row highlight and the name colour,
             // so there is no dot and no extra checkmark.
             Toggle("", isOn: Binding(
-                get: { !isModelDisabled(modelID, providerID: providerID) },
+                get: { appState.isModelEnabled(providerID: providerID, modelID: modelID) },
                 set: { isEnabled in
                     toggleModelDisabled(modelID, providerID: providerID, enabled: isEnabled)
                 }

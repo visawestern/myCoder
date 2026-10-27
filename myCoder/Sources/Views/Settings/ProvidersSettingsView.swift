@@ -90,7 +90,7 @@ struct LocalProvidersSection: View {
                     ForEach(locals) { cfg in
                         LocalProviderRow(config: cfg,
                                          onRemove: { removeLocal(cfg) },
-                                         onToggle: { toggleLocal(cfg) },
+                                         onToggle: { toggleLocal(cfg, isEnabled: $0) },
                                          onSelect: { model in selectLocalModel(model, from: cfg) },
                                          onUpdate: { updateLocal($0) },
                                          onPassword: { updated, secret in saveLocalPassword(updated, secret) })
@@ -196,11 +196,11 @@ struct LocalProvidersSection: View {
         LocalProviderLogic.save(locals)
     }
 
-    private func toggleLocal(_ cfg: LocalProviderConfig) {
-        if let idx = locals.firstIndex(where: { $0.id == cfg.id }) {
-            locals[idx].isEnabled.toggle()
-            LocalProviderLogic.save(locals)
-        }
+    private func toggleLocal(_ cfg: LocalProviderConfig, isEnabled: Bool) {
+        // One persisted mutation, then read the truth back instead of flipping
+        // a local copy: the card and the send picker both follow the config.
+        LocalProviderLogic.setEnabled(id: cfg.id, isEnabled: isEnabled)
+        locals = LocalProviderLogic.load()
     }
 
     private func updateLocal(_ cfg: LocalProviderConfig) {
@@ -263,7 +263,7 @@ struct LocalProviderRow: View {
     @EnvironmentObject var appState: AppState
     let config: LocalProviderConfig
     let onRemove: () -> Void
-    let onToggle: () -> Void
+    let onToggle: (Bool) -> Void
     let onSelect: (String) -> Void
     /// Persisted credential edits (username stored on the config).
     let onUpdate: (LocalProviderConfig) -> Void
@@ -304,14 +304,19 @@ struct LocalProviderRow: View {
                 .disabled(refreshing)
                 .help(L.t(AppLocalizationKey.locRefreshModels))
                 Toggle("", isOn: Binding(
-                    get: { config.isEnabled },
-                    set: { _ in onToggle() }
+                    // Read the persisted config, not the snapshot the card was
+                    // created with: switching off must not wait for another
+                    // unrelated state change.
+                    get: { appState.isProviderEnabled(config.id) },
+                    set: { isEnabled in onToggle(isEnabled) }
                 ))
                 .labelsHidden()
                 .toggleStyle(.dotSized)
                 .frame(width: 22, height: 18)
                 .contentShape(Rectangle())
-                .help(config.isEnabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable))
+                .help(appState.isProviderEnabled(config.id)
+                    ? L.t(AppLocalizationKey.locDisable)
+                    : L.t(AppLocalizationKey.locEnable))
                 Button(action: onRemove) {
                     Image(systemName: "trash")
                         .interfaceFont(size: 12)
