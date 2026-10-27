@@ -75,6 +75,15 @@ enum ContextMaterializer {
 
     // MARK: - Code blocks
 
+    /// Builds one code block for a reference. Internal so `TurnContextCompiler`
+    /// can compose sections without inventing its own file reading.
+    static func block(for reference: TaskReference,
+                      projectRoot: String,
+                      maxBytes: Int = defaultMaxBlockBytes,
+                      maxFileBytes: Int = ProjectFileIndexLogic.defaultMaxFileSize) throws -> String {
+        try codeBlock(for: reference, projectRoot: projectRoot, maxBytes: maxBytes, maxFileBytes: maxFileBytes)
+    }
+
     private static func codeBlock(for reference: TaskReference,
                                   projectRoot: String,
                                   maxBytes: Int,
