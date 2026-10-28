@@ -22,7 +22,7 @@ final class SpecWizardSession: ObservableObject {
     @Published var errorMessage: String?
 
     let projectPath: String
-    let projectName: String
+    var projectName: String
 
     private let database: ProjectDatabaseManager
     private let store: ProjectSpecStore

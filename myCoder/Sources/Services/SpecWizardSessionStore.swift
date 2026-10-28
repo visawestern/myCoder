@@ -17,6 +17,9 @@ final class SpecWizardSessionStore {
                  appState: AppState) throws -> SpecWizardSession {
         let normalized = ChatSession.normalizedPath(projectPath)
         if let existing = sessions[normalized] {
+            // Update the project name in case the folder was renamed or
+            // this is a new project at the same path (replaces stale name).
+            existing.projectName = projectName
             return existing
         }
         let database = try ProjectDatabaseManager.manager(forProjectPath: normalized)

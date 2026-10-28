@@ -3213,6 +3213,14 @@ class AppState: ObservableObject {
         // Сохраняем в БД
         createOrUpdateProject(id: projectId, name: name, path: normalizedPath)
         
+        // Clear any stale wizard draft from a previous project at this path
+        DatabaseBridge.shared.clearSpecWizardDraft(projectPath: normalizedPath)
+        
+        // Evict any stale wizard session for this path so a new project
+        // gets a fresh session (not a cached session from a previous project
+        // at the same location).
+        SpecWizardSessionStore.shared.evict(projectPath: normalizedPath)
+        
         // Добавляем workspace если его ещё нет (addWorkspace also registers
         // the project in the registry — Round 14 п.11).
         addWorkspace(path: normalizedPath)

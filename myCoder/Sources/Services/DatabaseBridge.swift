@@ -151,6 +151,18 @@ class DatabaseBridge: ObservableObject {
     }
 
     @discardableResult
+    func clearSpecWizardDraft(projectPath: String) -> Bool {
+        guard let projectDB = resolveProjectDatabase(for: projectPath) else { return false }
+        do {
+            try projectDB.setMetadataValue("", forKey: "spec_wizard_draft")
+            return true
+        } catch {
+            print("❌ Failed to clear spec wizard draft: \(error)")
+            return false
+        }
+    }
+
+    @discardableResult
     func saveSpecWizardDraft(_ draft: SpecWizardDraft, projectPath: String) -> Bool {
         guard let projectDB = resolveProjectDatabase(for: projectPath) else { return false }
         var stored = draft
