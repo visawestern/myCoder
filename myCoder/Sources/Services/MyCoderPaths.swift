@@ -10,6 +10,9 @@ enum MyCoderPaths {
         homeDirectory.appendingPathComponent(appDirName, isDirectory: true)
     }
 
+    /// Legacy project registry file. Projects are stored in the global
+    /// database now; this path is kept only so the one-time importer can read
+    /// an older file and the full-storage reset can clean it up.
     static func registryURL(homeDirectory: URL) -> URL {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("projects.json")
     }
@@ -38,7 +41,7 @@ enum MyCoderPaths {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("logs", isDirectory: true)
     }
 
-    static let globalDatabaseFilename = "mimo.db"
+    static let globalDatabaseFilename = "mycoder.db"
 
     static func globalDatabaseURL(homeDirectory: URL) -> URL {
         appDir(homeDirectory: homeDirectory).appendingPathComponent(globalDatabaseFilename)

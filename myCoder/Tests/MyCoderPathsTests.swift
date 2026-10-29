@@ -24,9 +24,10 @@ struct MyCoderPathsTests {
         #expect(url.path == "/p/x/.mycoder")
     }
 
-    @Test func registryLogicUsesMycoderPath() {
+    @Test func legacyRegistryPathUsesMycoder() {
         let home = URL(fileURLWithPath: "/tmp/fake-home")
-        #expect(ProjectRegistryLogic.registryURL(homeDirectory: home) == MyCoderPaths.registryURL(homeDirectory: home))
+        let url = MyCoderPaths.registryURL(homeDirectory: home)
+        #expect(url.path == "/tmp/fake-home/.mycoder/projects.json")
     }
 
     @Test func databaseURLUsesMycoder() {
@@ -83,12 +84,12 @@ struct MyCoderPathsTests {
     @Test func globalDatabaseLivesUnderMycoder() {
         let home = URL(fileURLWithPath: "/tmp/fake-home")
         #expect(MyCoderPaths.globalDatabaseURL(homeDirectory: home).path
-            == "/tmp/fake-home/.mycoder/mimo.db")
+            == "/tmp/fake-home/.mycoder/mycoder.db")
     }
 
     @Test func storageResetPlanUsesMycoder() {
         let home = URL(fileURLWithPath: "/tmp/fake-home")
         let plan = StorageResetLogic.plan(for: .appCacheOnly, homeDirectory: home)
-        #expect(plan.deletesPaths == ["/tmp/fake-home/.mycoder/mimo.db"])
+        #expect(plan.deletesPaths == ["/tmp/fake-home/.mycoder/mycoder.db"])
     }
 }

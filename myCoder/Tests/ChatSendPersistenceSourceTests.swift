@@ -16,7 +16,13 @@ struct ChatSendPersistenceSourceTests {
     func rejectedSendUsesHelper() throws {
         let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
         #expect(source.contains("private func recordRejectedSend"))
-        #expect(source.contains("self.recordRejectedSend(text: text, files: files, images: images, error: error)"))
+        // Both rejection paths (connection and send validation) must go
+        // through the helper, and a force-sent bubble must not be appended a
+        // second time when the send is rejected.
+        let calls = source.components(separatedBy: "self.recordRejectedSend(").count - 1
+        #expect(calls == 2)
+        #expect(source.contains("existingUserMessageID: existingUserMessageID"))
+        #expect(source.contains("messageStore.append(Message(role: .assistant, content: error, isFinished: true))"))
     }
 
     @Test("AppState bootstrap writes to the project database and does not select early")

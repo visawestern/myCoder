@@ -22,14 +22,16 @@ enum StreamEvent: Equatable {
 final class MyCoderAutoFreeClient {
     static let shared = MyCoderAutoFreeClient()
 
-    static let providerBaseURL = URL(string: "https://opencode.ai/zen/v1")!
+    /// Primary endpoint (matches OpenCode 2.0.25+). Falls back to legacy /zen/v1
+    /// if the inference endpoint is unreachable.
+    static let providerBaseURL = URL(string: "https://opencode.ai/inference/v1")!
+    static let legacyBaseURL = URL(string: "https://opencode.ai/zen/v1")!
     static let defaultModelID = "big-pickle"
     static let maxConsecutiveFailures = 5
 
     /// Ordered by preference. The list is intersected with the live `/models`
     /// response so a retired free model can never be selected accidentally.
-    /// Kept in sync with the live catalog (verified 2026-09-04: 8 `-free`
-    /// routes live; `hy3-free` and `ling-3.0-tiny-free` retired by the server).
+    /// Kept in sync with the live catalog and magpie-community/zen-free plugin.
     static let freeModelIDs = [
         "big-pickle",
         "muse-spark-1.3-contributor-free",
@@ -42,22 +44,42 @@ final class MyCoderAutoFreeClient {
         "nemotron-3.5-lightning-free"
     ]
 
+    /// Core OpenCode tools that Zen's free tier requires on every request.
+    /// These are sent even if the agent doesn't declare them — the model may
+    /// call them and the agent must handle unknown-tool errors gracefully.
     static let maximumErrorBodyBytes = 16_384
 
     private let session: URLSession
     private let baseURL: URL
     private let sessionDefaults: UserDefaults
     private let usesInjectedSession: Bool
+    private let proxyStore: AutoFreeProxyStore
+    private let proxySessionFactory: (AutoFreeProxy) -> URLSession
 
     init(
         session: URLSession = .shared,
         baseURL: URL = MyCoderAutoFreeClient.providerBaseURL,
-        sessionDefaults: UserDefaults = .standard
+        sessionDefaults: UserDefaults = .standard,
+        proxyStore: AutoFreeProxyStore = .shared,
+        proxySessionFactory: @escaping (AutoFreeProxy) -> URLSession = MyCoderAutoFreeClient.makeProxySession
     ) {
         self.session = session
         self.baseURL = baseURL
         self.sessionDefaults = sessionDefaults
         self.usesInjectedSession = session !== URLSession.shared
+        self.proxyStore = proxyStore
+        self.proxySessionFactory = proxySessionFactory
+    }
+
+    /// A fresh session per proxy attempt: proxy settings live on the session
+    /// configuration, and an ephemeral session cannot reuse a pooled
+    /// connection that was opened without the proxy.
+    static func makeProxySession(for proxy: AutoFreeProxy) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.connectionProxyDictionary = proxy.connectionProxySettings
+        configuration.timeoutIntervalForRequest = 180
+        configuration.timeoutIntervalForResource = 600
+        return URLSession(configuration: configuration)
     }
 
     struct ModelProfile: Identifiable, Hashable {
@@ -259,26 +281,38 @@ final class MyCoderAutoFreeClient {
 
     /// Fetch the anonymous live catalog and return eligible free models:
     /// trusted IDs first (preference order), then any other live `-free` route.
+    /// Tries the primary inference endpoint first, falls back to legacy /zen/v1.
     func listModels(context: OpenCodeRequestContext = .generated()) async throws -> [Model] {
-        var request = URLRequest(url: baseURL.appendingPathComponent("models"))
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        context.applying(to: &request)
+        let urls = [Self.providerBaseURL, Self.legacyBaseURL]
+        var lastError: Error?
+        
+        for url in urls {
+            do {
+                var request = URLRequest(url: url.appendingPathComponent("models"))
+                request.timeoutInterval = 20
+                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                context.applying(to: &request)
 
-        let (data, response) = try await session.data(for: request)
-        try validate(response, data: data, operation: "OpenCode free model list")
-        let decoded = try JSONDecoder().decode(ModelListResponse.self, from: data)
-        let byID = Dictionary(uniqueKeysWithValues: decoded.data.map { ($0.id, $0) })
-        let liveFreeIDs = decoded.data.map(\.id).filter { Self.isEligibleFreeModel($0) }
-        let orderedIDs = Self.freeModelIDs + liveFreeIDs.filter { !Self.freeModelIDs.contains($0) }.sorted()
-        let models = orderedIDs.compactMap { id -> Model? in
-            guard let dto = byID[id] else { return nil }
-            return Model(id: dto.id, contextLength: dto.contextLength, description: dto.description)
+                let (data, response) = try await session.data(for: request)
+                try validate(response, data: data, operation: "OpenCode free model list")
+                let decoded = try JSONDecoder().decode(ModelListResponse.self, from: data)
+                let byID = Dictionary(uniqueKeysWithValues: decoded.data.map { ($0.id, $0) })
+                let liveFreeIDs = decoded.data.map(\.id).filter { Self.isEligibleFreeModel($0) }
+                let orderedIDs = Self.freeModelIDs + liveFreeIDs.filter { !Self.freeModelIDs.contains($0) }.sorted()
+                let models = orderedIDs.compactMap { id -> Model? in
+                    guard let dto = byID[id] else { return nil }
+                    return Model(id: dto.id, contextLength: dto.contextLength, description: dto.description)
+                }
+                guard !models.isEmpty else {
+                    throw MyCoderAutoFreeError.noFreeModels
+                }
+                return models
+            } catch {
+                lastError = error
+                continue
+            }
         }
-        guard !models.isEmpty else {
-            throw MyCoderAutoFreeError.noFreeModels
-        }
-        return models
+        throw lastError ?? MyCoderAutoFreeError.noFreeModels
     }
 
     /// A model is eligible when it is a trusted temporary free route OR any
@@ -405,6 +439,83 @@ final class MyCoderAutoFreeClient {
 
     static func gateToolDefinitions() -> [ToolDefinition] {
         [toolDefinition(for: .readFile)]
+    }
+
+    /// Core OpenCode tools that Zen's free tier requires on every request.
+    /// These use the exact names and parameters OpenCode sends.
+    static func coreToolDefinitions() -> [ToolDefinition] {
+        [
+            ToolDefinition(
+                type: "function",
+                function: .init(
+                    name: "bash",
+                    description: "Run a shell command",
+                    parameters: .init(
+                        type: "object",
+                        properties: ["command": .init(type: "string", description: "Shell command to execute")],
+                        required: ["command"]
+                    )
+                )
+            ),
+            ToolDefinition(
+                type: "function",
+                function: .init(
+                    name: "edit",
+                    description: "Replace an exact substring in a file",
+                    parameters: .init(
+                        type: "object",
+                        properties: [
+                            "filePath": .init(type: "string", description: "Relative file path"),
+                            "oldString": .init(type: "string", description: "Exact text to replace"),
+                            "newString": .init(type: "string", description: "Replacement text")
+                        ],
+                        required: ["filePath", "oldString", "newString"]
+                    )
+                )
+            ),
+            ToolDefinition(
+                type: "function",
+                function: .init(
+                    name: "glob",
+                    description: "Find files matching a glob pattern",
+                    parameters: .init(
+                        type: "object",
+                        properties: [
+                            "pattern": .init(type: "string", description: "Glob pattern"),
+                            "path": .init(type: "string", description: "Relative path")
+                        ],
+                        required: ["pattern"]
+                    )
+                )
+            ),
+            ToolDefinition(
+                type: "function",
+                function: .init(
+                    name: "grep",
+                    description: "Search files for a regex pattern",
+                    parameters: .init(
+                        type: "object",
+                        properties: [
+                            "pattern": .init(type: "string", description: "Regex pattern"),
+                            "path": .init(type: "string", description: "Relative path to search in")
+                        ],
+                        required: ["pattern"]
+                    )
+                )
+            ),
+            ToolDefinition(
+                type: "function",
+                function: .init(
+                    name: "read",
+                    description: "Read a file's contents",
+                    parameters: .init(
+                        type: "object",
+                        properties: ["filePath": .init(type: "string", description: "Relative file path")],
+                        required: ["filePath"]
+                    )
+                )
+            )
+        ]
     }
 
     static func agentToolDefinitions() -> [ToolDefinition] {
@@ -575,6 +686,8 @@ final class MyCoderAutoFreeClient {
 
     /// Stream a completion without an API key. The selected model must be in
     /// the live temporary free catalog; this prevents accidental paid usage.
+    /// Core OpenCode tools (bash, edit, glob, grep, read) are always included
+    /// because Zen's free tier requires them on every request.
     func chatCompletion(
         model: String = MyCoderAutoFreeClient.defaultModelID,
         messages: [Message],
@@ -593,6 +706,11 @@ final class MyCoderAutoFreeClient {
                         throw MyCoderAutoFreeError.modelUnavailable(effectiveModel, "Model is not in the OpenCode temporary free catalog")
                     }
 
+                    // Merge provided tools with required core tools (by name)
+                    let coreTools = MyCoderAutoFreeClient.coreToolDefinitions()
+                    let providedNames = Set(tools.map { $0.function.name })
+                    let mergedTools = tools + coreTools.filter { !providedNames.contains($0.function.name) }
+
                     let completionBody = CompletionRequest(
                         model: effectiveModel,
                         messages: MyCoderAutoFreeClient.messagesWithEnvironment(
@@ -601,7 +719,7 @@ final class MyCoderAutoFreeClient {
                             isGitRepo: isGitRepo
                         ),
                         parameters: parameters,
-                        tools: tools,
+                        tools: mergedTools,
                         toolChoice: toolChoice
                     )
                     let body = try JSONEncoder().encode(completionBody)
@@ -620,29 +738,85 @@ final class MyCoderAutoFreeClient {
         }
     }
 
+    /// Retry a rate-limited turn. Zen throttles the anonymous free tier per
+    /// client/IP for the rest of the UTC day, so a fresh session id alone is
+    /// not always enough.
+    ///
+    /// Order of attempts: direct → (if any proxy is enabled) each enabled
+    /// proxy in rotation order → give up with the ORIGINAL error. A proxy that
+    /// is limited too rotates to the next one immediately. Everything else is
+    /// rethrown untouched.
     private func streamCompletion(
         requestContext: OpenCodeRequestContext,
         body: Data,
         continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
     ) async throws {
         var context = requestContext
-        var rotated = false
+        var sessionRotated = false
+        var proxies: [AutoFreeProxy] = []
+        var currentProxy: AutoFreeProxy?
+        var proxyAttempts = 0
+        var directRetried = false
+        var originalError: MyCoderAutoFreeError?
+
         while true {
             do {
-                try await self.performStream(requestContext: context, body: body, continuation: continuation)
+                try await self.performStream(
+                    requestContext: context,
+                    body: body,
+                    proxy: currentProxy,
+                    continuation: continuation
+                )
+                if proxyAttempts > 0 {
+                    proxyStore.advanceRotation(attempted: proxyAttempts)
+                }
+                continuation.finish()
                 return
             } catch let limit as StreamRateLimit {
-                guard !rotated,
-                      let replacement = OpenCodeSessionIdentifierStore.shared.rotate(
-                        identifier: context.sessionID,
-                        defaults: sessionDefaults
-                      ) else {
-                    throw limit.underlying
+                if originalError == nil { originalError = limit.underlying }
+                var rotatedNow = false
+                if !sessionRotated,
+                   let replacement = OpenCodeSessionIdentifierStore.shared.rotate(
+                    identifier: context.sessionID,
+                    defaults: sessionDefaults
+                   ) {
+                    context = context
+                        .withSessionID(replacement)
+                        .withRequestID(OpenCodeRequestContext.requestID())
+                    rotatedNow = true
                 }
-                rotated = true
-                context = context
-                    .withSessionID(replacement)
-                    .withRequestID(OpenCodeRequestContext.requestID())
+                sessionRotated = true
+
+                if currentProxy == nil {
+                    guard limit.allowsProxy else {
+                        // 503 and other transient failures are not per-IP
+                        // throttling: keep the previous single direct retry.
+                        guard rotatedNow, !directRetried else { throw limit.underlying }
+                        directRetried = true
+                        continue
+                    }
+                    proxies = proxyStore.rotationOrder()
+                    // A configured proxy is tried immediately: a second direct
+                    // attempt from the same throttled IP would only burn time.
+                    if !proxies.isEmpty {
+                        currentProxy = proxies[0]
+                        proxyAttempts = 1
+                        continue
+                    }
+                    // No proxy: keep the previous single direct retry.
+                    guard rotatedNow, !directRetried else { throw limit.underlying }
+                    directRetried = true
+                    continue
+                }
+
+                // The proxy was throttled as well — rotate to the next one.
+                if proxyAttempts < proxies.count {
+                    currentProxy = proxies[proxyAttempts]
+                    proxyAttempts += 1
+                    continue
+                }
+                proxyStore.advanceRotation(attempted: proxyAttempts)
+                throw originalError ?? limit.underlying
             }
         }
     }
@@ -650,6 +824,7 @@ final class MyCoderAutoFreeClient {
     private func performStream(
         requestContext: OpenCodeRequestContext,
         body: Data,
+        proxy: AutoFreeProxy?,
         continuation: AsyncThrowingStream<StreamEvent, Error>.Continuation
     ) async throws {
         var request = URLRequest(url: baseURL.appendingPathComponent("chat/completions"))
@@ -660,25 +835,32 @@ final class MyCoderAutoFreeClient {
         requestContext.applying(to: &request)
         request.httpBody = body
 
-        if !usesInjectedSession, baseURL.host == Self.providerBaseURL.host, let bunPath = Self.bunExecutablePath() {
+        // A proxied attempt cannot go through the bun transport: its fetch has
+        // no proxy configuration, so it would silently use the throttled IP.
+        if proxy == nil,
+           !usesInjectedSession,
+           baseURL.host == Self.providerBaseURL.host,
+           let bunPath = Self.bunExecutablePath() {
             try await performStreamViaBun(bunPath: bunPath, request: request, body: body, continuation: continuation)
             return
         }
 
-        let (bytes, response) = try await session.bytes(for: request)
+        let streamSession = proxy.map(proxySessionFactory) ?? session
+        let (bytes, response) = try await streamSession.bytes(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode
         let errorBody: Data
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+        if let statusCode, !(200..<300).contains(statusCode) {
             errorBody = try await Self.readErrorBody(bytes)
         } else {
             errorBody = Data()
         }
         do {
             try validate(response, data: errorBody, operation: "Free model streaming")
-        } catch let error as MyCoderAutoFreeError {
-            if case .rateLimited = error {
-                throw StreamRateLimit(underlying: error)
-            }
-            throw error
+        } catch let error as MyCoderAutoFreeError where Self.isRetryableLimit(error, statusCode: statusCode) {
+            throw StreamRateLimit(
+                underlying: error,
+                allowsProxy: Self.allowsProxyRetry(error, statusCode: statusCode)
+            )
         }
         let lineStream = AsyncThrowingStream<String, Error> { box in
             let forward = Task {
@@ -693,7 +875,16 @@ final class MyCoderAutoFreeClient {
             }
             box.onTermination = { _ in forward.cancel() }
         }
-        try await consumeSSE(lineStream, continuation: continuation)
+        do {
+            try await consumeSSE(lineStream, continuation: continuation)
+        } catch let error as MyCoderAutoFreeError where Self.isRetryableLimit(error, statusCode: nil) {
+            // The free-usage limit can also arrive as an SSE error envelope
+            // inside an HTTP 200 response.
+            throw StreamRateLimit(
+                underlying: error,
+                allowsProxy: Self.allowsProxyRetry(error, statusCode: nil)
+            )
+        }
     }
 
     private func performStreamViaBun(
@@ -718,11 +909,11 @@ final class MyCoderAutoFreeClient {
             )!
             do {
                 try validate(synthetic, data: opened.errorBody, operation: "Free model streaming")
-            } catch let error as MyCoderAutoFreeError {
-                if case .rateLimited = error {
-                    throw StreamRateLimit(underlying: error)
-                }
-                throw error
+            } catch let error as MyCoderAutoFreeError where Self.isRetryableLimit(error, statusCode: opened.statusCode) {
+                throw StreamRateLimit(
+                    underlying: error,
+                    allowsProxy: Self.allowsProxyRetry(error, statusCode: opened.statusCode)
+                )
             }
             throw MyCoderAutoFreeError.apiError("HTTP \(opened.statusCode)")
         }
@@ -763,7 +954,9 @@ final class MyCoderAutoFreeClient {
             continuation.yield(.toolCall(id: call.id, name: call.name, arguments: call.arguments))
         }
         guard emitted else { throw MyCoderAutoFreeError.emptyResponse }
-        continuation.finish()
+        // The stream is finished by `streamCompletion`, after it has recorded
+        // the proxy rotation cursor — otherwise a consumer could observe
+        // completion before the client's bookkeeping ran.
     }
 
     static func bunExecutablePath() -> String? {
@@ -867,6 +1060,38 @@ final class MyCoderAutoFreeClient {
         return consecutiveFailures >= maxConsecutiveFailures || shouldSwitchImmediately(for: error)
     }
 
+    /// Failures that a fresh session id (and possibly another exit IP) can
+    /// serve. `statusCode == nil` means the failure came from an SSE error
+    /// envelope rather than an HTTP status.
+    static func isRetryableLimit(_ error: MyCoderAutoFreeError, statusCode: Int?) -> Bool {
+        if let statusCode { return statusCode == 429 || statusCode == 503 }
+        switch error {
+        case .rateLimited:
+            return true
+        case .freeTierBlocked(let message):
+            return MyCoderAutoFreeError.isUsageLimitText(message)
+        default:
+            return false
+        }
+    }
+
+    /// Only per-IP throttling is worth another exit point. A 400/403
+    /// client-identity gate and a 503 outage are not fixed by a proxy.
+    static func allowsProxyRetry(_ error: MyCoderAutoFreeError, statusCode: Int?) -> Bool {
+        if let statusCode { return statusCode == 429 }
+        switch error {
+        case .rateLimited:
+            // mapHttpError produces `.rateLimited` for 429 and 503; only the
+            // SSE path can reach this without a status code, and it never
+            // produces `.rateLimited`.
+            return true
+        case .freeTierBlocked(let message):
+            return MyCoderAutoFreeError.isUsageLimitText(message)
+        default:
+            return false
+        }
+    }
+
     /// Error responses are not SSE streams; retain enough body for diagnosis
     /// without buffering an unbounded response before validating its status.
     static func readErrorBody<Bytes: AsyncSequence>(
@@ -896,6 +1121,9 @@ final class MyCoderAutoFreeClient {
 
 private struct StreamRateLimit: Error {
     let underlying: MyCoderAutoFreeError
+    /// True when the failure is per-IP throttling, so another proxy can serve
+    /// the same turn instead of only a fresh session id.
+    let allowsProxy: Bool
 }
 
 private struct ModelListResponse: Decodable {
@@ -1018,7 +1246,7 @@ enum MyCoderAutoFreeError: LocalizedError {
         }
 
         var isFreeTierGate: Bool {
-            !isMissingSession && (type.lowercased() == "freetiererror" || MyCoderAutoFreeError.hasGateMessage(message))
+            !isMissingSession && (type.lowercased() == "freetiererror" || type.lowercased() == "freeusagelimiterror" || MyCoderAutoFreeError.hasGateMessage(message))
         }
 
         var summary: String {
@@ -1047,7 +1275,9 @@ enum MyCoderAutoFreeError: LocalizedError {
 
     private static func hasGateMessage(_ message: String) -> Bool {
         let lower = message.lowercased()
-        return lower.contains("only be used from within opencode") || lower.contains("only be used in opencode")
+        return lower.contains("only be used from within opencode")
+            || lower.contains("only be used in opencode")
+            || lower.contains("free models work in opencode")
     }
 
     private static func hasMissingSessionMessage(_ message: String) -> Bool {
@@ -1055,14 +1285,23 @@ enum MyCoderAutoFreeError: LocalizedError {
         return lower.contains("missingsessionid") || lower.contains("missing session id")
     }
 
-    private static func boundedMessage(_ text: String) -> String {
+    /// True when the rejection is the per-IP free-usage quota rather than the
+    /// client-identity gate. Only the quota is worth retrying through a proxy.
+    static func isUsageLimitText(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("freeusagelimit")
+            || lower.contains("usage limit")
+            || lower.contains("usage exceeded")
+    }
+
+    static func boundedMessage(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(maximumMessageCharacters)) + (trimmed.count > maximumMessageCharacters ? "…" : "")
     }
 
     /// An HTTP status alone cannot establish why the upstream rejected a request.
     static func isFreeTierGate(statusCode: Int, body: String) -> Bool {
-        guard statusCode == 400 || statusCode == 403 else { return false }
+        guard statusCode == 400 || statusCode == 403 || statusCode == 429 else { return false }
         if let error = serverError(in: body) { return error.isFreeTierGate }
         // Plain-text HTTP errors are valid too, but JSON content is not an error envelope.
         guard (try? JSONSerialization.jsonObject(with: Data(body.utf8))) == nil else { return false }
@@ -1116,6 +1355,11 @@ enum MyCoderAutoFreeError: LocalizedError {
         case .emptyResponse:
             return "OpenCode returned an empty response."
         case .freeTierBlocked(let message):
+            // The per-IP usage limit is what the proxy list exists for; the
+            // client-identity gate is not fixed by another provider.
+            if Self.isUsageLimitText(message) {
+                return "OpenCode's anonymous free usage is exhausted for this connection. \(Self.boundedMessage(message)) Add a rate-limit proxy in Settings → Internal models to retry through another exit point, or choose another provider."
+            }
             return "OpenCode rejected the free-tier request. \(Self.boundedMessage(message)) Use OpenCode, select a configured Zen provider for paid models, or choose another provider."
         }
     }

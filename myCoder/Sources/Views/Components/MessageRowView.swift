@@ -68,6 +68,8 @@ private enum MessageContentSegment: Identifiable {
 struct MessageRow: View {
     let message: Message
     var projectRoot: String = ""
+    /// Outlined while a notification tap is walking the user to this row.
+    var isHighlighted: Bool = false
     @State private var copied = false
     @State private var showRawText = false
     @State private var showCompiledContext = false
@@ -196,6 +198,17 @@ struct MessageRow: View {
             }
         }
         .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.mimo.brand.opacity(isHighlighted ? 0.10 : 0))
+                .padding(.horizontal, 8)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.mimo.brand.opacity(isHighlighted ? 0.55 : 0), lineWidth: 1.5)
+                .padding(.horizontal, 8)
+        )
+        .animation(.easeInOut(duration: 0.25), value: isHighlighted)
     }
 
     @ViewBuilder
@@ -216,12 +229,6 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var formattedContent: some View {
-        if !hasRenderableTextParts && !message.content.isEmpty {
-            if let sanitized = MessageContentSanitizerLogic.sanitizedTextPart(message.content) {
-                markdownBubble(sanitized)
-            }
-        }
-
         ForEach(contentSegments) { segment in
             switch segment {
             case .part(let part):
@@ -449,7 +456,10 @@ struct MessageRow: View {
 
     private var contentSegments: [MessageContentSegment] {
         MessageContentSegment.build(
-            from: MessageDisplayLogic.chatDisplayParts(message.parts),
+            from: MessageRowPartsLogic.displayParts(
+                parts: MessageDisplayLogic.chatDisplayParts(message.parts),
+                content: message.content
+            ),
             approvals: message.pendingApprovals
         )
     }
@@ -464,29 +474,37 @@ struct MessageRow: View {
         }.first
     }
 
-    private var hasRenderableTextParts: Bool {
-        message.parts.contains { part in
-            if case .text(let text) = part {
-                return MessageContentSanitizerLogic.sanitizedTextPart(text) != nil
-            }
-            return false
-        }
-    }
-
     @ViewBuilder
     private func markdownBubble(_ text: String) -> some View {
-        // One selectable surface for the whole message: the per-block SwiftUI
-        // renderer made each line its own selection island, so a drag could
-        // never span a heading, a bullet and the next paragraph.
-        SelectableMarkdownTextView(text: text, fontSize: 14, textColor: Color.mimo.textPrimary, projectRoot: projectRoot)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                message.role == .user
-                    ? Color.mimo.brand.opacity(0.2)
-                    : Color.mimo.surface
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+        // Prose keeps the single selectable text surface the chat was built
+        // around; fenced code becomes its own spoiler (see
+        // MarkdownCodeSegmentLogic) so it can use the configured code theme,
+        // syntax highlighting and copy control. The message-level Copy action
+        // still copies the whole answer, fences included.
+        let segments = MarkdownCodeSegmentLogic.segments(from: text)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .prose(let prose):
+                    SelectableMarkdownTextView(
+                        text: prose,
+                        fontSize: 14,
+                        textColor: Color.mimo.textPrimary,
+                        projectRoot: projectRoot
+                    )
+                case .code(let language, let code):
+                    CodeBlockSpoilerView(language: language, code: code)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            message.role == .user
+                ? Color.mimo.brand.opacity(0.2)
+                : Color.mimo.surface
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

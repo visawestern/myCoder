@@ -506,7 +506,15 @@ struct StorageSettingsView: View {
         panel.message = L.t(AppLocalizationKey.locFindProjectFolder)
         panel.prompt = L.t(AppLocalizationKey.locRelink)
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        mutateProjects { ProjectRegistryLogic.relink(id: entry.id, toNewPath: url.path, in: $0) }
+        do {
+            try ProjectRegistryStore.relink(id: entry.id, toNewPath: url.path)
+            appState.refreshProjectRegistry()
+            refreshStats()
+        } catch {
+            deletionNotice = ProjectDeletionOutcomeLogic.notice(
+                .failed("The project could not be re-linked: \(error.localizedDescription)")
+            )
+        }
     }
 
     private func projectRow(_ entry: ProjectRegistryEntry, archived: Bool) -> some View {
@@ -585,7 +593,6 @@ struct StorageSettingsView: View {
         panel.prompt = "Export"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let succeeded = AppConfigurationBackupStore.export(
-            homeDirectory: home,
             defaults: appState.defaults,
             to: url
         )
@@ -613,7 +620,6 @@ struct StorageSettingsView: View {
     private func performAppConfigurationImport(from url: URL) {
         let succeeded = AppConfigurationBackupStore.import(
             from: url,
-            homeDirectory: home,
             defaults: appState.defaults
         )
         appConfigurationNotice = AppConfigurationTransferLogic.notice(
@@ -640,11 +646,11 @@ struct StorageSettingsView: View {
     }
 
     private func loadProjectEntries() {
-        projectEntries = ProjectRegistryLogic.load(homeDirectory: home)
+        projectEntries = ProjectRegistryStore.load()
     }
 
     private func mutateProjects(_ transform: ([ProjectRegistryEntry]) -> [ProjectRegistryEntry]) {
-        let before = ProjectRegistryLogic.load(homeDirectory: home)
+        let before = ProjectRegistryStore.load()
         let updated = transform(before)
         // Audit every registry mutation (plan Раздел 8 п.46) so destructive
         // operations are reconstructable later.
@@ -658,8 +664,15 @@ struct StorageSettingsView: View {
                 try? StorageAuditLog.append(action: "registry.remove", detail: removed.map(\.path).joined(separator: ", "), homeDirectory: home)
             }
         }
-        try? ProjectRegistryLogic.save(updated, homeDirectory: home)
-        projectEntries = updated
+        do {
+            try ProjectRegistryStore.replace(updated)
+        } catch {
+            deletionNotice = ProjectDeletionOutcomeLogic.notice(
+                .failed("The project list could not be saved: \(error.localizedDescription)")
+            )
+            return
+        }
+        loadProjectEntries()
         appState.refreshProjectRegistry()
     }
 
@@ -771,17 +784,17 @@ struct StorageSettingsView: View {
             return
         }
 
-        let before = ProjectRegistryLogic.load(homeDirectory: home)
+        let before = ProjectRegistryStore.load()
         let updated = ProjectRegistryLogic.remove(id: projectID, in: before)
         do {
-            try ProjectRegistryLogic.save(updated, homeDirectory: home)
+            try ProjectRegistryStore.replace(updated)
         } catch {
             deletionNotice = ProjectDeletionOutcomeLogic.notice(
-                .failed("Project data was deleted, but the registry could not be saved: \(error.localizedDescription)")
+                .failed("Project data was deleted, but the project row could not be removed: \(error.localizedDescription)")
             )
             return
         }
-        projectEntries = updated
+        loadProjectEntries()
         appState.refreshProjectRegistry()
 
         let selectedPath = appState.selectedWorkspace.map { workspace in

@@ -552,10 +552,19 @@ class DatabaseBridge: ObservableObject {
         }
     }
 
+    /// True when any store (the owning project DB or the global DB) still
+    /// holds this session. Sidebar rows use it to detect a chat that was
+    /// deleted outside the UI instead of opening a permanently empty chat.
+    func sessionExists(id: String) -> Bool {
+        if let projectDB = resolveProjectDatabase(forSessionID: id) {
+            return (try? projectDB.hasSession(id: id)) ?? false
+        }
+        return (try? db.hasSession(id: id)) ?? false
+    }
+
     /// Hard-delete a session (messages cascade) from the store that owns it.
     @discardableResult
-    func deleteSession(id: String) -> Bool {
-        if let projectDB = resolveProjectDatabase(forSessionID: id) {
+    func deleteSession(id: String) -> Bool {        if let projectDB = resolveProjectDatabase(forSessionID: id) {
             do {
                 return try projectDB.deleteSession(id: id)
             } catch {
@@ -572,15 +581,18 @@ class DatabaseBridge: ObservableObject {
     }
 
     /// Архивировать сессию в базе проекта, которому она принадлежит.
-    func archiveSession(id: String) {
+    @discardableResult
+    func archiveSession(id: String) -> Bool {
         guard let projectDB = resolveProjectDatabase(forSessionID: id) else {
             print("❌ Cannot archive session without a registered project: \(id)")
-            return
+            return false
         }
         do {
             try projectDB.archiveSession(id: id)
+            return true
         } catch {
             print("❌ Failed to archive session in project database: \(error)")
+            return false
         }
     }
     

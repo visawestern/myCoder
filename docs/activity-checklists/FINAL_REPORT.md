@@ -11,7 +11,7 @@
 
 ### 2. Сообщения не сохранялись в базу
 **Проблема:** `table messages has no column named cost_usd (code: 1)`.
-**Причина:** Глобальная БД `~/.mycoder/mimo.db` не имела колонки `cost_usd`.
+**Причина:** Глобальная БД `~/.mycoder/mycoder.db` не имела колонки `cost_usd`.
 **Исправление:** Выполнен `ALTER TABLE messages ADD COLUMN cost_usd REAL`.
 
 ### 3. acknowledgedToS убран

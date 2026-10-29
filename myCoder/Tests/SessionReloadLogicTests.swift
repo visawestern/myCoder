@@ -4,51 +4,22 @@ import Testing
 @Suite("Session Reload Logic")
 struct SessionReloadLogicTests {
 
-    @Test("Skip reload while send is in flight with local messages")
-    func skipDuringActiveSend() {
-        #expect(
-            SessionReloadLogic.shouldReloadMessages(
-                newSessionID: "ses_new",
-                currentSessionID: nil,
-                localMessageCount: 2,
-                isLoading: true
-            ) == false
-        )
+    @Test("A chat that was already loaded is shown from cache without re-reading history")
+    func cachedChatIsNotReloaded() {
+        #expect(SessionReloadLogic.shouldReloadMessages(hasCachedMessages: true) == false)
     }
 
-    @Test("Skip reload when same session already has local messages")
-    func skipSameSessionWithMessages() {
-        #expect(
-            SessionReloadLogic.shouldReloadMessages(
-                newSessionID: "ses_1",
-                currentSessionID: "ses_1",
-                localMessageCount: 3,
-                isLoading: false
-            ) == false
-        )
+    @Test("A chat without a loaded feed reads its history")
+    func uncachedChatIsReloaded() {
+        #expect(SessionReloadLogic.shouldReloadMessages(hasCachedMessages: false) == true)
     }
 
-    @Test("Reload when switching to a different session")
-    func reloadOnSessionSwitch() {
-        #expect(
-            SessionReloadLogic.shouldReloadMessages(
-                newSessionID: "ses_2",
-                currentSessionID: "ses_1",
-                localMessageCount: 3,
-                isLoading: false
-            ) == true
-        )
-    }
-
-    @Test("Reload empty local state for newly selected session")
-    func reloadWhenLocalEmpty() {
-        #expect(
-            SessionReloadLogic.shouldReloadMessages(
-                newSessionID: "ses_1",
-                currentSessionID: nil,
-                localMessageCount: 0,
-                isLoading: false
-            ) == true
-        )
+    @Test("A running generation in another chat does not block loading the selected one")
+    func backgroundGenerationDoesNotBlockReload() {
+        // Regression: the old rule skipped the reload while `appState.isLoading`
+        // was true, so switching chats mid-generation kept showing the previous
+        // chat's messages. The store now partitions feeds by session and the
+        // decision only depends on the selected chat.
+        #expect(SessionReloadLogic.shouldReloadMessages(hasCachedMessages: false) == true)
     }
 }

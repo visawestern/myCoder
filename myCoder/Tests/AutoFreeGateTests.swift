@@ -74,11 +74,10 @@ struct AutoFreeGateTests {
     @Test func rateLimitRetainsTheServerMessage() {
         let body = #"{"error":{"type":"FreeUsageLimitError","message":"Free usage exceeded, subscribe to Go"}}"#
         let error = MyCoderAutoFreeError.mapHttpError(statusCode: 429, body: body, operation: "Free model streaming")
-        guard case .rateLimited(let message) = error else {
-            Issue.record("Expected the quota error, got \(error)")
+        guard case .freeTierBlocked(let message) = error else {
+            Issue.record("Expected the free-tier gate error, got \(error)")
             return
         }
-        #expect(message.contains("HTTP 429"))
         #expect(message.contains("FreeUsageLimitError"))
         #expect(message.contains("Free usage exceeded, subscribe to Go"))
     }
@@ -368,8 +367,9 @@ private final class AutoFreeRateLimitThenSuccessProtocol: URLProtocol {
         let body: String
         let contentType: String
         if attempt == 1 {
+            // Regular rate limit (not a free-tier gate) to test session rotation
             status = 429
-            body = #"{"error":{"type":"FreeUsageLimitError","message":"Free usage limit reached"}}"#
+            body = #"{"error":{"type":"RateLimitError","message":"Rate limit exceeded"}}"#
             contentType = "application/json"
         } else {
             status = 200

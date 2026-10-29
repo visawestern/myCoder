@@ -2,12 +2,11 @@ import Foundation
 
 enum AppConfigurationBackupStore {
     static func export(
-        homeDirectory: URL,
         defaults: UserDefaults,
         to destination: URL,
         now: Date = Date()
     ) -> Bool {
-        let registry = ProjectRegistryLogic.load(homeDirectory: homeDirectory)
+        let registry = ProjectRegistryStore.load()
         let settings = AppSettings.load(from: defaults)
         guard let registryJSON = try? encodeRegistry(registry),
               let settingsJSON = try? JSONEncoder().encode(settings),
@@ -26,7 +25,6 @@ enum AppConfigurationBackupStore {
 
     static func `import`(
         from source: URL,
-        homeDirectory: URL,
         defaults: UserDefaults
     ) -> Bool {
         guard let data = try? Data(contentsOf: source),
@@ -37,7 +35,7 @@ enum AppConfigurationBackupStore {
         }
         do {
             let normalizedRegistry = ProjectRegistryLogic.deduplicated(registry)
-            try ProjectRegistryLogic.save(normalizedRegistry, homeDirectory: homeDirectory)
+            try ProjectRegistryStore.replace(normalizedRegistry)
             settings.save(to: defaults)
             return true
         } catch {

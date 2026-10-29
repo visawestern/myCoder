@@ -51,30 +51,11 @@ enum ProjectIdentityLogic {
 }
 
 /// Pure administration of the project registry (plan Раздел 8 Блок 3).
-/// The global DB layer persists this; all decisions are testable here.
+/// The global database (`~/.mycoder/mycoder.db`, `projects` table) is the ONLY
+/// persistence layer for projects: opening/creating a project writes a row,
+/// and archive state / per-project defaults live in that same row (user
+/// directive 2026-10-28). This enum stays free of I/O and is unit-testable.
 enum ProjectRegistryLogic {
-    static var registryRelativePath: String { "\(MyCoderPaths.appDirName)/projects.json" }
-
-    static func registryURL(homeDirectory: URL) -> URL {
-        MyCoderPaths.registryURL(homeDirectory: homeDirectory)
-    }
-
-    static func load(homeDirectory: URL, fileManager: FileManager = .default) -> [ProjectRegistryEntry] {
-        let url = registryURL(homeDirectory: homeDirectory)
-        guard let data = try? Data(contentsOf: url) else { return [] }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(ProjectRegistryDocument.self, from: data))?.projects ?? []
-    }
-
-    static func save(_ projects: [ProjectRegistryEntry], homeDirectory: URL, fileManager: FileManager = .default) throws {
-        let url = registryURL(homeDirectory: homeDirectory)
-        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(ProjectRegistryDocument(projects: projects)).write(to: url, options: .atomic)
-    }
 
     /// Register a project, deduplicating by canonical path (plan Блок 3 п.32:
     /// reopening the same folder must NOT create a duplicate — fixes UUID pileup).
@@ -195,20 +176,132 @@ enum ProjectRegistryLogic {
             archivedAt: a.archivedAt ?? b.archivedAt
         )
     }
+}
 
-    /// One-time migration helper: load the registry file, collapse duplicate
-    /// canonical paths, and rewrite it in place. Idempotent — a clean registry
-    /// is returned unchanged (no churn on re-run). Returns true when a rewrite
-    /// actually happened.
+/// Database-backed project registry: the one and only persistence layer for
+/// projects. There is deliberately no JSON file any more — `~/.mycoder/
+/// projects.json` is treated as a legacy import source and archived after the
+/// first successful read (see `importLegacyJSON`).
+enum ProjectRegistryStore {
+    /// All projects, most recently opened first (the database defines the
+    /// order). `store` is injectable so tests can use an isolated in-memory
+    /// database instead of the process-wide singleton.
+    static func load(store: DatabaseManager = .shared) -> [ProjectRegistryEntry] {
+        let records = (try? store.getAllProjects()) ?? []
+        return records.map(entry(from:))
+    }
+
+    /// Replace the whole registry (see `DatabaseManager.replaceProjectRegistry`).
+    static func replace(_ entries: [ProjectRegistryEntry], store: DatabaseManager = .shared) throws {
+        try store.replaceProjectRegistry(entries.map(record(from:)))
+    }
+
+    /// Register a project when it is created or opened (idempotent by
+    /// canonical path). `addWorkspace` writes the row through the normal
+    /// project upsert; this helper exists for import/backup paths.
+    static func register(path: String, name: String? = nil, store: DatabaseManager = .shared) throws {
+        let entries = ProjectRegistryLogic.upsert(
+            ProjectRegistryEntry(path: path, name: name),
+            into: load(store: store)
+        )
+        try replace(entries, store: store)
+    }
+
+    static func archive(id: String, at date: Date, store: DatabaseManager = .shared) throws {
+        let entries = ProjectRegistryLogic.archive(id: id, at: date, in: load(store: store))
+        try replace(entries, store: store)
+    }
+
+    static func restore(id: String, store: DatabaseManager = .shared) throws {
+        let entries = ProjectRegistryLogic.restore(id: id, in: load(store: store))
+        try replace(entries, store: store)
+    }
+
+    static func remove(id: String, store: DatabaseManager = .shared) throws {
+        let entries = ProjectRegistryLogic.remove(id: id, in: load(store: store))
+        try replace(entries, store: store)
+    }
+
+    /// Re-point a project after its folder was moved/renamed. The database
+    /// keeps the row's `stable_id` and creation date, so a relink never
+    /// breaks history provenance.
+    static func relink(id: String, toNewPath newPath: String, store: DatabaseManager = .shared) throws {
+        let entries = load(store: store)
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+        let normalized = ChatSession.normalizedPath(newPath)
+        _ = try store.relinkProject(
+            oldId: id,
+            newPath: normalized,
+            name: URL(fileURLWithPath: normalized).lastPathComponent
+        )
+        var updated = entries.filter { $0.id != id }
+        updated.append(ProjectRegistryLogic.relink(entry, toNewPath: normalized))
+        try replace(updated, store: store)
+    }
+
+    /// One-time import of the legacy `~/.mycoder/projects.json` registry.
+    /// The database wins: rows are seeded only when the `projects` table is
+    /// empty, so a live install can never be overwritten by a stale file.
+    /// The file is archived (renamed) afterwards, never silently deleted.
     @discardableResult
-    static func deduplicateRegistry(homeDirectory: URL, fileManager: FileManager = .default) -> Bool {
-        let before = load(homeDirectory: homeDirectory, fileManager: fileManager)
-        let after = deduplicated(before)
-        guard after != before else { return false }
-        try? save(after, homeDirectory: homeDirectory, fileManager: fileManager)
-        try? StorageAuditLog.append(action: "registry.deduplicate",
-                                    detail: "\(before.count)->\(after.count) entries",
-                                    homeDirectory: homeDirectory)
-        return true
+    static func importLegacyJSON(
+        homeDirectory: URL,
+        store: DatabaseManager = .shared,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let url = MyCoderPaths.registryURL(homeDirectory: homeDirectory)
+        guard fileManager.fileExists(atPath: url.path) else { return false }
+        defer { archiveLegacyFile(url, fileManager: fileManager) }
+        guard let data = try? Data(contentsOf: url) else { return false }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let document = try? decoder.decode(ProjectRegistryDocument.self, from: data) else {
+            return false
+        }
+        guard load(store: store).isEmpty else { return false }
+        let deduplicated = ProjectRegistryLogic.deduplicated(document.projects)
+        do {
+            try replace(deduplicated, store: store)
+            return true
+        } catch {
+            print("❌ Legacy project registry import failed: \(error)")
+            return false
+        }
+    }
+
+    /// Rename `projects.json` out of the way so the importer never runs twice
+    /// and the user's old file remains available for manual recovery.
+    private static func archiveLegacyFile(_ url: URL, fileManager: FileManager) {
+        let stamp = Int(Date().timeIntervalSince1970)
+        let archived = url.deletingLastPathComponent()
+            .appendingPathComponent("\(url.lastPathComponent).legacy-\(stamp)")
+        do {
+            try fileManager.moveItem(at: url, to: archived)
+        } catch {
+            print("❌ Could not archive legacy project registry: \(error)")
+        }
+    }
+
+    private static func entry(from record: ProjectRecord) -> ProjectRegistryEntry {
+        ProjectRegistryEntry(
+            path: record.path,
+            name: record.name,
+            lastOpenedAt: record.lastOpenedAt,
+            defaultProviderID: record.defaultProviderID,
+            defaultModelID: record.defaultModelID,
+            archivedAt: record.archivedAt
+        )
+    }
+
+    private static func record(from entry: ProjectRegistryEntry) -> ProjectRegistryRecord {
+        ProjectRegistryRecord(
+            id: entry.id,
+            name: entry.name,
+            path: entry.path,
+            lastOpenedAt: entry.lastOpenedAt,
+            archivedAt: entry.archivedAt,
+            defaultProviderID: entry.defaultProviderID,
+            defaultModelID: entry.defaultModelID
+        )
     }
 }

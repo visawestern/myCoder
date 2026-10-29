@@ -6,7 +6,7 @@ import SQLite
 /// (`myCoder-2026-08-05-220402.ips`: SIGILL in SQLite.swift
 /// `FailableIterator.next()` → `DatabaseManager.sessionCountsByProject()`).
 ///
-/// Root cause: `resetStorage(.appCacheOnly)` deleted `~/.mycoder/mimo.db`
+/// Root cause: `resetStorage(.appCacheOnly)` deleted `~/.mycoder/mycoder.db`
 /// underneath the still-open `DatabaseManager.shared` connection. The orphaned
 /// handle keeps running; the next `SELECT` fails with a real SQLite error
 /// (`disk I/O error` / `attempt to write a readonly database`) — but
@@ -32,10 +32,10 @@ final class ClearCacheCrashRegressionTests: XCTestCase {
     /// journal mode — the mode `DatabaseManager` actually uses) whose main
     /// file is removed underneath the still-open connection.
     private func makeOrphanedConnection(in dir: URL) throws -> Connection {
-        let conn = try Connection(dir.appendingPathComponent("mimo.db").path)
+        let conn = try Connection(dir.appendingPathComponent("mycoder.db").path)
         try conn.execute("CREATE TABLE sessions (id TEXT, is_archived INTEGER)")
         try conn.execute("INSERT INTO sessions VALUES ('s1', 0)")
-        try FileManager.default.removeItem(at: dir.appendingPathComponent("mimo.db"))
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("mycoder.db"))
         return conn
     }
 
@@ -64,7 +64,7 @@ final class ClearCacheCrashRegressionTests: XCTestCase {
     func testWipeAndReopenRecipeYieldsWorkingDatabase() throws {
         let dir = makeSandbox()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let path = dir.appendingPathComponent("mimo.db").path
+        let path = dir.appendingPathComponent("mycoder.db").path
         var conn: Connection? = try Connection(path)
         try conn?.execute("CREATE TABLE sessions (id TEXT, is_archived INTEGER)")
         try conn?.execute("INSERT INTO sessions VALUES ('s1', 0)")

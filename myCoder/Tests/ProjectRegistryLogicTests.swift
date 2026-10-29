@@ -108,16 +108,80 @@ struct ProjectRegistryLogicTests {
         #expect(inactive.first?.name == "old")
     }
 
-    @Test func persistenceRoundTrip() throws {
-        let home = try makeTempHome()
+    @Test func databaseStoreRoundTrip() throws {
+        let store = DatabaseManager.createInMemory()
         let projects = [
             ProjectRegistryEntry(path: "/p/a"),
             ProjectRegistryEntry(path: "/p/b")
         ]
-        try ProjectRegistryLogic.save(projects, homeDirectory: home)
-        let loaded = ProjectRegistryLogic.load(homeDirectory: home)
+        try ProjectRegistryStore.replace(projects, store: store)
+        let loaded = ProjectRegistryStore.load(store: store)
         #expect(loaded.count == 2)
         #expect(loaded.first(where: { $0.path == "/p/a" })?.name == "a")
+    }
+
+    @Test func databaseStoreArchiveAndRemove() throws {
+        let store = DatabaseManager.createInMemory()
+        try ProjectRegistryStore.replace([ProjectRegistryEntry(path: "/p/x")], store: store)
+        let id = try #require(ProjectRegistryStore.load(store: store).first?.id)
+
+        try ProjectRegistryStore.archive(id: id, at: Date(), store: store)
+        #expect(ProjectRegistryStore.load(store: store).first?.isArchived == true)
+
+        try ProjectRegistryStore.restore(id: id, store: store)
+        #expect(ProjectRegistryStore.load(store: store).first?.isArchived == false)
+
+        try ProjectRegistryStore.remove(id: id, store: store)
+        #expect(ProjectRegistryStore.load(store: store).isEmpty)
+    }
+
+    @Test func replaceDropsRowsAbsentFromTheList() throws {
+        let store = DatabaseManager.createInMemory()
+        try ProjectRegistryStore.replace(
+            [ProjectRegistryEntry(path: "/p/keep"), ProjectRegistryEntry(path: "/p/drop")],
+            store: store
+        )
+        try ProjectRegistryStore.replace([ProjectRegistryEntry(path: "/p/keep")], store: store)
+        let loaded = ProjectRegistryStore.load(store: store)
+        #expect(loaded.map(\.path) == ["/p/keep"])
+    }
+
+    @Test func relinkPreservesStableIdAndArchiveState() throws {
+        let store = DatabaseManager.createInMemory()
+        let entry = ProjectRegistryEntry(path: "/p/old")
+        try ProjectRegistryStore.replace([entry], store: store)
+        let before = try #require(try store.getAllProjects().first)
+        try ProjectRegistryStore.archive(id: entry.id, at: Date(), store: store)
+
+        try ProjectRegistryStore.relink(id: entry.id, toNewPath: "/p/new", store: store)
+        let after = try #require(try store.getAllProjects().first)
+        #expect(after.id == IdentifierNormalization.projectID(for: "/p/new"))
+        #expect(after.stableId == before.stableId)
+        #expect(after.archivedAt != nil)
+    }
+
+    @Test func legacyJSONImportSeedsAnEmptyDatabaseOnce() throws {
+        let home = try makeTempHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let store = DatabaseManager.createInMemory()
+        let legacy = [
+            ProjectRegistryEntry(path: "/tmp/dup", name: "A", lastOpenedAt: Date(timeIntervalSince1970: 100)),
+            ProjectRegistryEntry(path: "/tmp/dup/", name: "B", lastOpenedAt: Date(timeIntervalSince1970: 200))
+        ]
+        try FileManager.default.createDirectory(
+            at: MyCoderPaths.appDir(homeDirectory: home),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(ProjectRegistryDocument(projects: legacy))
+            .write(to: MyCoderPaths.registryURL(homeDirectory: home))
+
+        #expect(ProjectRegistryStore.importLegacyJSON(homeDirectory: home, store: store))
+        #expect(ProjectRegistryStore.load(store: store).count == 1)
+        // The legacy file is archived, never imported twice.
+        #expect(!FileManager.default.fileExists(atPath: MyCoderPaths.registryURL(homeDirectory: home).path))
+        #expect(!ProjectRegistryStore.importLegacyJSON(homeDirectory: home, store: store))
     }
 
     @Test func activeSortedByLastOpened() {
@@ -170,25 +234,5 @@ struct ProjectRegistryLogicTests {
         let deduped = ProjectRegistryLogic.deduplicated([a, b])
         #expect(deduped[0].defaultProviderID == "new")
         #expect(deduped[0].defaultModelID == "model-2")
-    }
-
-    @Test func dedupMigrationRewritesRegistryFileOnce() throws {
-        // End-to-end: a legacy registry file containing duplicates is rewritten
-        // in place to a deduplicated document (idempotent on re-run).
-        let home = try makeTempHome()
-        defer { try? FileManager.default.removeItem(at: home) }
-        let legacy = [
-            ProjectRegistryEntry(path: "/tmp/dup", name: "A", lastOpenedAt: Date(timeIntervalSince1970: 100)),
-            ProjectRegistryEntry(path: "/tmp/dup/", name: "B", lastOpenedAt: Date(timeIntervalSince1970: 200))
-        ]
-        try ProjectRegistryLogic.save(legacy, homeDirectory: home)
-
-        ProjectRegistryLogic.deduplicateRegistry(homeDirectory: home)
-        let after = ProjectRegistryLogic.load(homeDirectory: home)
-        #expect(after.count == 1)
-
-        // Second run is a no-op (still one entry, no churn).
-        ProjectRegistryLogic.deduplicateRegistry(homeDirectory: home)
-        #expect(ProjectRegistryLogic.load(homeDirectory: home).count == 1)
     }
 }

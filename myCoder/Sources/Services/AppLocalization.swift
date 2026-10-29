@@ -664,6 +664,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case locRunning
     case locResend
     case locCopied
+    case locLines
     case locNewTaskSidebar
     case locMarkAllRead
     case locSelectFolder
@@ -996,7 +997,15 @@ enum AppLocalization {
         }
     }
 
-    static let translations: [String: [String: String]] = [
+    static let translations: [String: [String: String]] = makeTranslations()
+
+    /// Swift 6.3's `COWArrayOptPass` spends hours on this single ~1,000-entry
+    /// nested dictionary under `-O` (it was the only file blocking release
+    /// builds). The literal is built by an explicitly unoptimized function so
+    /// the optimizer skips it; initialization still runs exactly once.
+    @_optimize(none)
+    private static func makeTranslations() -> [String: [String: String]] {
+        [
         "locSelect": ["en": "Select", "ru": "Выбрать", "es": "Seleccionar", "fr": "Sélectionner", "de": "Auswählen", "zh": "选择", "ja": "選択", "ko": "선택", "pt": "Selecionar", "ar": "تحديد"],
         "locRemoveProvider": ["en": "Remove provider", "ru": "Удалить провайдер", "es": "Eliminar proveedor", "fr": "Supprimer le fournisseur", "de": "Anbieter entfernen", "zh": "移除提供商", "ja": "プロバイダーを削除", "ko": "공급자 제거", "pt": "Remover provedor", "ar": "إزالة الموفر"],
         "locParameters": ["en": "Parameters", "ru": "Параметры", "es": "Parámetros", "fr": "Paramètres", "de": "Parameter", "zh": "参数", "ja": "パラメーター", "ko": "매개변수", "pt": "Parâmetros", "ar": "المعلمات"],
@@ -1570,6 +1579,7 @@ enum AppLocalization {
         "locRunning": ["en": "Running", "ru": "Выполняется", "es": "Ejecutando", "fr": "En cours", "de": "Läuft", "zh": "运行中", "ja": "実行中", "ko": "실행 중", "pt": "Executando", "ar": "قيد التشغيل"],
         "locResend": ["en": "Resend", "ru": "Отправить повторно", "es": "Reenviar", "fr": "Renvoyer", "de": "Erneut senden", "zh": "重新发送", "ja": "再送信", "ko": "다시 보내기", "pt": "Reenviar", "ar": "إعادة الإرسال"],
         "locCopied": ["en": "Copied", "ru": "Скопировано", "es": "Copiado", "fr": "Copié", "de": "Kopiert", "zh": "已复制", "ja": "コピーしました", "ko": "복사됨", "pt": "Copiado", "ar": "تم النسخ"],
+        "locLines": ["en": "lines", "ru": "строк", "es": "líneas", "fr": "lignes", "de": "Zeilen", "zh": "行", "ja": "行", "ko": "줄", "pt": "linhas", "ar": "أسطر"],
         "locNewTaskSidebar": ["en": "New task", "ru": "Новая задача", "es": "Нueva tarea", "fr": "Nouvelle tâche", "de": "Новая Aufgabe", "zh": "Новая задача", "ja": "新しいタスク", "ko": "새 작업", "pt": "Новая tarefa", "ar": "مهمة جديدة"],
         "locMarkAllRead": ["en": "Mark All Read", "ru": "Отметить все как прочитанные", "es": "Marcar todo como leído", "fr": "Tout marquer comme lu", "de": "Alle als gelesen markieren", "zh": "全部标记为已读", "ja": "すべて既読にする", "ko": "모두 읽음으로 표시", "pt": "Marcar tudo como lido", "ar": "تحديد الكل كمقروء"],
         "locSelectFolder": ["en": "Select a folder to open as a project", "ru": "Выберите папку для открытия как проекта", "es": "Selecciona una carpeta para abrir como proyecto", "fr": "Sélectionnez un dossier à ouvrir comme projet", "de": "Ordner zum Öffnen als Projekt auswählen", "zh": "选择要作为项目打开的文件夹", "ja": "プロジェクトとして開くフォルダを選択", "ko": "프로젝트로 열 폴더 선택", "pt": "Seleccione una pasta para abrir como proyecto", "ar": "حدد مجلداً لفتحه كمشروع"],
@@ -1871,5 +1881,6 @@ enum AppLocalization {
         "locClear": ["en": "Clear", "ru": "Очистить", "es": "Borrar", "fr": "Effacer", "de": "Löschen", "zh": "清除", "ja": "クリア", "ko": "지우기", "pt": "Limpar", "ar": "مسح"],
         "locHide": ["en": "Hide", "ru": "Скрыть", "es": "Ocultar", "fr": "Masquer", "de": "Ausblenden", "zh": "隐藏", "ja": "非表示", "ko": "숨기기", "pt": "Ocultar", "ar": "إخفاء"],
         "locShow": ["en": "Show", "ru": "Показать", "es": "Mostrar", "fr": "Afficher", "de": "Anzeigen", "zh": "显示", "ja": "表示", "ko": "표시", "pt": "Mostrar", "ar": "إظهار"],
-    ]
+        ]
+    }
 }

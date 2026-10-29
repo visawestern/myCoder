@@ -5,12 +5,17 @@ import FoundationNetworking
 
 /// Result of a direct (OpenAI-compatible) chat call. `usage` is nil when the
 /// provider did not return token accounting (e.g. local Ollama without usage).
+/// `reasoning` carries the provider's thinking channel when it sends one
+/// separately from the answer (`reasoning_content`, `reasoning`, `thinking`);
+/// without it the UI had nothing to render and the spoiler stayed empty.
 struct DirectChatResult: Equatable {
     let content: String
+    let reasoning: String?
     let usage: UsageCapture?
 
-    init(content: String, usage: UsageCapture? = nil) {
+    init(content: String, reasoning: String? = nil, usage: UsageCapture? = nil) {
         self.content = content
+        self.reasoning = reasoning
         self.usage = usage
     }
 }
@@ -108,22 +113,78 @@ enum DirectChatClient {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
         var content: String?
+        var reasoning: String?
         // OpenAI: choices[0].message.content
         if let choices = json["choices"] as? [[String: Any]],
-           let message = choices.first?["message"] as? [String: Any],
-           let c = message["content"] as? String {
-            content = c
+           let message = choices.first?["message"] as? [String: Any] {
+            content = message["content"] as? String
+            reasoning = reasoningText(in: message)
         }
-        // Ollama /api/chat style: message.content
-        if content == nil, let message = json["message"] as? [String: Any],
-           let c = message["content"] as? String {
-            content = c
+        // Ollama /api/chat style: message.content (thinking arrives as
+        // `message.thinking` on reasoning models).
+        if content == nil, let message = json["message"] as? [String: Any] {
+            content = message["content"] as? String
+            if reasoning == nil { reasoning = reasoningText(in: message) }
         }
+        // A few gateways put the thinking channel at the top level.
+        if reasoning == nil { reasoning = reasoningText(in: json) }
         guard let content,
               ProviderResponseValidationLogic.hasVisibleContent(content) else { return nil }
 
         let usage = Self.extractUsage(from: json, contextBytes: contextBytes)
-        return DirectChatResult(content: content, usage: usage)
+        return DirectChatResult(
+            content: content,
+            reasoning: normalizedReasoning(reasoning),
+            usage: usage
+        )
+    }
+
+    /// Providers spell the thinking channel differently and some wrap it in an
+    /// array of `{type, text}` blocks. Read every known spelling; unknown
+    /// shapes are ignored rather than crashing the whole response.
+    static func reasoningText(in container: [String: Any]) -> String? {
+        for key in ["reasoning_content", "reasoning", "thinking"] {
+            if let text = reasoningValue(container[key]), !text.isEmpty { return text }
+        }
+        return nil
+    }
+
+    private static func reasoningValue(_ raw: Any?) -> String? {
+        if let text = raw as? String { return text }
+        if let dict = raw as? [String: Any] {
+            for key in ["text", "content", "summary"] {
+                if let text = dict[key] as? String, !text.isEmpty { return text }
+            }
+            return nil
+        }
+        if let array = raw as? [Any] {
+            var chunks: [String] = []
+            for item in array {
+                guard let text = reasoningValue(item), !text.isEmpty else { continue }
+                if !chunks.contains(text) { chunks.append(text) }
+            }
+            return chunks.isEmpty ? nil : chunks.joined(separator: "\n\n")
+        }
+        return nil
+    }
+
+    private static func normalizedReasoning(_ raw: String?) -> String? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// Merge reasoning blocks across agent-loop iterations. Some gateways
+    /// repeat an earlier block verbatim; a repeated block is not a second
+    /// thought and must not be shown twice.
+    static func mergedReasoning(_ chunks: [String]) -> String? {
+        var merged: [String] = []
+        for chunk in chunks {
+            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, merged.last != trimmed else { continue }
+            merged.append(trimmed)
+        }
+        return merged.isEmpty ? nil : merged.joined(separator: "\n\n")
     }
 
     /// Read the top-level `usage` block. Tolerant of missing/partial fields and
@@ -140,6 +201,12 @@ enum DirectChatClient {
             return !ProviderResponseValidationLogic.hasVisibleContent(content)
         }
         return false
+    }
+
+    /// Usage block from a response or a stream chunk. Internal so the
+    /// streaming client can read the final `usage` event of an SSE stream.
+    static func usage(from json: [String: Any], contextBytes: Int = 0) -> UsageCapture? {
+        extractUsage(from: json, contextBytes: contextBytes)
     }
 
     private static func extractUsage(from json: [String: Any], contextBytes: Int = 0) -> UsageCapture? {

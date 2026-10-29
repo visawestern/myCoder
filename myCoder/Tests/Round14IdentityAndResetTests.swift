@@ -10,7 +10,7 @@ import Foundation
 ///   panel is empty in real use ("registry is orphaned").
 /// - plan Раздел 8 п.9/п.19: resetStorage must be injectable so tests (and
 ///   the StorageResetCrashTests that previously deleted the REAL user
-///   ~/.mycoder/mimo.db) never touch real user data.
+///   ~/.mycoder/mycoder.db) never touch real user data.
 @Suite("Round 14 — project identity + safe reset (devil's advocate)")
 struct Round14IdentityAndResetTests {
 
@@ -26,7 +26,7 @@ struct Round14IdentityAndResetTests {
 
         // Place fake "data" files — only the app DB is a reset target now
         // (HTTP-only, no CLI history: the reset clears the app cache).
-        let fakeAppDB = mimoDir.appendingPathComponent("mimo.db")
+        let fakeAppDB = mimoDir.appendingPathComponent("mycoder.db")
         let unrelated = sandbox.appendingPathComponent("keep.txt")
         try Data("app".utf8).write(to: fakeAppDB)
         try Data("keep".utf8).write(to: unrelated)

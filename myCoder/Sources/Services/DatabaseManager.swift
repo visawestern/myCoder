@@ -7,7 +7,7 @@ class DatabaseManager {
     static let shared = DatabaseManager()
     
     /// Current schema version — increment when tables change
-    private static let schemaVersion: Int = 5
+    private static let schemaVersion: Int = 6
     
     private var db: Connection?
     private let dbPath: String
@@ -37,6 +37,12 @@ class DatabaseManager {
     /// equals the project's normalized path and therefore changes if the
     /// project is ever re-linked at a new path after being moved/renamed).
     private let projectStableId = Expression<String?>("stable_id")
+    /// Project administration state. It used to live in a side file
+    /// (`~/.mycoder/projects.json`); the global database is now the single
+    /// source of truth for projects (user directive 2026-10-28).
+    private let projectArchivedAt = Expression<Int64?>("archived_at")
+    private let projectDefaultProviderId = Expression<String?>("default_provider_id")
+    private let projectDefaultModelId = Expression<String?>("default_model_id")
 
     // Sessions table
     private let sessions = Table("sessions")
@@ -158,7 +164,7 @@ class DatabaseManager {
         // Audit 2026-09-13 (user DB pollution): `swift test` runs via
         // swift-testing, which does NOT load XCTest — the old "test" path
         // never fired and every DatabaseBridge.shared call in tests wrote
-        // into the REAL ~/.mycoder/mimo.db (245 junk sessions accumulated
+        // into the REAL ~/.mycoder/mycoder.db (245 junk sessions accumulated
         // across 106 runs, verified live). Under any test runner the
         // singleton becomes an in-memory database: tests that assert on it
         // still work, production data is never touched.
@@ -224,6 +230,9 @@ class DatabaseManager {
             t.column(projectCustomInstructions)
             t.column(projectEnvVars)
             t.column(projectStableId)
+            t.column(projectArchivedAt)
+            t.column(projectDefaultProviderId)
+            t.column(projectDefaultModelId)
         })
         
         // Sessions table
@@ -434,7 +443,10 @@ class DatabaseManager {
         path: String,
         gitRemote: String? = nil,
         gitBranch: String? = nil,
-        stableId: String? = nil
+        stableId: String? = nil,
+        archivedAt: Date? = nil,
+        defaultProviderID: String? = nil,
+        defaultModelID: String? = nil
     ) throws {
         guard let db = db else { throw DatabaseError.notInitialized }
         
@@ -448,7 +460,10 @@ class DatabaseManager {
             projectGitRemote <- gitRemote,
             projectGitBranch <- gitBranch,
             projectIsPinned <- false,
-            projectStableId <- stableId ?? UUID().uuidString
+            projectStableId <- stableId ?? UUID().uuidString,
+            projectArchivedAt <- archivedAt.map { Int64($0.timeIntervalSince1970) },
+            projectDefaultProviderId <- defaultProviderID,
+            projectDefaultModelId <- defaultModelID
         ))
     }
     
@@ -461,17 +476,7 @@ class DatabaseManager {
         
         var results: [ProjectRecord] = []
         for row in try SQLiteSafeQuery.rows(db.prepareRowIterator(projects.order(projectLastOpenedAt.desc).limit(limit))) {
-            results.append(ProjectRecord(
-                id: row[projectId],
-                name: row[projectName],
-                path: row[projectPath],
-                createdAt: Date(timeIntervalSince1970: TimeInterval(row[projectCreatedAt])),
-                lastOpenedAt: Date(timeIntervalSince1970: TimeInterval(row[projectLastOpenedAt])),
-                gitRemote: row[projectGitRemote],
-                gitBranch: row[projectGitBranch],
-                isPinned: row[projectIsPinned],
-                stableId: row[projectStableId]
-            ))
+            results.append(projectRecord(from: row))
         }
         return results
     }
@@ -484,7 +489,13 @@ class DatabaseManager {
     func findProjectByStableId(_ stableId: String) throws -> ProjectRecord? {
         guard let db = db else { throw DatabaseError.notInitialized }
         guard let row = try db.pluck(projects.filter(projectStableId == stableId)) else { return nil }
-        return ProjectRecord(
+        return projectRecord(from: row)
+    }
+
+    /// Single SQL row → record mapping shared by every project query so a new
+    /// column can never be silently omitted from one of them.
+    private func projectRecord(from row: Row) -> ProjectRecord {
+        ProjectRecord(
             id: row[projectId],
             name: row[projectName],
             path: row[projectPath],
@@ -493,7 +504,10 @@ class DatabaseManager {
             gitRemote: row[projectGitRemote],
             gitBranch: row[projectGitBranch],
             isPinned: row[projectIsPinned],
-            stableId: row[projectStableId]
+            stableId: row[projectStableId],
+            archivedAt: row[projectArchivedAt].map { Date(timeIntervalSince1970: TimeInterval($0)) },
+            defaultProviderID: row[projectDefaultProviderId],
+            defaultModelID: row[projectDefaultModelId]
         )
     }
 
@@ -508,15 +522,76 @@ class DatabaseManager {
         let normalizedNewPath = ChatSession.normalizedPath(newPath)
         let existingRow = try db.pluck(projects.filter(projectId == oldId))
         let preservedStableId = existingRow?[projectStableId]
+        let createdAt = existingRow?[projectCreatedAt] ?? Int64(Date().timeIntervalSince1970)
+        let lastOpenedAt = existingRow?[projectLastOpenedAt] ?? createdAt
+        let isPinned = existingRow?[projectIsPinned] ?? false
+        // Registry state is a user decision: moving a folder must not unarchive
+        // the project or drop its default provider/model.
+        let archivedAt = existingRow?[projectArchivedAt]
+        let defaultProviderID = existingRow?[projectDefaultProviderId]
+        let defaultModelID = existingRow?[projectDefaultModelId]
 
-        try db.run(projects.filter(projectId == oldId).delete())
-        try insertProject(
-            id: normalizedNewPath,
-            name: name,
-            path: normalizedNewPath,
-            stableId: preservedStableId
-        )
+        try db.transaction {
+            try db.run(projects.filter(projectId == oldId).delete())
+            try db.run(projects.insert(
+                projectId <- normalizedNewPath,
+                projectName <- name,
+                projectPath <- normalizedNewPath,
+                projectCreatedAt <- createdAt,
+                projectLastOpenedAt <- lastOpenedAt,
+                projectIsPinned <- isPinned,
+                projectStableId <- preservedStableId ?? UUID().uuidString,
+                projectArchivedAt <- archivedAt,
+                projectDefaultProviderId <- defaultProviderID,
+                projectDefaultModelId <- defaultModelID
+            ))
+        }
         return normalizedNewPath
+    }
+
+    /// Atomically replace the project registry: rows that are present are
+    /// updated, missing ids are inserted, and every row absent from the list
+    /// is deleted. Used by the Storage panel for archive/restore/forget and by
+    /// configuration import. All statements run in one transaction so a failed
+    /// write can never leave a half-renamed registry behind.
+    func replaceProjectRegistry(_ records: [ProjectRegistryRecord]) throws {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        let now = Int64(Date().timeIntervalSince1970)
+        try db.transaction {
+            let keep = Set(records.map(\.id))
+            let existingIds = try SQLiteSafeQuery
+                .rows(db.prepareRowIterator(projects.select(projectId)))
+                .map { $0[projectId] }
+            for id in existingIds where !keep.contains(id) {
+                try db.run(projects.filter(projectId == id).delete())
+            }
+            for record in records {
+                let archived = record.archivedAt.map { Int64($0.timeIntervalSince1970) }
+                if try db.pluck(projects.filter(projectId == record.id)) != nil {
+                    try db.run(projects.filter(projectId == record.id).update(
+                        projectName <- record.name,
+                        projectPath <- record.path,
+                        projectLastOpenedAt <- Int64(record.lastOpenedAt.timeIntervalSince1970),
+                        projectArchivedAt <- archived,
+                        projectDefaultProviderId <- record.defaultProviderID,
+                        projectDefaultModelId <- record.defaultModelID
+                    ))
+                } else {
+                    try db.run(projects.insert(
+                        projectId <- record.id,
+                        projectName <- record.name,
+                        projectPath <- record.path,
+                        projectCreatedAt <- now,
+                        projectLastOpenedAt <- Int64(record.lastOpenedAt.timeIntervalSince1970),
+                        projectIsPinned <- false,
+                        projectStableId <- UUID().uuidString,
+                        projectArchivedAt <- archived,
+                        projectDefaultProviderId <- record.defaultProviderID,
+                        projectDefaultModelId <- record.defaultModelID
+                    ))
+                }
+            }
+        }
     }
     
     func updateProjectLastOpened(id: String) throws {
@@ -610,6 +685,13 @@ class DatabaseManager {
             sessionTitle <- title,
             sessionUpdatedAt <- Int64(Date().timeIntervalSince1970)
         ))
+    }
+
+    /// True when this store owns the given session id. Used to drop sidebar
+    /// rows that survived after their chat was deleted.
+    func hasSession(id: String) throws -> Bool {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        return try db.pluck(sessions.filter(sessionId == id)) != nil
     }
 
     /// Read a session's persisted goal.
@@ -1058,6 +1140,14 @@ class DatabaseManager {
             // Sub-agent chats: parent link (column exists since v1) and the
             // lifecycle status shown in the right panel.
             try addColumnIfMissing(table: "sessions", column: "subagent_status", definition: "TEXT")
+        case 6:
+            // Projects are the single source of truth (user directive
+            // 2026-10-28): the archived flag and the per-project default
+            // provider/model moved out of `~/.mycoder/projects.json` into the
+            // `projects` table so Storage/Sidebar/backup read one database.
+            try addColumnIfMissing(table: "projects", column: "archived_at", definition: "INTEGER")
+            try addColumnIfMissing(table: "projects", column: "default_provider_id", definition: "TEXT")
+            try addColumnIfMissing(table: "projects", column: "default_model_id", definition: "TEXT")
         default:
             break
         }
@@ -1350,6 +1440,22 @@ struct ProjectRecord {
     let gitBranch: String?
     let isPinned: Bool
     let stableId: String?
+    let archivedAt: Date?
+    let defaultProviderID: String?
+    let defaultModelID: String?
+}
+
+/// One row of the database-backed project registry. `ProjectRegistryStore`
+/// maps between this DTO and `ProjectRegistryEntry`; the database layer stays
+/// free of UI/registry types.
+struct ProjectRegistryRecord {
+    let id: String
+    let name: String
+    let path: String
+    let lastOpenedAt: Date
+    let archivedAt: Date?
+    let defaultProviderID: String?
+    let defaultModelID: String?
 }
 
 struct SessionRecord {

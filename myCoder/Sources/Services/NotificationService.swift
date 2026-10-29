@@ -68,6 +68,10 @@ enum NotificationType: String, Equatable {
 
 enum NotificationAction: Equatable {
     case openSession(String)  // session ID
+    /// Opens a chat and scrolls to one concrete message, so tapping a
+    /// tool-approval alert lands on the card that raised it instead of only
+    /// opening the chat at the newest message.
+    case openMessage(sessionID: String, messageID: String)
     case openSettings
     case openGit
     case custom(String)       // URL or action identifier

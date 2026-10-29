@@ -6,7 +6,7 @@ import Foundation
 /// probed `XCTestCase`, but the suite runs via swift-testing — which does
 /// NOT link XCTest into the runner process. The detector returned false, so
 /// 245 junk sessions ("New Chat" / "merge me" / "Quick question" /
-/// "API Chat") accumulated in the REAL ~/.mycoder/mimo.db across 106 test
+/// "API Chat") accumulated in the REAL ~/.mycoder/mycoder.db across 106 test
 /// runs (verified live in the user's database). The probe now detects the
 /// swift-testing runtime classes too, plus an explicit env escape hatch.
 enum TestRunDetector {

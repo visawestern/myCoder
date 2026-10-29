@@ -523,6 +523,9 @@ struct NotificationRow: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     let notification: AppNotification
+    /// Guards against a host delivering both the row tap and the inner action
+    /// button for the same click, which would route (and scroll) twice.
+    @State private var lastRoutedAt = Date.distantPast
     
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -568,6 +571,11 @@ struct NotificationRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             appState.notificationService.markAsRead(notification.id)
+            // Tapping the alert body is the same intent as its action button:
+            // open the chat (and the exact tool call, when anchored).
+            if let action = notification.action {
+                handleAction(action)
+            }
         }
         .background(
             notification.isRead
@@ -599,6 +607,7 @@ struct NotificationRow: View {
     private func actionLabel(_ action: NotificationAction) -> String {
         switch action {
         case .openSession: return "Open Session"
+        case .openMessage: return "Open tool call"
         case .openSettings: return "Open Settings"
         case .openGit: return "View Changes"
         case .custom(let id): return id
@@ -606,16 +615,28 @@ struct NotificationRow: View {
     }
     
     private func handleAction(_ action: NotificationAction) {
+        let now = Date()
+        guard now.timeIntervalSince(lastRoutedAt) > 0.3 else { return }
+        lastRoutedAt = now
         // Child buttons do not reliably propagate the row tap gesture on every
         // macOS SwiftUI host, so action routing explicitly marks the item read.
         appState.notificationService.markAsRead(notification.id)
         let sessionWasFound: Bool
         switch action {
         case .openSession(let sessionID):
-            guard let session = appState.sessions.first(where: { $0.id == sessionID }) else {
+            guard let session = appState.sessionForNavigation(id: sessionID) else {
                 return
             }
             appState.selectSession(session)
+            sessionWasFound = true
+        case .openMessage(let sessionID, let messageID):
+            // Open the chat AND ask the panel to scroll to the message that
+            // raised the alert — opening at the newest message hid the card.
+            guard let session = appState.sessionForNavigation(id: sessionID) else {
+                return
+            }
+            appState.selectSession(session)
+            appState.requestMessageFocus(sessionID: sessionID, messageID: messageID)
             sessionWasFound = true
         case .openSettings:
             appState.openSettings()
@@ -969,6 +990,20 @@ struct NoProjectRow: View {
     }
 }
 
+/// Small spinner shown before a chat title while that chat's model turn is
+/// still running, even when the user is reading another chat.
+struct BackgroundActivityIndicator: View {
+    var body: some View {
+        ProgressView()
+            .progressViewStyle(.circular)
+            .controlSize(.mini)
+            .scaleEffect(0.65)
+            .frame(width: 10, height: 10)
+            .help(L.t("The model is still answering in this chat"))
+            .accessibilityLabel(L.t("The model is still answering in this chat"))
+    }
+}
+
 struct ProjectlessChatRow: View {
     let node: SidebarProjectlessChatNode
     @EnvironmentObject var appState: AppState
@@ -999,6 +1034,9 @@ struct ProjectlessChatRow: View {
 
             Button(action: { appState.selectSession(node.session) }) {
                 HStack(spacing: 6) {
+                    if appState.streamingSessionIDs.contains(node.id) {
+                        BackgroundActivityIndicator()
+                    }
                     Text(node.title)
                         .interfaceFont(size: 12, weight: .medium)
                         .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
@@ -1104,6 +1142,9 @@ struct SessionTaskRow: View {
             } else {
                 Button(action: { appState.selectSession(session) }) {
                     HStack(spacing: 6) {
+                        if appState.streamingSessionIDs.contains(session.id) {
+                            BackgroundActivityIndicator()
+                        }
                         Text(session.title)
                             .interfaceFont(size: 12)
                             .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
@@ -1304,7 +1345,7 @@ struct SearchPaletteView: View {
 struct ArchivedProjectsPopover: View {
     @EnvironmentObject var appState: AppState
     @State private var archived: [ProjectRegistryEntry] = ProjectRegistryLogic.archived(
-        ProjectRegistryLogic.load(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+        ProjectRegistryStore.load()
     )
 
     var body: some View {
@@ -1358,11 +1399,8 @@ struct ArchivedProjectsPopover: View {
     }
 
     private func restore(_ entry: ProjectRegistryEntry) {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let all = ProjectRegistryLogic.load(homeDirectory: home)
-        let updated = ProjectRegistryLogic.restore(id: entry.id, in: all)
-        try? ProjectRegistryLogic.save(updated, homeDirectory: home)
+        try? ProjectRegistryStore.restore(id: entry.id)
         appState.refreshProjectRegistry()
-        archived = ProjectRegistryLogic.archived(updated)
+        archived = ProjectRegistryLogic.archived(ProjectRegistryStore.load())
     }
 }

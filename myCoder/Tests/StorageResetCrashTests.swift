@@ -11,7 +11,7 @@ final class StorageResetCrashTests: XCTestCase {
     //
     // Round 14 (test-safety): these tests used to call
     // `resetStorage(scope: .appCacheOnly)` with default args, which deleted
-    // the REAL user's ~/.mycoder/mimo.db and dropped every table via
+    // the REAL user's ~/.mycoder/mycoder.db and dropped every table via
     // `DatabaseManager.shared.reset()`. They now run in a temp sandbox with a
     // no-op database reset, so running the test suite can never destroy real
     // user data (devil's-advocate re-audit 2026-08-01).

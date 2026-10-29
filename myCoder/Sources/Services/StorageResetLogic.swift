@@ -2,11 +2,11 @@ import Foundation
 
 /// Pure logic for the explicit storage-reset scenarios (plan Раздел 8 Блок 1 п.10).
 /// The app is HTTP-only (no local CLI): the cache-only scope clears the global
-/// app database, while the full scope also removes the project registry and
-/// every known per-project database. Decoupled from the UI so it is
-/// unit-testable without touching real databases.
+/// app database, while the full scope also removes the (legacy) project
+/// registry file and every known per-project database. Decoupled from the UI so
+/// it is unit-testable without touching real databases.
 enum StorageResetScope: Equatable {
-    /// Clear the app database (`~/.mycoder/mimo.db`).
+    /// Clear the app database (`~/.mycoder/mycoder.db`).
     case appCacheOnly
     /// Wipe the app database, the project registry and every known
     /// per-project database (`<project>/.mycoder/project.db`) plus the
@@ -33,6 +33,8 @@ enum StorageResetLogic {
         case .fullDatabase:
             var paths = [
                 dbURL.path,
+                // Legacy side registry. Projects now live in the database, so
+                // this file is only cleaned up if an older build left it behind.
                 MyCoderPaths.registryURL(homeDirectory: homeDirectory).path
             ]
             for projectPath in projectPaths {

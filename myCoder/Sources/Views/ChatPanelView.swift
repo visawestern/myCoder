@@ -73,6 +73,10 @@ struct ChatPanelView: View {
     @State private var currentUserMessageID: String?
     @State private var canLoadOlderMessages = false
     @State private var scrolledSessionID: String?
+    /// Message to outline after a notification tap jumps to it.
+    @State private var highlightedMessageID: String?
+    @State private var highlightClearTask: Task<Void, Never>?
+    @State private var focusLoadingTask: Task<Void, Never>?
     @State private var draftSaveTask: Task<Void, Never>?
     @State private var serveTimeoutTask: Task<Void, Never>?
     @State private var isCompacting = false
@@ -179,7 +183,11 @@ struct ChatPanelView: View {
                                         WorkedTimeSeparator(label: separator)
                                     }
                                     
-                                    MessageRow(message: message, projectRoot: appState.toolWorkingDirectory)
+                                    MessageRow(
+                                        message: message,
+                                        projectRoot: appState.toolWorkingDirectory,
+                                        isHighlighted: message.id == highlightedMessageID
+                                    )
                                         .id(message.id)
                                         .chatRowFrameReporter(id: message.id, isUser: message.role == .user)
                                 }
@@ -215,11 +223,18 @@ struct ChatPanelView: View {
                         .onChange(of: messageStore.currentSessionID) { newID in
                             handleSessionChange(newID, proxy: proxy)
                         }
+                        .onChange(of: appState.messageFocusRequest?.token) { _ in
+                            applyPendingMessageFocus(proxy: proxy)
+                        }
+                        .onChange(of: messageStore.loadedSessionID) { _ in
+                            applyPendingMessageFocus(proxy: proxy)
+                        }
                         .onChange(of: messageText) { newText in
                             scheduleDraftSave(newText)
                         }
                         .onAppear {
                             scrollToBottomOnAppear(proxy: proxy)
+                            applyPendingMessageFocus(proxy: proxy)
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if ChatScrollLogic.showsScrollToBottomButton(
@@ -253,7 +268,8 @@ struct ChatPanelView: View {
 
                     ComposerAttachmentPreview(store: attachmentStore)
 
-                    if let pending = appState.pendingQuestionRequest {
+                    if let pending = appState.pendingQuestionRequest,
+                       pending.sessionID == messageStore.currentSessionID {
                         PlanQuestionCardView(questions: pending.questions) { answers in
                             submitQuestionAnswers(answers)
                         }
@@ -265,7 +281,7 @@ struct ChatPanelView: View {
                         messageText: $messageText,
                         onSend: sendMessage,
                         onStop: stopGeneration,
-                        isLoading: appState.isLoading,
+                        isLoading: visibleSessionIsStreaming,
                         attachmentStore: attachmentStore,
                         showFilePicker: $showFilePicker,
                         messageQueue: messageQueue,
@@ -317,6 +333,12 @@ struct ChatPanelView: View {
                 messageQueue.processNext()
                 flushPendingSpecNodePrompt()
             }
+        }
+        .onChange(of: messageStore.streamingSessionIDs) { _ in
+            syncBackgroundActivity()
+        }
+        .onChange(of: appState.pendingQuestionRequest) { _ in
+            syncBackgroundActivity()
         }
         .onChange(of: appState.pendingSpecNodePrompt?.id) { _ in
             flushPendingSpecNodePrompt()
@@ -397,7 +419,7 @@ struct ChatPanelView: View {
             messageQueue: messageQueue,
             onSend: sendMessage,
             onStop: stopGeneration,
-            isLoading: appState.isLoading,
+            isLoading: visibleSessionIsStreaming,
             isLoadingChat: presentation == .centered,
             onForceSendQueued: forceSendQueued,
             onEditQueued: editQueuedMessage
@@ -545,9 +567,93 @@ struct ChatPanelView: View {
         }
     }
 
+    // MARK: - Notification focus (open the exact tool-call message)
+
+    /// Applies a pending "show this message" request once its chat is loaded.
+    /// The target may sit before the loaded tail; in that case older pages are
+    /// fetched first instead of silently doing nothing.
+    private func applyPendingMessageFocus(proxy: ScrollViewProxy) {
+        guard let request = appState.messageFocusRequest else { return }
+        guard MessageFocusLogic.applies(request, to: messageStore.currentSessionID) else { return }
+        guard !messageStore.isLoadingMessages else { return }
+
+        if MessageFocusLogic.isLoaded(messageID: request.messageID, in: messageStore.messages) {
+            revealFocusedMessage(request, proxy: proxy)
+            return
+        }
+        guard messageStore.hasMoreMessages else {
+            appState.clearMessageFocus(id: request.id)
+            appState.shellActionNotice = "This tool call is no longer in the chat history."
+            appState.shellActionNoticeTone = .error
+            return
+        }
+        loadOlderPagesForFocus(request, proxy: proxy)
+    }
+
+    private func revealFocusedMessage(_ request: MessageFocusRequest, proxy: ScrollViewProxy) {
+        appState.clearMessageFocus(id: request.id)
+        highlightedMessageID = request.messageID
+        highlightClearTask?.cancel()
+        highlightClearTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard !Task.isCancelled else { return }
+            if highlightedMessageID == request.messageID {
+                highlightedMessageID = nil
+            }
+        }
+        // LazyVStack needs a beat to lay the target row out; retry a few
+        // times instead of scrolling once into an empty slot.
+        for delay in [0.05, 0.25, 0.6] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard messageStore.currentSessionID == request.sessionID,
+                      MessageFocusLogic.isLoaded(messageID: request.messageID, in: messageStore.messages) else {
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(request.messageID, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func loadOlderPagesForFocus(_ request: MessageFocusRequest, proxy: ScrollViewProxy) {
+        guard focusLoadingTask == nil else { return }
+        focusLoadingTask = Task { @MainActor in
+            defer { focusLoadingTask = nil }
+            guard let sessionID = messageStore.currentSessionID else { return }
+            var attempts = 0
+            while MessageFocusLogic.shouldLoadOlderPage(
+                messageID: request.messageID,
+                messages: messageStore.messages,
+                hasMoreMessages: messageStore.hasMoreMessages,
+                attempts: attempts
+            ) {
+                attempts += 1
+                _ = await messageStore.loadHistory(sessionID: sessionID, client: appState.mimoClient)
+                if !messageStore.hasMoreMessages {
+                    // Local/auto-free chats have no server history; page the
+                    // local store exactly like "Load earlier messages" does.
+                    let loadedPage = messageStore.loadOlderFromDatabase(sessionId: sessionID)
+                    if !loadedPage { break }
+                }
+                guard messageStore.currentSessionID == sessionID else { return }
+            }
+            guard MessageFocusLogic.applies(request, to: messageStore.currentSessionID),
+                  MessageFocusLogic.isLoaded(messageID: request.messageID, in: messageStore.messages) else {
+                appState.clearMessageFocus(id: request.id)
+                appState.shellActionNotice = "This tool call is no longer in the chat history."
+                appState.shellActionNoticeTone = .error
+                return
+            }
+            revealFocusedMessage(request, proxy: proxy)
+        }
+    }
+
     private func handleSelectedSessionChange(_ newSessionID: String?) {
         guard let sessionID = newSessionID else {
-            messageStore.clear()
+            // Detach, do not clear: a model turn started in another chat keeps
+            // streaming into its own feed and must survive "no chat selected".
+            messageStore.detach()
             messageText = ""
             attachmentStore.clear()
             stashedComposerDraft = nil
@@ -555,13 +661,16 @@ struct ChatPanelView: View {
             composerHoldsQueuedMessage = false
             return
         }
-        guard SessionReloadLogic.shouldReloadMessages(
-            newSessionID: sessionID,
-            currentSessionID: messageStore.currentSessionID,
-            localMessageCount: messageStore.messages.count,
-            isLoading: appState.isLoading
-        ) else { return }
-        loadSessionMessages(sessionID: sessionID)
+        if SessionReloadLogic.shouldReloadMessages(
+            hasCachedMessages: messageStore.hasLoadedMessages(sessionID: sessionID)
+        ) {
+            loadSessionMessages(sessionID: sessionID)
+        } else {
+            // The chat is already in memory: show it immediately. Re-reading it
+            // from the database would replace chunks of a turn that is still
+            // streaming into this chat.
+            messageStore.currentSessionID = sessionID
+        }
         #if canImport(WebKit)
         // User directive 2026-09-09: moving to another chat/project surfaces
         // THAT chat's pooled webview ("another tab of the same site") when one
@@ -593,7 +702,8 @@ struct ChatPanelView: View {
                     text: queued.text,
                     files: queued.files,
                     images: queued.images,
-                    agentModeOverride: queued.type.toAgentMode
+                    agentModeOverride: queued.type.toAgentMode,
+                    sessionID: queued.sessionID
                 )
             }
         }
@@ -602,6 +712,29 @@ struct ChatPanelView: View {
             loadSessionMessages(sessionID: sessionID)
         }
         flushPendingSpecNodePrompt()
+        syncBackgroundActivity()
+    }
+
+    /// Mirror the panel's live turns into `AppState`, where the sidebar reads
+    /// them. A chat waiting for a plan answer counts as active: the model is
+    /// paused but the turn is not over.
+    @MainActor
+    private func syncBackgroundActivity() {
+        var ids = messageStore.streamingSessionIDs
+        if let pending = appState.pendingQuestionRequest {
+            ids.insert(pending.sessionID)
+        }
+        if ids != appState.streamingSessionIDs {
+            appState.streamingSessionIDs = ids
+        }
+    }
+
+    /// Whether the chat currently on screen has a live turn. The composer
+    /// shows Stop only for that chat; a background turn is stopped from its
+    /// own row/chat, not from an unrelated composer.
+    private var visibleSessionIsStreaming: Bool {
+        guard let sessionID = messageStore.currentSessionID else { return false }
+        return appState.streamingSessionIDs.contains(sessionID)
     }
 
     private func editMessageFromNotification(_ notification: Notification) {
@@ -721,7 +854,9 @@ struct ChatPanelView: View {
         let isSameSessionRefresh = messageStore.currentSessionID == sessionID
             && !messageStore.messages.isEmpty
         if !isSameSessionRefresh {
-            messageStore.clear()
+            // Detach the visible feed instead of wiping it: other chats may be
+            // mid-stream and their feeds must stay intact.
+            messageStore.detach()
             messageStore.currentSessionID = sessionID
         }
         messageStore.loadingSessionID = sessionID
@@ -831,7 +966,8 @@ struct ChatPanelView: View {
     private func recordRejectedSend(text: String,
                                     files: [FileInfo],
                                     images: [ClipboardImage],
-                                    error: String) {
+                                    error: String,
+                                    existingUserMessageID: String? = nil) {
         let preparedSessionID: String?
         if messageStore.currentSessionID == nil {
             preparedSessionID = appState.prepareLocalSessionForSend(title: text)
@@ -839,13 +975,17 @@ struct ChatPanelView: View {
         } else {
             preparedSessionID = messageStore.currentSessionID
         }
-        let userMessage = Message(
-            role: .user,
-            content: text,
-            files: files.isEmpty ? nil : files,
-            parts: MessagePartsBuilder.displayParts(text: text, images: images)
-        )
-        messageStore.append(userMessage)
+        // Force-send already appended the user bubble; never append a second
+        // copy just because the send was rejected.
+        if existingUserMessageID == nil {
+            let userMessage = Message(
+                role: .user,
+                content: text,
+                files: files.isEmpty ? nil : files,
+                parts: MessagePartsBuilder.displayParts(text: text, images: images)
+            )
+            messageStore.append(userMessage)
+        }
         messageStore.append(Message(role: .assistant, content: error, isFinished: true))
         if let preparedSessionID,
            let preparedSession = appState.sessions.first(where: { $0.id == preparedSessionID }) {
@@ -854,13 +994,15 @@ struct ChatPanelView: View {
     }
 
     @MainActor
-    private func prepareSessionBeforeAppending(route: SendRoute, title: String) async -> String? {
-        if let existing = messageStore.currentSessionID {
-            return existing
-        }
-        if let selected = appState.selectedSession?.id {
-            messageStore.currentSessionID = selected
-            return selected
+    private func prepareSessionBeforeAppending(
+        route: SendRoute,
+        title: String,
+        sessionID: String?
+    ) async -> String? {
+        // The send targets the session captured when it was requested, not
+        // whatever chat happens to be visible after the preparation awaits.
+        if let sessionID {
+            return sessionID
         }
 
         if case .mimoServe = route {
@@ -902,16 +1044,13 @@ struct ChatPanelView: View {
                     directory: appState.selectedWorkspace?.path ?? remote.directory,
                     select: false
                 )
-                messageStore.currentSessionID = remote.id
                 return remote.id
             } catch {
                 return nil
             }
         }
 
-        let localID = appState.prepareLocalSessionForSend(title: title)
-        messageStore.currentSessionID = localID
-        return localID
+        return appState.prepareLocalSessionForSend(title: title)
     }
 
     func sendMessage() {
@@ -1041,13 +1180,22 @@ struct ChatPanelView: View {
                 text: text,
                 files: files,
                 images: images,
-                type: MessageType(from: appState.agentMode)
+                type: MessageType(from: appState.agentMode),
+                sessionID: messageStore.currentSessionID ?? appState.selectedSession?.id
             )
             return
         }
         
+        // Capture the target chat now: the task may start after the user has
+        // already switched to another chat.
+        let targetSessionID = messageStore.currentSessionID ?? appState.selectedSession?.id
         currentTask = Task {
-            await sendDirectly(text: text, files: files, images: images)
+            await sendDirectly(
+                text: text,
+                files: files,
+                images: images,
+                sessionID: targetSessionID
+            )
         }
     }
 
@@ -1068,7 +1216,8 @@ struct ChatPanelView: View {
                 text: current.text,
                 files: current.files,
                 images: current.images,
-                type: MessageType(from: appState.agentMode)
+                type: MessageType(from: appState.agentMode),
+                sessionID: queued.sessionID
             )
         } else if stashedComposerDraft == nil, !current.isEmpty {
             stashedComposerDraft = current
@@ -1091,13 +1240,23 @@ struct ChatPanelView: View {
         messageQueue.remove(id: queued.id)
         stopGeneration(cancelQueued: false)
         currentTask = Task { @MainActor in
-            _ = await previousTask?.value
-            guard !Task.isCancelled else { return }
-            await sendDirectly(
-                text: queued.text,
-                files: queued.files,
-                images: queued.images,
-                agentModeOverride: queued.type.toAgentMode
+            // Show the bubble BEFORE waiting for the interrupted turn. Waiting
+            // first left the feed without the message for as long as the old
+            // turn kept streaming; the user re-sent and the DB ended up with
+            // duplicate user messages for one forced turn.
+            await ForcedSendOrderingLogic.run(
+                showUserMessage: { await appendOptimisticUserMessage(queued) },
+                waitForPreviousTurn: { _ = await previousTask?.value },
+                send: { optimisticID in
+                    await sendDirectly(
+                        text: queued.text,
+                        files: queued.files,
+                        images: queued.images,
+                        agentModeOverride: queued.type.toAgentMode,
+                        existingUserMessageID: optimisticID,
+                        sessionID: queued.sessionID
+                    )
+                }
             )
             guard !Task.isCancelled else { return }
             messageQueue.resume()
@@ -1105,6 +1264,37 @@ struct ChatPanelView: View {
                 messageQueue.processNext()
             }
         }
+    }
+
+    /// Appends the user bubble for a forced send immediately, with the same
+    /// session the send will use. Context parts and attachment payloads are
+    /// filled in by `sendDirectly` once compilation finishes.
+    @MainActor
+    private func appendOptimisticUserMessage(_ queued: QueuedMessage) async -> String? {
+        let route = currentRoute()
+        let sessionID = await prepareSessionBeforeAppending(
+            route: route,
+            title: queued.text,
+            sessionID: queued.sessionID
+                ?? messageStore.currentSessionID
+                ?? appState.selectedSession?.id
+        )
+        let message = Message(
+            role: .user,
+            content: queued.text,
+            files: queued.files.isEmpty ? nil : queued.files,
+            parts: MessagePartsBuilder.displayParts(text: queued.text, images: queued.images)
+        )
+        messageStore.append(message, to: sessionID)
+        if messageStore.currentSessionID == nil, let sessionID {
+            messageStore.currentSessionID = sessionID
+        }
+        if let sessionID,
+           appState.selectedSession?.id == nil || appState.selectedSession?.id == sessionID,
+           let preparedSession = appState.sessions.first(where: { $0.id == sessionID }) {
+            appState.selectedSession = preparedSession
+        }
+        return message.id
     }
 
     private func restoreStashedDraftIfNeeded() {
@@ -1222,15 +1412,18 @@ struct ChatPanelView: View {
     /// Replace the model-bound history with a factual summary message. The
     /// full chat stays visible; `historyForModel` cuts at the newest summary.
     @MainActor
-    private func compactConversation(reason: String) async {
+    private func compactConversation(reason: String, sessionID: String? = nil) async {
         guard !isCompacting else { return }
-        let history = ConversationCompactionLogic.historyForModel(messageStore.messages)
+        let targetSessionID = sessionID ?? messageStore.currentSessionID
+        let history = ConversationCompactionLogic.historyForModel(
+            messageStore.messages(in: targetSessionID)
+        )
         guard ConversationCompactionLogic.plan(messages: history) != nil else {
             messageStore.append(Message(
                 role: .assistant,
                 content: ConversationSummarizerError.nothingToCompact.errorDescription ?? "Nothing to compact.",
                 isFinished: true
-            ))
+            ), to: targetSessionID)
             return
         }
         let route = currentRoute()
@@ -1239,7 +1432,7 @@ struct ChatPanelView: View {
                 role: .assistant,
                 content: "Compaction is not available for this provider: its history is kept on the server (mimo/opencode serve, web or ACP), so a local summary would not shrink it.",
                 isFinished: true
-            ))
+            ), to: targetSessionID)
             return
         }
         isCompacting = true
@@ -1249,32 +1442,37 @@ struct ChatPanelView: View {
         let summarizer = ConversationSummarizer(transport: summaryTransport(for: route))
         do {
             let summary = try await summarizer.summarize(messages: history)
-            messageStore.append(ConversationCompactionLogic.summaryMessage(summary: summary))
+            messageStore.append(
+                ConversationCompactionLogic.summaryMessage(summary: summary),
+                to: targetSessionID
+            )
             let afterTokens = ContextUsageLogic.estimateTokens(summary)
             messageStore.append(Message(
                 role: .assistant,
                 content: "Context compacted (\(reason)): \(history.count) messages summarized, ~\(ContextUsageLogic.formatTokens(beforeTokens)) → ~\(ContextUsageLogic.formatTokens(afterTokens)) tokens. The full chat stays visible; the model now continues from the summary.",
                 isFinished: true
-            ))
+            ), to: targetSessionID)
         } catch {
             messageStore.append(Message(
                 role: .assistant,
                 content: "Context compaction failed: \(error.localizedDescription)",
                 isFinished: true
-            ))
+            ), to: targetSessionID)
         }
     }
 
     /// Auto-compaction trigger (plan: 90% of the window). Runs before the
     /// outgoing history is built; failures never block the send.
     @MainActor
-    private func autoCompactIfNeeded(route: SendRoute) async {
+    private func autoCompactIfNeeded(route: SendRoute, sessionID: String?) async {
         guard supportsLocalHistoryCompaction(route) else { return }
-        let history = ConversationCompactionLogic.historyForModel(messageStore.messages)
+        let history = ConversationCompactionLogic.historyForModel(
+            messageStore.messages(in: sessionID)
+        )
         guard !history.isEmpty else { return }
         let usage = ContextUsageLogic.usage(messages: history, limitTokens: selectedContextLimit)
         guard ContextUsageLogic.shouldCompact(usage) else { return }
-        await compactConversation(reason: "auto at \(usage.percent)%")
+        await compactConversation(reason: "auto at \(usage.percent)%", sessionID: sessionID)
     }
 
     func sendDirectly(
@@ -1283,7 +1481,9 @@ struct ChatPanelView: View {
         images: [ClipboardImage] = [],
         agentModeOverride: AgentMode? = nil,
         retryCount: Int = 0,
-        retryPlan: SessionBusyRetryLogic.RetryPlan? = nil
+        retryPlan: SessionBusyRetryLogic.RetryPlan? = nil,
+        existingUserMessageID: String? = nil,
+        sessionID explicitSessionID: String? = nil
     ) async {
         if let error = SendReadinessLogic.connectionValidationError(
             serverConnected: appState.serverConnected,
@@ -1298,7 +1498,13 @@ struct ChatPanelView: View {
                 : appState.selectedProviderConnected
         ) {
             await MainActor.run {
-                self.recordRejectedSend(text: text, files: files, images: images, error: error)
+                self.recordRejectedSend(
+                    text: text,
+                    files: files,
+                    images: images,
+                    error: error,
+                    existingUserMessageID: existingUserMessageID
+                )
             }
             return
         }
@@ -1324,7 +1530,13 @@ struct ChatPanelView: View {
             effectiveModelID: appState.effectiveSelectedModel()
         ) {
             await MainActor.run {
-                self.recordRejectedSend(text: text, files: files, images: images, error: error)
+                self.recordRejectedSend(
+                    text: text,
+                    files: files,
+                    images: images,
+                    error: error,
+                    existingUserMessageID: existingUserMessageID
+                )
                 appState.isLoading = false
                 appState.isStreaming = false
             }
@@ -1341,21 +1553,34 @@ struct ChatPanelView: View {
             localProviders: localProviders,
             webProviderIDs: appState.webProviderIDs
         )
+        // A turn belongs to the chat it was started in. Every `await` below
+        // can span a chat switch (background generation), so the turn must
+        // capture its session now and never read the visible one again.
+        let turnSessionID: String? = explicitSessionID
+            ?? retryPlan?.sessionID
+            ?? messageStore.currentSessionID
+            ?? appState.selectedSession?.id
         // Auto-compact BEFORE any history is assembled for this turn (plan:
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.
-        await autoCompactIfNeeded(route: route)
+        await autoCompactIfNeeded(route: route, sessionID: turnSessionID)
         // The point context replaces the old auto-search block: the compiler
         // ranks the index, cites real lines and reports what it could not get.
         // It runs before the session is prepared, so a failure can degrade to
         // the raw message instead of blocking the send.
         let pointContextProjectRoot = appState.selectedWorkspace?.path ?? ""
+        // A chat without a project has no project context to collect. Running
+        // the collector with an empty root used to fire "Не удалось собрать
+        // точечный контекст / Состояние задачи не сохранено" on every send in
+        // "Без проекта". There is nothing to warn about: the send is complete
+        // without project evidence.
+        let hasProjectForContext = !pointContextProjectRoot.isEmpty
         // Do not scan the project or flash the loader when the feature is off.
         var pointContextRecords: [FileIndexRecord] = []
         var projectMemories: [ProjectMemoryChunk] = []
         var taskLedger: TaskLedger?
         var contextWarning: String?
-        if appState.isPointContextEnabled {
+        if appState.isPointContextEnabled && hasProjectForContext {
             await MainActor.run { appState.isCompilingContext = true }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
             // Memory lives in the project database. A read failure must be
@@ -1373,7 +1598,7 @@ struct ChatPanelView: View {
             // messages still visible, so a pruned feed cannot forget an earlier
             // constraint. Session ids are assigned before the first append, so
             // a brand-new session simply has no ledger yet.
-            let ledgerSessionID = messageStore.currentSessionID ?? appState.selectedSession?.id ?? ""
+            let ledgerSessionID = turnSessionID ?? ""
             if !ledgerSessionID.isEmpty {
                 var persisted: TaskLedger?
                 do {
@@ -1392,7 +1617,7 @@ struct ChatPanelView: View {
                     sessionID: ledgerSessionID,
                     projectPath: pointContextProjectRoot,
                     goal: appState.currentSessionGoal,
-                    messages: messageStore.messages,
+                    messages: messageStore.messages(in: turnSessionID),
                     memories: projectMemories,
                     previous: persisted
                 )
@@ -1415,7 +1640,7 @@ struct ChatPanelView: View {
         // any failure is reported as a fallback instead of blocking the send.
         var localPlan: LocalQueryPlanResult?
         var preparedBoard: ContextBoard?
-        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled {
+        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled, hasProjectForContext {
             let board = ContextBoardBuilder.build(
                 projectPath: pointContextProjectRoot,
                 records: pointContextRecords
@@ -1446,10 +1671,16 @@ struct ChatPanelView: View {
         let preparedSessionID: String?
         if let retryPlan {
             preparedSessionID = retryPlan.sessionID
-            await MainActor.run { messageStore.currentSessionID = retryPlan.sessionID }
         } else {
-            preparedSessionID = await prepareSessionBeforeAppending(route: route, title: text)
+            preparedSessionID = await prepareSessionBeforeAppending(
+                route: route,
+                title: text,
+                sessionID: turnSessionID
+            )
         }
+        // Everything below writes to this session, even if the user opened
+        // another chat while the context was being prepared.
+        let sendSessionID = preparedSessionID ?? turnSessionID
         let userMessage = Message(
             role: .user,
             content: text,
@@ -1457,20 +1688,44 @@ struct ChatPanelView: View {
             parts: MessagePartsBuilder.displayParts(text: text, images: images) + contextParts
         )
         await MainActor.run {
-            if retryPlan == nil {
-                messageStore.append(userMessage)
-                if let warning = preparation.warning {
-                    // Visible degradation: the send goes ahead with the raw
-                    // message, and the user is told why no context was added.
-                    messageStore.append(Message(
-                        role: .assistant,
-                        content: "⚠️ \(warning)",
-                        isFinished: true
-                    ))
+            // A brand-new chat becomes the visible feed. If the user opened
+            // another chat meanwhile, leave their selection alone.
+            if messageStore.currentSessionID == nil, let sendSessionID {
+                messageStore.currentSessionID = sendSessionID
+            }
+            switch SendUserMessageAppendLogic.action(
+                hasRetryPlan: retryPlan != nil,
+                existingUserMessageID: existingUserMessageID
+            ) {
+            case .appendNew:
+                messageStore.append(userMessage, to: sendSessionID)
+            case .updateExisting:
+                // Force-send already showed the bubble; keep it exactly one
+                // message and attach the compiled context/attachments now.
+                if let existingUserMessageID {
+                    messageStore.update(id: existingUserMessageID) { message in
+                        message.parts = userMessage.parts
+                        message.files = userMessage.files
+                    }
                 }
+            case .skip:
+                break
+            }
+            if retryPlan == nil, let warning = preparation.warning {
+                // Visible degradation: the send goes ahead with the raw
+                // message, and the user is told why no context was added.
+                messageStore.append(Message(
+                    role: .assistant,
+                    content: "⚠️ \(warning)",
+                    isFinished: true
+                ), to: sendSessionID)
             }
             if let preparedSessionID,
-               let preparedSession = appState.sessions.first(where: { $0.id == preparedSessionID }) {
+               let preparedSession = appState.sessions.first(where: { $0.id == preparedSessionID }),
+               appState.selectedSession?.id == nil || appState.selectedSession?.id == sendSessionID {
+                // Only follow the send when the user is still looking at the
+                // chat it was started in. A background send must not yank the
+                // selection back from the chat the user opened meanwhile.
                 appState.selectedSession = preparedSession
             }
         }
@@ -1478,7 +1733,10 @@ struct ChatPanelView: View {
         await MainActor.run {
             currentAssistantMessageID = assistantID
             if retryPlan == nil {
-                messageStore.append(Message(id: assistantID, role: .assistant, content: "", isStreaming: true))
+                messageStore.append(
+                    Message(id: assistantID, role: .assistant, content: "", isStreaming: true),
+                    to: sendSessionID
+                )
             } else {
                 messageStore.update(id: assistantID) { message in
                     message.content = ""
@@ -1592,7 +1850,7 @@ struct ChatPanelView: View {
                 // Prior turns = everything except the just-appended user message
                 // and the empty assistant placeholder (audit P1 — carry history).
                 let prior = await MainActor.run { () -> [ChatHistoryBuilder.Turn] in
-                    let msgs = messageStore.messages
+                    let msgs = messageStore.messages(in: sendSessionID)
                     let modelHistory = ConversationCompactionLogic.historyForModel(msgs)
                     let history = modelHistory.count >= 2 ? Array(modelHistory.dropLast(2)) : []
                     // A long transcript is replaced by the ledger inside
@@ -1650,21 +1908,37 @@ struct ChatPanelView: View {
                 )
                 executor.subagentLauncher = subagentLauncher(
                     projectRoot: projectRoot,
-                    transport: .openAICompatible(baseURL: URL(string: baseURL) ?? URL(fileURLWithPath: "/"), apiKey: apiKey ?? "", model: model)
+                    transport: .openAICompatible(baseURL: URL(string: baseURL) ?? URL(fileURLWithPath: "/"), apiKey: apiKey ?? "", model: model),
+                    sessionID: sendSessionID
                 )
                 let maxIterations = 15
                 var conversation = msgs
                 var finalText = ""
                 var finalUsage: UsageCapture? = nil
+                // Thinking channel across iterations (`reasoning_content` /
+                // `reasoning` / `thinking`). It used to be dropped, so the
+                // reasoning spoiler stayed empty on direct providers.
+                var reasoningChunks: [String] = []
+                var reasoningStartedAt: Date?
                 var toolParts: [MessagePartContent] = []
                 do {
                     for iteration in 0..<maxIterations {
-                        let result = try await DirectChatClient.send(
-                            baseURL: baseURL, apiKey: apiKey, model: model,
-                            messages: conversation, parameters: params
+                        let result = try await streamDirectChat(
+                            baseURL: baseURL,
+                            apiKey: apiKey,
+                            model: model,
+                            messages: conversation,
+                            parameters: params,
+                            assistantID: assistantID,
+                            toolParts: toolParts,
+                            reasoningChunks: reasoningChunks
                         )
                         let response = result.content
                         finalUsage = result.usage
+                        if let reasoning = result.reasoning, !reasoning.isEmpty {
+                            if reasoningStartedAt == nil { reasoningStartedAt = Date() }
+                            reasoningChunks.append(reasoning)
+                        }
                         let calls = WebToolProtocolEmulator.parseToolCalls(from: response)
                         if calls.isEmpty || WebToolProtocolEmulator.shouldStopLoop(
                             iteration: iteration, maxIterations: maxIterations, lastResponse: response
@@ -1691,7 +1965,14 @@ struct ChatPanelView: View {
                                 callID: item.callID
                             ))
                         }
-                        publishToolParts(toolParts, assistantID: assistantID)
+                        publishToolParts(
+                            AssistantTurnPartsLogic.directParts(
+                                reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
+                                toolParts: toolParts,
+                                answer: ""
+                            ),
+                            assistantID: assistantID
+                        )
                         enqueueLocalToolApprovals(
                             prepared.compactMap(\.approval),
                             assistantID: assistantID
@@ -1724,7 +2005,14 @@ struct ChatPanelView: View {
                                         settingResult: message,
                                         callID: item.callID
                                     )
-                                    publishToolParts(toolParts, assistantID: assistantID)
+                                    publishToolParts(
+                                        AssistantTurnPartsLogic.directParts(
+                                            reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
+                                            toolParts: toolParts,
+                                            answer: ""
+                                        ),
+                                        assistantID: assistantID
+                                    )
                                     continue
                                 case .notApplicable:
                                     resultsBlock += WebToolProtocolEmulator.formatToolResult(
@@ -1750,7 +2038,14 @@ struct ChatPanelView: View {
                                         settingResult: denial,
                                         callID: item.callID
                                     )
-                                    publishToolParts(toolParts, assistantID: assistantID)
+                                    publishToolParts(
+                                        AssistantTurnPartsLogic.directParts(
+                                            reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
+                                            toolParts: toolParts,
+                                            answer: ""
+                                        ),
+                                        assistantID: assistantID
+                                    )
                                     continue
                                 }
                             }
@@ -1764,27 +2059,49 @@ struct ChatPanelView: View {
                                 settingResult: toolResult,
                                 callID: item.callID
                             )
-                            publishToolParts(toolParts, assistantID: assistantID)
+                            publishToolParts(
+                                AssistantTurnPartsLogic.directParts(
+                                    reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
+                                    toolParts: toolParts,
+                                    answer: ""
+                                ),
+                                assistantID: assistantID
+                            )
                         }
                         conversation.append(DirectChatMessage(role: "assistant", content: response))
                         conversation.append(DirectChatMessage(role: "user", content: resultsBlock))
                         finalText = response
                         await MainActor.run {
+                            let reasoning = DirectChatClient.mergedReasoning(reasoningChunks)
                             self.messageStore.update(id: assistantID) { msg in
                                 msg.content = response + "\n\n⏳ Running tools..."
-                                msg.parts = toolParts
+                                msg.parts = AssistantTurnPartsLogic.directParts(
+                                    reasoning: reasoning,
+                                    toolParts: toolParts,
+                                    answer: ""
+                                )
+                                msg.reasoning = reasoning ?? ""
+                                msg.reasoningStartedAt = reasoningStartedAt
                                 msg.isStreaming = true
                             }
                         }
                     }
                     await MainActor.run {
+                        let reasoning = DirectChatClient.mergedReasoning(reasoningChunks)
                         self.appState.isLoading = false
                         self.appState.isStreaming = false
                         self.streamingText = ""
                         self.messageStore.update(id: assistantID) { msg in
                             msg.content = finalText
                             msg.usage = finalUsage
-                            msg.parts = toolParts
+                            msg.parts = AssistantTurnPartsLogic.directParts(
+                                reasoning: reasoning,
+                                toolParts: toolParts,
+                                answer: finalText
+                            )
+                            msg.reasoning = reasoning ?? ""
+                            msg.reasoningStartedAt = reasoningStartedAt
+                            msg.reasoningEndedAt = reasoning == nil ? nil : Date()
                             msg.isFinished = true
                             msg.isStreaming = false
                         }
@@ -1794,10 +2111,22 @@ struct ChatPanelView: View {
                     await MainActor.run {
                         self.appState.isLoading = false
                         self.appState.isStreaming = false
-                        self.messageStore.update(id: assistantID) { msg in
-                            msg.content = "Local model error: \(error.localizedDescription)"
-                            msg.isFinished = true
-                            msg.isStreaming = false
+                        if Task.isCancelled || error is CancellationError {
+                            // Stop pressed: keep whatever already streamed in
+                            // instead of replacing it with an error.
+                            self.messageStore.update(id: assistantID) { msg in
+                                msg.isFinished = true
+                                msg.isStreaming = false
+                                if msg.content.isEmpty {
+                                    msg.content = L.t(AppLocalizationKey.locGenerationStopped)
+                                }
+                            }
+                        } else {
+                            self.messageStore.update(id: assistantID) { msg in
+                                msg.content = "Local model error: \(error.localizedDescription)"
+                                msg.isFinished = true
+                                msg.isStreaming = false
+                            }
                         }
                         self.currentAssistantMessageID = nil
                     }
@@ -1811,7 +2140,9 @@ struct ChatPanelView: View {
                 let model = appState.effectiveSelectedModel()
                 await MainActor.run { store.syncModel(model) }
                 let priorTurns = await MainActor.run { () -> [MyCoderAutoFreeHistoryLogic.Turn] in
-                    let modelHistory = ConversationCompactionLogic.historyForModel(messageStore.messages)
+                    let modelHistory = ConversationCompactionLogic.historyForModel(
+                        messageStore.messages(in: sendSessionID)
+                    )
                     let priorMessages = modelHistory.count >= 2
                         ? Array(modelHistory.dropLast(2))
                         : []
@@ -1842,7 +2173,7 @@ struct ChatPanelView: View {
                 let projectRoot = appState.toolWorkingDirectory
                 let autoFreeContext = OpenCodeRequestContext(
                     sessionID: OpenCodeRequestContext.sessionID(
-                        from: messageStore.currentSessionID ?? appState.selectedSession?.id ?? ""
+                        from: sendSessionID ?? ""
                     ),
                     projectID: OpenCodeRequestContext.projectID(fromPath: projectRoot)
                 )
@@ -1852,7 +2183,8 @@ struct ChatPanelView: View {
                 )
                 executor.subagentLauncher = subagentLauncher(
                     projectRoot: projectRoot,
-                    transport: .autoFree
+                    transport: .autoFree,
+                    sessionID: sendSessionID
                 )
                 let maxIterations = 15
                 var streamedContent = ""
@@ -1880,7 +2212,11 @@ struct ChatPanelView: View {
                             }
                             let display = [attachmentNotice, response].filter { !$0.isEmpty }.joined(separator: "\n\n")
                             let currentSegments = streamedReasoningSegments + (iterationReasoning.isEmpty ? [] : [iterationReasoning])
-                            let currentParts = allToolCallParts + (iterationReasoning.isEmpty ? [] : [MessagePartContent.reasoning(iterationReasoning)])
+                            let currentParts = AssistantTurnPartsLogic.autoFreeStreamingParts(
+                                timelineParts: allToolCallParts,
+                                reasoning: iterationReasoning,
+                                answer: display
+                            )
                             await MainActor.run {
                                 self.messageStore.update(id: assistantID) { m in
                                     m.content = display
@@ -2062,7 +2398,10 @@ struct ChatPanelView: View {
                         self.messageStore.update(id: assistantID) { m in
                             m.content = finalDisplay
                             m.reasoning = streamedReasoningSegments.joined(separator: "\n\n")
-                            m.parts = allToolCallParts
+                            m.parts = AssistantTurnPartsLogic.autoFreeFinalParts(
+                                timelineParts: allToolCallParts,
+                                answer: finalDisplay
+                            )
                             m.isFinished = true
                             m.isStreaming = false
                         }
@@ -2103,7 +2442,7 @@ struct ChatPanelView: View {
                     }
                     return
                 }
-                let chatID = messageStore.currentSessionID ?? appState.selectedSession?.id ?? assistantID
+                let chatID = sendSessionID ?? assistantID
                 activeWebChatID = chatID
                 await runWebChatTurn(config: cfg, text: modelText, assistantID: assistantID, chatID: chatID)
                 return
@@ -2177,13 +2516,15 @@ struct ChatPanelView: View {
                 }
                 self.startServeTimeout(assistantID: assistantID)
             }
-            guard let sessionID = messageStore.currentSessionID
+            guard let sessionID = sendSessionID
+                    ?? messageStore.currentSessionID
                     ?? appState.selectedSession?.id
                     ?? selectedID else {
                 throw MimoServeError.httpError(statusCode: 0)
             }
 
-            await MainActor.run { messageStore.currentSessionID = sessionID }
+            // Do not re-pin the visible chat: the user may have opened another
+            // one while this turn was being prepared.
             
             await MainActor.run {
                 sseClient.onEvent = { type, payload in
@@ -2224,8 +2565,8 @@ struct ChatPanelView: View {
             }
 
             await MainActor.run {
-                let hasPendingQuestion = self.appState.pendingQuestionRequest != nil
-                let mergedParts = messageStore.messages.first(where: { $0.id == self.currentAssistantMessageID })?.parts ?? []
+                let hasPendingQuestion = self.appState.pendingQuestionRequest?.sessionID == sessionID
+                let mergedParts = messageStore.message(id: self.currentAssistantMessageID ?? "")?.parts ?? []
                 let waitingForQuestion = hasPendingQuestion || PlanQuestionLogic.hasPendingQuestions(in: mergedParts)
 
                 if SessionSendLogic.shouldAwaitSSE(
@@ -2243,7 +2584,7 @@ struct ChatPanelView: View {
 
                 if let firstResponse {
                     let merged = MessageResponseMergeLogic.mergedAssistantMessage(
-                        existing: messageStore.messages.first(where: { $0.id == self.currentAssistantMessageID }) ?? Message(role: .assistant, content: ""),
+                        existing: messageStore.message(id: self.currentAssistantMessageID ?? "") ?? Message(role: .assistant, content: ""),
                         serverParts: firstResponse.parts,
                         serverText: firstResponse.textContent,
                         streamingText: self.streamingText
@@ -2267,9 +2608,10 @@ struct ChatPanelView: View {
                     self.appState.isStreaming = false
                     self.streamingText = ""
                     self.currentAssistantMessageID = nil
-                    self.refreshGitForCurrentSession()
-                    // Notify: task complete
-                    if let session = self.appState.selectedSession {
+                    self.appState.scheduleGitRefresh(sessionID: sendSessionID)
+                    // Notify: task complete. The turn belongs to its own chat,
+                    // which may not be the one currently on screen.
+                    if let session = self.appState.sessions.first(where: { $0.id == sessionID }) {
                         self.appState.notificationService.taskCompleted(
                             sessionTitle: session.title,
                             sessionID: session.id
@@ -2286,7 +2628,7 @@ struct ChatPanelView: View {
                     }
                     self.appState.notificationService.sessionBusy()
                 }
-                if let sessionID = messageStore.currentSessionID ?? selectedID,
+                if let sessionID = sendSessionID ?? selectedID,
                    !sessionID.isEmpty {
                     let currentPlan = SessionBusyRetryLogic.RetryPlan(
                         retryCount: retryCount,
@@ -2347,8 +2689,65 @@ struct ChatPanelView: View {
                     msg.isFinished = true
                     msg.isStreaming = false
                 }
-                self.refreshGitForCurrentSession()
+                self.appState.scheduleGitRefresh(sessionID: sendSessionID)
             }
+        }
+    }
+
+    /// Direct OpenAI-compatible turn with real token streaming. The answer is
+    /// written into its own chat's feed as it arrives, so switching chats no
+    /// longer hides the text until the whole response is ready. Providers that
+    /// reject `stream: true` fall back to the plain request.
+    private func streamDirectChat(
+        baseURL: String,
+        apiKey: String?,
+        model: String,
+        messages: [DirectChatMessage],
+        parameters: ModelCallParameters,
+        assistantID: String,
+        toolParts: [MessagePartContent],
+        reasoningChunks: [String]
+    ) async throws -> DirectChatResult {
+        do {
+            return try await DirectChatStreamer.stream(
+                baseURL: baseURL,
+                apiKey: apiKey,
+                model: model,
+                messages: messages,
+                parameters: parameters
+            ) { update in
+                let reasoning = DirectChatClient.mergedReasoning(
+                    reasoningChunks + [update.reasoning]
+                )
+                self.messageStore.update(id: assistantID) { msg in
+                    if !update.content.isEmpty {
+                        msg.content = update.content
+                    }
+                    msg.reasoning = reasoning ?? ""
+                    if msg.reasoningStartedAt == nil, reasoning != nil {
+                        msg.reasoningStartedAt = Date()
+                    }
+                    msg.parts = AssistantTurnPartsLogic.directParts(
+                        reasoning: reasoning,
+                        toolParts: toolParts,
+                        answer: update.content
+                    )
+                    msg.isStreaming = true
+                }
+            }
+        } catch let error as DirectChatError {
+            // A provider that does not implement SSE answers 400/405/422/501.
+            if case .http(let status, _) = error,
+               [400, 405, 422, 501].contains(status) {
+                return try await DirectChatClient.send(
+                    baseURL: baseURL,
+                    apiKey: apiKey,
+                    model: model,
+                    messages: messages,
+                    parameters: parameters
+                )
+            }
+            throw error
         }
     }
 
@@ -2374,19 +2773,19 @@ struct ChatPanelView: View {
         }
     }
 
-    private func refreshGitForCurrentSession() {
-        appState.scheduleGitRefresh(sessionID: messageStore.currentSessionID)
-    }
-    
     /// One assistant message can have several gated calls. They are all
     /// registered and rendered before the loop starts awaiting them, so the
     /// user sees the full queue instead of one modal at a time.
 
     private func subagentLauncher(
         projectRoot: String,
-        transport: SubagentRunner.Transport
+        transport: SubagentRunner.Transport,
+        sessionID: String?
     ) -> (String, String) async -> String {
-        let parentSessionID = messageStore.currentSessionID ?? appState.selectedSession?.id ?? ""
+        let parentSessionID = sessionID
+            ?? messageStore.currentSessionID
+            ?? appState.selectedSession?.id
+            ?? ""
         let projectKey = appState.selectedWorkspace?.id ?? ChatSession.standaloneProjectKey
         let directory = appState.selectedWorkspace?.path ?? ChatSession.standaloneProjectKey
         let context = SubagentRunner.Context(
@@ -2507,7 +2906,9 @@ struct ChatPanelView: View {
                 title: "Tool approval needed",
                 message: "\(approval.tool) is waiting in \(sessionTitle). Allow or deny it in the chat.",
                 type: .warning,
-                action: sessionID.isEmpty ? nil : .openSession(sessionID)
+                action: sessionID.isEmpty
+                    ? nil
+                    : .openMessage(sessionID: sessionID, messageID: assistantID)
             ))
         }
         messageStore.update(id: assistantID) { msg in
@@ -2576,11 +2977,16 @@ struct ChatPanelView: View {
     }
 
     func stopGeneration(cancelQueued: Bool) {
+        // The running turn belongs to the chat it was started in; stopping it
+        // must abort that session even if the user is reading another one.
+        let turnSessionID = messageStore.sessionID(owningMessageID: currentAssistantMessageID ?? "")
+            ?? messageStore.currentSessionID
+            ?? appState.selectedSession?.id
         currentTask?.cancel()
         currentTask = nil
         // A direct-model turn may be suspended on queued approvals. Deny
         // only this chat's queue; approvals in other chats keep waiting.
-        if let sessionID = messageStore.currentSessionID ?? appState.selectedSession?.id {
+        if let sessionID = turnSessionID {
             let pendingIDs = ToolApprovalCenter.shared.pendingApprovals(in: sessionID).map(\.id)
             ToolApprovalCenter.shared.cancelPending(in: sessionID)
             for id in pendingIDs {
@@ -2615,7 +3021,7 @@ struct ChatPanelView: View {
         }
         #endif
 
-        if let sessionID = messageStore.currentSessionID {
+        if let sessionID = turnSessionID {
             Task {
                 try? await appState.mimoClient.abortSession(id: sessionID)
             }
@@ -2637,7 +3043,7 @@ struct ChatPanelView: View {
         currentAssistantMessageID = nil
         streamingText = ""
         appState.notificationService.generationStopped()
-        refreshGitForCurrentSession()
+        appState.scheduleGitRefresh(sessionID: turnSessionID)
     }
     
     /// The user message the navigator should mark as current: resolved from
@@ -2690,13 +3096,19 @@ struct ChatPanelView: View {
                 text: draft.text,
                 files: draft.files,
                 images: draft.images,
-                type: MessageType(from: appState.agentMode)
+                type: MessageType(from: appState.agentMode),
+                sessionID: messageStore.currentSessionID ?? appState.selectedSession?.id
             )
             return
         }
 
         Task {
-            await sendDirectly(text: draft.text, files: draft.files, images: draft.images)
+            await sendDirectly(
+                text: draft.text,
+                files: draft.files,
+                images: draft.images,
+                sessionID: messageStore.currentSessionID ?? appState.selectedSession?.id
+            )
         }
     }
 
@@ -3543,7 +3955,11 @@ struct ChatPanelView: View {
         guard let props = payload["properties"] as? [String: Any] else { return }
         let sessionID = props["sessionID"] as? String ?? ""
         
-        if sessionID != messageStore.currentSessionID { return }
+        // Events belong to the chat that started the turn, which may not be the
+        // chat on screen while it streams in the background. Accept events for
+        // the turn's session and for the visible one; drop everything else.
+        let turnSessionID = messageStore.sessionID(owningMessageID: currentAssistantMessageID ?? "")
+        guard sessionID == turnSessionID || sessionID == messageStore.currentSessionID else { return }
         
         switch type {
         case "question.asked":
@@ -3559,7 +3975,9 @@ struct ChatPanelView: View {
             }
 
         case "question.replied", "question.rejected":
-            appState.pendingQuestionRequest = nil
+            if appState.pendingQuestionRequest?.sessionID == sessionID {
+                appState.pendingQuestionRequest = nil
+            }
 
         case "message.part.delta":
             let delta = props["delta"] as? String ?? ""
@@ -3687,15 +4105,19 @@ struct ChatPanelView: View {
 
     @MainActor
     private func finishStreaming() {
-        guard appState.pendingQuestionRequest == nil else { return }
+        let assistantID = currentAssistantMessageID ?? ""
+        let turnSessionID = messageStore.sessionID(owningMessageID: assistantID)
+            ?? appState.selectedSession?.id
+        // A question pauses only its own chat. Another chat's question must not
+        // keep this turn marked as streaming forever.
+        guard appState.pendingQuestionRequest?.sessionID != turnSessionID else { return }
         serveTimeoutTask?.cancel()
         serveTimeoutTask = nil
         appState.isLoading = false
         appState.isStreaming = false
         sseClient.disconnect()
 
-        let assistantID = currentAssistantMessageID ?? ""
-        let currentMessage = messageStore.messages.first(where: { $0.id == assistantID })
+        let currentMessage = messageStore.message(id: assistantID)
         let hasToolActivity = currentMessage?.parts.contains { part in
             switch part {
             case .toolCall, .stepStart, .stepFinish:
@@ -3731,7 +4153,7 @@ struct ChatPanelView: View {
         }
         streamingText = ""
         currentAssistantMessageID = nil
-        refreshGitForCurrentSession()
+        appState.scheduleGitRefresh(sessionID: turnSessionID)
     }
 
 // MARK: - Draft persistence

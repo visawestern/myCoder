@@ -35,8 +35,20 @@ struct ModelMetadataCatalog: Sendable {
     }
 
     static let shared: ModelMetadataCatalog = {
-        guard let url = Bundle.module.url(forResource: "model_metadata", withExtension: "json"),
+        // The catalog ships as a SwiftPM target resource (module bundle), but a
+        // hand-assembled app bundle can also place it in Contents/Resources.
+        // Try both so a packaging change cannot silently empty the catalog.
+        let candidates = [
+            Bundle.module.url(forResource: "model_metadata", withExtension: "json"),
+            Bundle.main.url(forResource: "model_metadata", withExtension: "json")
+        ].compactMap { $0 }
+        guard let url = candidates.first,
               let data = try? Data(contentsOf: url) else {
+            // Never fail silently: without the catalog every model would show
+            // "Not reported" and look like missing provider data.
+            FileHandle.standardError.write(
+                Data("model_metadata.json is missing from the app bundle; model metadata falls back to provider responses and user overrides.\n".utf8)
+            )
             return ModelMetadataCatalog(models: [:])
         }
         return ModelMetadataCatalog(data: data)

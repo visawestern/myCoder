@@ -137,6 +137,11 @@ class AppState: ObservableObject {
     @Published var pendingSpecNodePrompt: PendingSpecNodePrompt?
     @Published var isStreaming = false
     @Published var isLoading = false
+    /// Sessions with a live model turn (streaming or waiting for a plan
+    /// question). The sidebar shows an activity indicator on those rows, so a
+    /// turn that keeps running in the background stays visible while the user
+    /// reads another chat.
+    @Published var streamingSessionIDs: Set<String> = []
     /// True while the host compiles the point context for the next send
     /// (user directive D1: the loader says "собираем точечный контекст").
     @Published var isCompilingContext = false
@@ -349,6 +354,9 @@ class AppState: ObservableObject {
     @Published var showRemoveProviderConfirmation = false
     @Published var pendingProviderToDelete: CustomProvider?
     @Published var notificationService = NotificationService()
+    /// One-shot "show this message" request raised by a notification tap.
+    /// ChatPanelView consumes it after the target chat's history is loaded.
+    @Published private(set) var messageFocusRequest: MessageFocusRequest?
     @Published var transientProviderNotification: AppNotification? = nil
     /// Short-lived feedback for shell actions such as Cmd+Option+Z.
     @Published var shellActionNotice: String?
@@ -449,9 +457,7 @@ class AppState: ObservableObject {
     /// relaunch. Unknown registry rows remain non-destructive to workspaces.
     @MainActor
     func refreshProjectRegistry() {
-        projectRegistryEntries = ProjectRegistryLogic.load(
-            homeDirectory: registryHomeDirectory
-        )
+        projectRegistryEntries = ProjectRegistryStore.load()
     }
     
     var userDisplayName: String { UserProfileDisplay.displayName() }
@@ -487,9 +493,9 @@ class AppState: ObservableObject {
     /// swift-testing runtime classes.
     private static let isRunningTests: Bool = TestRunDetector.isRunningTests
 
-    /// Root for the project registry only. Tests get a per-instance temp home
-    /// so `addWorkspace` cannot append temp sidebar projects to the real
-    /// `~/.mycoder/projects.json` (test pollution, verified live).
+    /// Sandbox root for auxiliary per-person files (audit log, legacy
+    /// registry import) when running tests. Project state itself lives in the
+    /// database, which is in-memory under the test runner.
     let registryHomeDirectory: URL
 
     // MiMo Serve connection manager (now optional)
@@ -581,13 +587,6 @@ class AppState: ObservableObject {
         }
 
         guard !Self.isRunningTests else { return }
-
-        // Dedup the project registry (plan Раздел 8 п.47): the old single DB
-        // could leave multiple rows per canonical path (UUID pileup, Блок 1 п.4).
-        // Idempotent — a clean registry is untouched.
-        ProjectRegistryLogic.deduplicateRegistry(
-            homeDirectory: registryHomeDirectory
-        )
 
         // Initialize database and perform migrations
         Task {
@@ -2558,6 +2557,21 @@ class AppState: ObservableObject {
     }
 
     func selectSession(_ session: ChatSession) {
+        // A sidebar cache can outlive the chat it points at (deleted through
+        // the API, another window, or an older build). Selecting such a row
+        // used to open a permanently empty chat; drop the row instead.
+        let isInMemory = sessions.contains { $0.id == session.id }
+        let existsInStore = isInMemory || DatabaseBridge.shared.sessionExists(id: session.id)
+        if SessionSelectionGuardLogic.decision(
+            sessionIsInMemory: isInMemory,
+            sessionExistsInStore: existsInStore
+        ) == .removeStaleRow {
+            removeSessionFromInMemoryState(id: session.id)
+            shellActionNotice = "This chat no longer exists — it was removed from the list."
+            shellActionNoticeTone = .error
+            MyCoderAPIServer.appendLog("🗑 removed stale sidebar chat: id=\(session.id)")
+            return
+        }
         if let workspace = workspaces.first(where: { session.belongs(to: $0) }) {
             selectWorkspace(workspace)
         }
@@ -3040,6 +3054,60 @@ class AppState: ObservableObject {
         sidebarProjectlessSessions = projectless
     }
 
+    /// Drop a deleted/archived chat from every in-memory list the sidebar
+    /// renders. Deleting used to touch `sessions` only, leaving the sidebar's
+    /// own caches holding rows whose history no longer existed — clicking one
+    /// opened an empty chat.
+    func removeSessionFromInMemoryState(id: String) {
+        sessions = SidebarSessionRemovalLogic.removing(id: id, from: sessions)
+        sidebarProjectSessions = SidebarSessionRemovalLogic.removing(
+            id: id,
+            from: sidebarProjectSessions
+        )
+        sidebarProjectlessSessions = SidebarSessionRemovalLogic.removing(
+            id: id,
+            from: sidebarProjectlessSessions
+        )
+        pinnedSidebarItemIDs.remove(SidebarPinID.chat(id))
+        streamingSessionIDs.remove(id)
+        if selectedSession?.id == id {
+            selectedSession = nil
+        }
+        if messageFocusRequest?.sessionID == id {
+            messageFocusRequest = nil
+        }
+    }
+
+    /// Resolve a chat for notification/deep-link navigation, materializing it
+    /// from a sidebar cache or the database when it is not in `sessions`.
+    @MainActor
+    func sessionForNavigation(id: String) -> ChatSession? {
+        if let session = sessions.first(where: { $0.id == id }) {
+            return session
+        }
+        if let cached = sidebarKnownSessions.first(where: { $0.id == id }) {
+            return cached
+        }
+        return materializeSessionFromDatabase(id: id)
+    }
+
+    /// Ask the chat panel to scroll to one concrete message. The token makes
+    /// repeated taps on the same notification trigger a fresh scroll.
+    @MainActor
+    func requestMessageFocus(sessionID: String, messageID: String) {
+        messageFocusRequest = MessageFocusRequest(
+            sessionID: sessionID,
+            messageID: messageID
+        )
+    }
+
+    /// Consume a focus request once the chat panel applied it.
+    @MainActor
+    func clearMessageFocus(id: UUID) {
+        guard messageFocusRequest?.id == id else { return }
+        messageFocusRequest = nil
+    }
+
     /// Merge persisted standalone chats into the in-memory list at startup
     /// (audit 2026-09-08 — they used to vanish after every restart).
     @MainActor
@@ -3185,19 +3253,9 @@ class AppState: ObservableObject {
         )
         workspaces.append(workspace)
         selectWorkspace(workspace, reloadSessions: false)
+        // The database row IS the registration: Storage/Sidebar read the
+        // `projects` table, so no side registry needs to be updated here.
         createOrUpdateProject(id: workspace.id, name: workspace.name, path: normalized, gitBranch: branch)
-
-        // Round 14 (п.11/п.32): registering here fixes the orphaned registry —
-        // without it the storage panel stayed empty in real use.
-        let home = registryHomeDirectory
-        let entries = ProjectRegistryLogic.load(homeDirectory: home)
-        let updated = ProjectRegistryLogic.registerProject(path: normalized, name: workspace.name, into: entries)
-        if updated != entries {
-            try? ProjectRegistryLogic.save(updated, homeDirectory: home)
-            try? StorageAuditLog.append(action: "registry.add",
-                                        detail: normalized,
-                                        homeDirectory: home)
-        }
         return workspace
     }
     

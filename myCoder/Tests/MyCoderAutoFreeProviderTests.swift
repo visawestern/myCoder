@@ -67,7 +67,7 @@ struct MyCoderAutoFreeProviderTests {
 struct MyCoderAutoFreeClientContractTests {
     @Test("uses the official Zen base URL and OpenAI-compatible endpoint family")
     func endpointAndModelContract() {
-        #expect(MyCoderAutoFreeClient.providerBaseURL.absoluteString == "https://opencode.ai/zen/v1")
+        #expect(MyCoderAutoFreeClient.providerBaseURL.absoluteString == "https://opencode.ai/inference/v1")
         #expect(MyCoderAutoFreeProvider.defaultModelID == "big-pickle")
         #expect(MyCoderAutoFreeClient.maxConsecutiveFailures == 5)
     }

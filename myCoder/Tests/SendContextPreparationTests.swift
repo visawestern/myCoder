@@ -175,4 +175,54 @@ struct SendContextPreparationTests {
         #expect(preparation.modelText == "   ")
         #expect(preparation.pack == nil)
     }
+
+    @Test("Чат без проекта: тихо, без баннера об ошибке")
+    func projectlessChatIsSilent() throws {
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "привет",
+            records: [],
+            projectPath: "",
+            isEnabled: true
+        )
+        #expect(preparation.modelText == "привет")
+        #expect(preparation.pack == nil)
+        #expect(preparation.warning == nil)
+        #expect(preparation.status == .projectless)
+    }
+
+    @Test("Нет совпадений в проекте: не ошибка, но и не выдуманный контекст")
+    func noMatchingEvidenceIsNotAFailure() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "совершенно посторонний текст без имён",
+            records: try records(for: root),
+            projectPath: root.path,
+            isEnabled: true
+        )
+        #expect(preparation.modelText == "совершенно посторонний текст без имён")
+        #expect(preparation.pack == nil)
+        #expect(preparation.warning == nil)
+        #expect(preparation.status == .noEvidence)
+    }
+
+    @Test("Реальный проект: индекс сканируется и контекст собирается с цитатами")
+    func realProjectIndexCompiles() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let indexed = PointContextIndexLogic.records(projectPath: root.path)
+        #expect(indexed.isEmpty == false)
+
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "как работает UserStore.load",
+            records: indexed,
+            projectPath: root.path,
+            isEnabled: true
+        )
+        #expect(preparation.status == .compiled)
+        #expect(preparation.pack?.citations.isEmpty == false)
+        #expect(preparation.warning == nil)
+    }
 }

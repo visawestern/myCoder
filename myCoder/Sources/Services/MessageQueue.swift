@@ -6,6 +6,9 @@ struct QueuedMessage: Identifiable {
     let files: [FileInfo]
     let images: [ClipboardImage]
     let type: MessageType
+    /// Chat the message was queued in. A queued send must land in that chat
+    /// even if the user opened another one before it started.
+    let sessionID: String?
 }
 
 class MessageQueue: ObservableObject {
@@ -26,8 +29,20 @@ class MessageQueue: ObservableObject {
         onProcess = handler
     }
     
-    func enqueue(text: String, files: [FileInfo] = [], images: [ClipboardImage] = [], type: MessageType) {
-        let msg = QueuedMessage(text: text, files: files, images: images, type: type)
+    func enqueue(
+        text: String,
+        files: [FileInfo] = [],
+        images: [ClipboardImage] = [],
+        type: MessageType,
+        sessionID: String? = nil
+    ) {
+        let msg = QueuedMessage(
+            text: text,
+            files: files,
+            images: images,
+            type: type,
+            sessionID: sessionID
+        )
         pendingMessages.append(msg)
     }
     

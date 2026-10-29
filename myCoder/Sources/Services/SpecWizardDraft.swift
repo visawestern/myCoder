@@ -37,6 +37,11 @@ struct SpecWizardDraft: Codable, Equatable {
     var constraints: String = ""
     var plannerModel: String = ""
     var coderModel: String = ""
+    /// Provider that owns the selected model. Stored separately because model
+    /// ids are not unique across providers and routing must not depend on the
+    /// app-wide selection. Empty in drafts written before the field existed.
+    var plannerProviderID: String = ""
+    var coderProviderID: String = ""
     var interviewComplete: Bool = false
     var specVersion: Int = 0
     var decompositionNodeCount: Int = 0
@@ -52,6 +57,8 @@ struct SpecWizardDraft: Codable, Equatable {
          constraints: String = "",
          plannerModel: String = "",
          coderModel: String = "",
+         plannerProviderID: String = "",
+         coderProviderID: String = "",
          interviewComplete: Bool = false,
          specVersion: Int = 0,
          decompositionNodeCount: Int = 0,
@@ -63,6 +70,8 @@ struct SpecWizardDraft: Codable, Equatable {
         self.constraints = constraints
         self.plannerModel = plannerModel
         self.coderModel = coderModel
+        self.plannerProviderID = plannerProviderID
+        self.coderProviderID = coderProviderID
         self.interviewComplete = interviewComplete
         self.specVersion = specVersion
         self.decompositionNodeCount = decompositionNodeCount
@@ -81,6 +90,8 @@ struct SpecWizardDraft: Codable, Equatable {
         constraints = try container.decodeIfPresent(String.self, forKey: .constraints) ?? ""
         plannerModel = try container.decodeIfPresent(String.self, forKey: .plannerModel) ?? ""
         coderModel = try container.decodeIfPresent(String.self, forKey: .coderModel) ?? ""
+        plannerProviderID = try container.decodeIfPresent(String.self, forKey: .plannerProviderID) ?? ""
+        coderProviderID = try container.decodeIfPresent(String.self, forKey: .coderProviderID) ?? ""
         interviewComplete = try container.decodeIfPresent(Bool.self, forKey: .interviewComplete) ?? false
         specVersion = try container.decodeIfPresent(Int.self, forKey: .specVersion) ?? 0
         decompositionNodeCount = try container.decodeIfPresent(Int.self, forKey: .decompositionNodeCount) ?? 0

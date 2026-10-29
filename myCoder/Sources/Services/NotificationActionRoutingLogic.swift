@@ -8,7 +8,7 @@ enum NotificationActionRoutingLogic {
         sessionWasFound: Bool
     ) -> Bool {
         switch action {
-        case .openSession:
+        case .openSession, .openMessage:
             return sessionWasFound
         case .openSettings, .openGit:
             return true

@@ -12,8 +12,16 @@ import CryptoKit
 /// (26 characters from the base62 alphabet); project identifiers are 40 hex
 /// characters.
 struct OpenCodeRequestContext: Equatable {
-    static let clientName = "desktop"
-    static let userAgent = "opencode/1.19.4 ai-sdk/provider-utils/4.0.23 runtime/bun/1.4.4"
+    static let clientName = "cli"
+    
+    /// Matches the official OpenCode client's User-Agent format as of 2026-10-26:
+    /// `opencode/latest/<version>/cli` — the "latest" channel and a pinned version
+    /// that Zen's free tier recognizes. Using a fixed known-good version (2.0.25)
+    /// instead of the app version avoids mismatches when the app updates.
+    static var userAgent: String {
+        "opencode/latest/2.0.25/cli"
+    }
+    
     static let anonymousAuthorization = "Bearer public"
 
     static let identifierBodyLength = 26
@@ -111,6 +119,8 @@ struct OpenCodeRequestContext: Equatable {
         var headers: [String: String] = [
             "x-opencode-session-id": sessionID,
             "x-opencode-session": sessionID,
+            "x-session-affinity": sessionID,
+            "x-session-id": sessionID,
             "x-opencode-client": Self.clientName,
             "User-Agent": Self.userAgent,
             "Authorization": Self.anonymousAuthorization

@@ -14,6 +14,10 @@ extension AppState {
     @MainActor
     func initializeDatabase() async {
         MyCoderAPIServer.appendLog("🧭 initializeDatabase: start")
+        // 0. Projects live in the database. A legacy `projects.json` from an
+        //    older build is imported once (only into an empty `projects`
+        //    table) and archived, so no side registry survives.
+        ProjectRegistryStore.importLegacyJSON(homeDirectory: registryHomeDirectory)
         // 1. Выполнить maintenance + авто-архивация
         DatabaseManager.shared.performMaintenanceIfNeeded()
         MyCoderAPIServer.appendLog("🧭 initializeDatabase: maintenance kicked off")
@@ -178,14 +182,8 @@ extension AppState {
     /// Архивировать сессию
     @MainActor
     func archiveSessionInDatabase(id: String) {
-        db.archiveSession(id: id)
-        
-        // Reload current project sessions
-        if let projectId = selectedWorkspace?.id {
-            Task {
-                await loadSessionsFromDatabase(projectId: projectId)
-            }
-        }
+        guard db.archiveSession(id: id) else { return }
+        removeSessionFromInMemoryState(id: id)
     }
     
     /// Toggle pin статус проекта
@@ -344,7 +342,7 @@ extension AppState {
 
     /// Clears in-memory selection/navigation/sessions/projects (no DB I/O).
     /// Round 10 — the crash fix is verifiable without touching the real
-    /// database, so tests never race on ~/.mycoder/mimo.db.
+    /// database, so tests never race on ~/.mycoder/mycoder.db.
     func clearInMemoryState() {
         selectedSession = nil
         selectedWorkspace = nil
@@ -359,7 +357,7 @@ extension AppState {
     ///
     /// Round 14 (test-safety): `homeDirectory` is injectable so tests sandbox
     /// the reset to a temp dir instead of the REAL user home (the old
-    /// StorageResetCrashTests deleted the real ~/.mycoder/mimo.db).
+    /// StorageResetCrashTests deleted the real ~/.mycoder/mycoder.db).
     /// `resetDatabase` is a closure so tests can substitute a no-op and never
     /// touch `DatabaseManager.shared`.
     func resetStorage(scope: StorageResetScope,
@@ -398,7 +396,7 @@ extension AppState {
             }
         }
 
-        // Reinitialize the app database (recreates the cleared mimo.db on
+        // Reinitialize the app database (recreates the cleared mycoder.db on
         // disk). Default = wipeAndReopen(): closes the stale open handle to
         // the removed file, ensures the file+sidecars are gone, and opens a
         // brand-new empty database. Tests substitute a no-op closure so the
@@ -510,10 +508,9 @@ extension AppState {
     @MainActor
     func deleteSessionInDatabaseUI(id: String) {
         guard db.deleteSession(id: id) else { return }
-        sessions.removeAll { $0.id == id }
-        if selectedSession?.id == id {
-            selectedSession = nil
-        }
+        // The sidebar tree renders its own caches, so removing the chat from
+        // `sessions` alone left a dead row that opened an empty chat.
+        removeSessionFromInMemoryState(id: id)
     }
 
     /// Full transcript (Markdown) for Share/Export, read from the store that

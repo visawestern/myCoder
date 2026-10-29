@@ -68,7 +68,7 @@ struct NewChatSidebarVisibilityTests {
         #expect(appState.registryHomeDirectory.path.hasPrefix(
             FileManager.default.temporaryDirectory.path
         ))
-        let entries = ProjectRegistryLogic.load(homeDirectory: appState.registryHomeDirectory)
+        let entries = ProjectRegistryStore.load()
         #expect(entries.contains { $0.id == workspace.id })
         #expect(entries.contains { $0.path == ChatSession.normalizedPath(projectPath) })
     }

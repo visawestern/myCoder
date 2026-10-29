@@ -7,16 +7,16 @@ struct StorageResetLogicTests {
 
     private let home = URL(fileURLWithPath: "/home/user")
 
-    @Test func appCacheOnlyClearsMimoDBOnly() {
+    @Test func appCacheOnlyClearsTheAppDatabase() {
         let plan = StorageResetLogic.plan(for: .appCacheOnly, homeDirectory: home)
-        #expect(plan.deletesPaths == ["/home/user/.mycoder/mimo.db"])
+        #expect(plan.deletesPaths == ["/home/user/.mycoder/mycoder.db"])
         #expect(plan.scope == .appCacheOnly)
     }
 
     @Test func summaryMentionsDeletedPaths() {
         let plan = StorageResetLogic.plan(for: .appCacheOnly, homeDirectory: home)
         let s = StorageResetLogic.summary(for: plan)
-        #expect(s.contains("mimo.db"))
+        #expect(s.contains("mycoder.db"))
     }
 
     @Test func fullDatabasePlanCoversGlobalRegistryAndProjectDatabases() {
@@ -26,7 +26,7 @@ struct StorageResetLogicTests {
             projectPaths: ["/work/alpha", "/work/beta"]
         )
         #expect(plan.scope == .fullDatabase)
-        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mimo.db"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mycoder.db"))
         #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects.json"))
         #expect(plan.deletesPaths.contains("/work/alpha/.mycoder/project.db"))
         #expect(plan.deletesPaths.contains("/work/beta/.mycoder/project.db"))
@@ -36,7 +36,7 @@ struct StorageResetLogicTests {
 
     @Test func fullDatabasePlanWorksWithoutKnownProjects() {
         let plan = StorageResetLogic.plan(for: .fullDatabase, homeDirectory: home)
-        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mimo.db"))
+        #expect(plan.deletesPaths.contains("/home/user/.mycoder/mycoder.db"))
         #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects.json"))
         #expect(plan.deletesPaths.contains("/home/user/.mycoder/projects"))
     }

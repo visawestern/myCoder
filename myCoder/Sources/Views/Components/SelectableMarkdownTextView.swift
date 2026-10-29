@@ -16,6 +16,7 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
     var projectRoot: String? = nil
 
     @Environment(\.interfaceFontScale) private var interfaceFontScale
+    @Environment(\.codeDisplaySettings) private var codeSettings
 
     private var scaledFontSize: CGFloat {
         InterfaceTypography.scaled(fontSize, scale: interfaceFontScale)
@@ -48,7 +49,9 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
             text: text,
             fontSize: scaledFontSize,
             textColor: textColor,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: Color.mimo.isLightTheme
         )
         guard pathView.attributedString() != attributed else { return }
 
@@ -191,14 +194,17 @@ enum MarkdownAttributedStringBuilder {
         text: String,
         fontSize: CGFloat,
         textColor: Color,
-        projectRoot: String? = nil
+        projectRoot: String? = nil,
+        codeSettings: CodeDisplaySettings = .default,
+        isLightInterface: Bool = Color.mimo.isLightTheme
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let baseColor = NSColor(textColor)
         let muted = NSColor(Color.mimo.textMuted)
         let brand = NSColor(Color.mimo.brand)
-        let codeBackground = NSColor(Color.mimo.codeBg)
-        let codeHeaderBackground = NSColor(Color.mimo.codeHeaderBg)
+        let codePalette = codeSettings.theme(isLightInterface: isLightInterface).palette
+        let codeBackground = NSColor(codePalette.background)
+        let codeHeaderBackground = NSColor(codePalette.headerBackground)
         let border = NSColor(Color.mimo.border)
 
         let baseFont = NSFont.systemFont(ofSize: fontSize)
@@ -274,18 +280,29 @@ enum MarkdownAttributedStringBuilder {
                 ]))
 
             case .codeBlock(let language, let code):
-                let caption = language.isEmpty ? "CODE" : language.uppercased()
+                let caption = language.isEmpty
+                    ? "CODE"
+                    : CodeLanguageLabel.name(for: language).uppercased()
                 result.append(NSAttributedString(string: caption, attributes: [
                     .font: captionFont,
-                    .foregroundColor: NSColor(Color.mimo.textMuted),
+                    .foregroundColor: NSColor(codePalette.lineNumber),
                     .backgroundColor: codeHeaderBackground
                 ]))
                 result.append(NSAttributedString(string: "\n"))
-                result.append(NSAttributedString(string: code, attributes: [
-                    .font: codeFont,
-                    .foregroundColor: baseColor,
-                    .backgroundColor: codeBackground
-                ]))
+                let highlighted = NSMutableAttributedString(attributedString: CodeSyntaxHighlighter.nsAttributed(
+                    code,
+                    language: language,
+                    palette: codePalette,
+                    fontSize: codeSettings.clampedFontSize
+                ))
+                if highlighted.length > 0 {
+                    highlighted.addAttribute(
+                        .backgroundColor,
+                        value: codeBackground,
+                        range: NSRange(location: 0, length: highlighted.length)
+                    )
+                }
+                result.append(highlighted)
 
             case .table(let rows):
                 appendTable(rows, to: result, font: codeFont, color: baseColor, muted: muted)

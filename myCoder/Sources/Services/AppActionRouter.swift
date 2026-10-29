@@ -490,7 +490,8 @@ final class AppActionRouter {
                 "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
                 "language": appState.appLanguage.rawValue,
                 "isStreaming": appState.isStreaming,
-                "isLoading": appState.isLoading
+                "isLoading": appState.isLoading,
+                "streamingSessionIds": appState.streamingSessionIDs.sorted()
             ],
             "selection": [
                 "providerId": appState.selectedProviderID,

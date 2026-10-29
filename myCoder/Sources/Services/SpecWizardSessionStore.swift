@@ -28,13 +28,17 @@ final class SpecWizardSessionStore {
             projectName: projectName,
             database: database,
             providerID: appState.selectedProviderID,
-            routeProvider: { [weak appState] model in
+            routeProvider: { [weak appState] model, providerID in
                 guard let appState else { return nil }
+                let resolvedProviderID = providerID ?? appState.selectedProviderID
+                let isACP = appState.customProviders.contains {
+                    $0.id == resolvedProviderID && $0.type == .acp && $0.acpEnabled
+                }
                 let route = SendRouteResolver.route(
-                    selectedProviderID: appState.selectedProviderID,
+                    selectedProviderID: resolvedProviderID,
                     selectedModel: model,
                     serverConnected: appState.serverConnected,
-                    isACP: appState.isSelectedACPProvider,
+                    isACP: isACP,
                     customProviders: appState.customProviders,
                     localProviders: LocalProviderLogic.load(),
                     webProviderIDs: appState.webProviderIDs
@@ -51,7 +55,29 @@ final class SpecWizardSessionStore {
                 : appState.selectedModel
             created.draft.plannerModel = current
             created.draft.coderModel = current
+            created.draft.plannerProviderID = appState.selectedProviderID
+            created.draft.coderProviderID = appState.selectedProviderID
         }
+        // The app-wide provider can be a web, ACP, or MiMo serve provider that
+        // the wizard cannot call directly. Drop such a preset instead of
+        // showing a configured-looking setup that fails on the first turn.
+        let groups = SpecWizardModelCatalog.groups(
+            serverProviders: appState.serverProviders,
+            customProviders: appState.customProviders,
+            localProviders: LocalProviderLogic.load(defaults: appState.defaults),
+            autoFree: MyCoderAutoFreeStore.shared.provider,
+            defaults: appState.defaults
+        )
+        SpecWizardModelCatalog.pruneUnroutableSelection(
+            providerID: &created.draft.plannerProviderID,
+            modelID: &created.draft.plannerModel,
+            groups: groups
+        )
+        SpecWizardModelCatalog.pruneUnroutableSelection(
+            providerID: &created.draft.coderProviderID,
+            modelID: &created.draft.coderModel,
+            groups: groups
+        )
         sessions[normalized] = created
         return created
     }

@@ -168,6 +168,22 @@ struct SpecWizardDraftTests {
         #expect(draft.specVersion == 0)
         #expect(draft.decompositionNodeCount == 0)
         #expect(draft.goal == "G")
+        #expect(draft.plannerProviderID == "")
+        #expect(draft.coderProviderID == "")
+    }
+
+    @Test("Provider ids survive an encode/decode round-trip")
+    func providerIDsRoundTrip() throws {
+        var draft = SpecWizardDraft()
+        draft.plannerModel = "gpt-4o"
+        draft.coderModel = "gpt-4o"
+        draft.plannerProviderID = "custom-1"
+        draft.coderProviderID = "custom-2"
+        let data = try JSONEncoder().encode(draft)
+        let restored = try JSONDecoder().decode(SpecWizardDraft.self, from: data)
+        #expect(restored == draft)
+        #expect(restored.plannerProviderID == "custom-1")
+        #expect(restored.coderProviderID == "custom-2")
     }
 
     @Test("Draft round-trips through the project metadata store")

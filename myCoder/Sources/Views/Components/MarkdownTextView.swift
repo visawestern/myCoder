@@ -21,16 +21,7 @@ struct MarkdownText: View {
                         .padding(.top, level == 1 ? 4 : 2)
 
                 case .codeBlock(let language, let code):
-                    VStack(alignment: .leading, spacing: 0) {
-                        CodeBlockHeader(language: language, code: code)
-                        MarkdownText.highlightedCode(code, language: language,
-                                                     baseColor: textColor,
-                                                     fontSize: max(10, scaledFontSize - 1))
-                            .textSelection(.enabled)
-                            .padding(10)
-                    }
-                    .background(Color.mimo.codeBg)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    CodeBlockSpoilerView(language: language, code: code)
 
                 case .inlineCode(let code):
                     Text(code)
@@ -114,140 +105,10 @@ struct MarkdownText: View {
         }
     }
 
-    private func languageColor(_ lang: String) -> Color {
-        MarkdownText.codeLanguageColor(lang)
-    }
-
-    static func codeLanguageColor(_ lang: String) -> Color {
-        switch lang.lowercased() {
-        case "swift": return Color(red: 0.94, green: 0.32, blue: 0.22)
-        case "python", "py": return Color(red: 0.22, green: 0.47, blue: 0.67)
-        case "javascript", "js": return Color(red: 1.0, green: 0.85, blue: 0.24)
-        case "typescript", "ts": return Color(red: 0.19, green: 0.47, blue: 0.78)
-        case "html", "htm": return Color(red: 1.0, green: 0.42, blue: 0.42)
-        case "css": return Color(red: 0.29, green: 0.80, blue: 0.77)
-        case "rust": return Color(red: 0.75, green: 0.35, blue: 0.22)
-        case "go": return Color(red: 0.0, green: 0.74, blue: 0.84)
-        default: return Color.mimo.textMuted
-        }
-    }
-
-    /// Render a code block with light syntax highlighting (K) and diff (+/-/@@)
-    /// line coloring (C). Keeps the same monospaced font; only colors change.
-    static func highlightedCode(_ code: String, language: String,
-                                baseColor: Color, fontSize: CGFloat) -> Text {
-        let mono = Font.system(size: fontSize, design: .monospaced)
-        let lower = language.lowercased()
-        let diffMode = isDiffBlock(code, language: lower)
-        let keywords = keywords(for: lower)
-        var result = Text("")
-        let lines = code.components(separatedBy: "\n")
-        for (idx, line) in lines.enumerated() {
-            if idx > 0 { result = result + Text("\n") }
-            let piece = diffMode ? diffLine(line, baseColor: baseColor)
-                                 : tokenizeLine(line, keywords: keywords, baseColor: baseColor)
-            result = result + piece
-        }
-        return result.font(mono)
-    }
-
-    /// Whether a code block should be rendered as a unified diff (colors the
-    /// +/-/@@ prefixes). True for `diff`/`patch` fenced blocks or any block
-    /// whose lines carry diff markers.
+    /// Whether a code block should be rendered as a unified diff.
+    /// Kept on `MarkdownText` because the renderer tests exercise it.
     static func isDiffBlock(_ code: String, language: String) -> Bool {
-        let lower = language.lowercased()
-        if lower == "diff" || lower == "patch" { return true }
-        return code.components(separatedBy: "\n").contains { l in
-            l.hasPrefix("+++") || l.hasPrefix("---") || l.hasPrefix("@@")
-                || l.hasPrefix("diff --git") || l.hasPrefix("index ")
-        }
-    }
-
-    private static func diffLine(_ line: String, baseColor: Color) -> Text {
-        if line.hasPrefix("+++") || line.hasPrefix("---")
-            || line.hasPrefix("diff ") || line.hasPrefix("index ")
-            || line.hasPrefix("new file") || line.hasPrefix("deleted file")
-            || line.hasPrefix("similarity") || line.hasPrefix("rename") {
-            return Text(line).foregroundColor(Color.mimo.cyan)
-        }
-        if line.hasPrefix("@@") {
-            return Text(line).foregroundColor(Color.mimo.thinking)
-        }
-        if line.hasPrefix("+") {
-            return Text(line).foregroundColor(Color.mimo.mint)
-        }
-        if line.hasPrefix("-") {
-            return Text(line).foregroundColor(Color.mimo.error)
-        }
-        return Text(line).foregroundColor(baseColor)
-    }
-
-    /// Very light tokenizer: strings, line comments, numbers and known keywords
-    /// get a color; everything else stays in the base color.
-    private static func tokenizeLine(_ line: String, keywords: Set<String>,
-                                     baseColor: Color) -> Text {
-        let kwColor = Color.mimo.thinking
-        let strColor = Color.mimo.mint
-        let numColor = Color.mimo.cyan
-        let comColor = Color.mimo.textMuted
-        let pattern = #"("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`)|(//[^\n]*|#[^\n]*)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              !line.isEmpty else {
-            return Text(line).foregroundColor(baseColor)
-        }
-        let ns = line as NSString
-        let matches = regex.matches(in: line, range: NSRange(location: 0, length: ns.length))
-        var result = Text("")
-        var pos = 0
-        for m in matches {
-            let mRange = m.range(at: 0)
-            if mRange.location > pos {
-                let gap = ns.substring(with: NSRange(location: pos, length: mRange.location - pos))
-                result = result + Text(gap).foregroundColor(baseColor)
-            }
-            let text = ns.substring(with: mRange)
-            let color: Color
-            if m.range(at: 1).location != NSNotFound {
-                color = strColor
-            } else if m.range(at: 2).location != NSNotFound {
-                color = comColor
-            } else if m.range(at: 3).location != NSNotFound {
-                color = numColor
-            } else {
-                color = keywords.contains(text) ? kwColor : baseColor
-            }
-            result = result + Text(text).foregroundColor(color)
-            pos = mRange.location + mRange.length
-        }
-        if pos < ns.length {
-            result = result + Text(ns.substring(with: NSRange(location: pos, length: ns.length - pos)))
-                .foregroundColor(baseColor)
-        }
-        return result
-    }
-
-    private static func keywords(for language: String) -> Set<String> {
-        let base: Set<String> = [
-            "let", "var", "func", "return", "if", "else", "for", "while", "in",
-            "class", "struct", "enum", "extension", "import", "guard", "switch",
-            "case", "break", "continue", "nil", "true", "false", "self", "static",
-            "public", "private", "internal", "override", "new", "void", "int",
-            "string", "bool", "double", "float", "const", "def", "async", "await",
-            "try", "catch", "throw", "throws",
-        ]
-        let lower = language.lowercased()
-        if lower.contains("python") || lower.contains("py") {
-            return base.union(["print", "lambda", "None", "with", "as", "elif",
-                               "yield", "from", "raise", "del", "global", "not"])
-        }
-        if lower.contains("js") || lower.contains("ts")
-            || lower.contains("javascript") || lower.contains("typescript") {
-            return base.union(["function", "export", "default", "=>"])
-        }
-        if lower == "json" || lower == "yaml" || lower == "yml" || lower == "toml" {
-            return []
-        }
-        return base
+        CodeSyntaxHighlighter.isDiff(code: code, language: language)
     }
 
     /// Block kinds of a markdown document. The parsing itself lives in
@@ -316,43 +177,6 @@ struct MarkdownText: View {
                 .frame(width: col == 0 ? 0 : 1),
             alignment: .leading
         )
-    }
-}
-
-struct CodeBlockHeader: View {
-    let language: String
-    let code: String
-    @State private var copied = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(language.isEmpty ? "CODE" : language.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(MarkdownText.codeLanguageColor(language))
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(code, forType: .string)
-                withAnimation { copied = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withAnimation { copied = false }
-                }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(
-                        copied ? Color.mimo.success : Color.mimo.textMuted
-                    )
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .help(copied ? L.t(AppLocalizationKey.locCopied) : L.t(AppLocalizationKey.locCopyAll))
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color.mimo.codeHeaderBg)
     }
 }
 

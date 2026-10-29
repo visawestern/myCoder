@@ -35,7 +35,7 @@
 |---|---|
 | Платформа | macOS 13+, нативный SwiftUI/AppKit/WebKit |
 | Сборка | `swift build`, `swift test`, `./build-app.sh` (сборка .app) |
-| Хранилище | SQLite `.db` с WAL; глобальная БД `~/.mycoder/mimo.db`; проектная `<project>/.mycoder/project.db`; резервный фолбэк `~/.mycoder/projects/<stable-hash>/project.db` |
+| Хранилище | SQLite `.db` с WAL; глобальная БД `~/.mycoder/mycoder.db`; проектная `<project>/.mycoder/project.db`; резервный фолбэк `~/.mycoder/projects/<stable-hash>/project.db` |
 | Безопасность | Гейты AccessLevel; `run_command` ограничен; экранирование shell-аргументов; Keychain для ключей |
 | Локализация | 10 языков (en, ru, es, fr, de, zh, ja, ko, pt, ar) |
 | Тесты | >2200 `@Test` в >350 суитах; все зелёные |

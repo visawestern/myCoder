@@ -28,7 +28,7 @@ final class SpecWizardSession: ObservableObject {
     private let store: ProjectSpecStore
     private let planner: SpecPlannerService
     private let providerID: String?
-    private let routeProvider: (String) -> SpecPlannerRoute?
+    private let routeProvider: (String, String?) -> SpecPlannerRoute?
     private let languageProvider: () -> AppLanguage
     private let projectID: String
     private lazy var repositoryContext: String = SpecContextBuilder.build(projectPath: projectPath)
@@ -38,7 +38,7 @@ final class SpecWizardSession: ObservableObject {
          database: ProjectDatabaseManager,
          providerID: String?,
          planner: SpecPlannerService = SpecPlannerService(),
-         routeProvider: @escaping (String) -> SpecPlannerRoute?,
+         routeProvider: @escaping (String, String?) -> SpecPlannerRoute?,
          languageProvider: @escaping () -> AppLanguage = { .english }) {
         self.projectPath = projectPath
         self.projectName = projectName
@@ -115,13 +115,19 @@ final class SpecWizardSession: ObservableObject {
         var storedDraft = draft
         storedDraft.updatedAt = Date().timeIntervalSince1970
         let now = Int64(Date().timeIntervalSince1970)
+        let plannerProviderID = draft.plannerProviderID.isEmpty
+            ? providerID
+            : draft.plannerProviderID
+        let coderProviderID = draft.coderProviderID.isEmpty
+            ? providerID
+            : draft.coderProviderID
         do {
             let existing = try store.settings(projectID: projectID)
             var settings = ProjectSpecSettings(
                 projectID: projectID,
-                plannerProviderID: providerID,
+                plannerProviderID: plannerProviderID,
                 plannerModelID: draft.plannerModel,
-                coderProviderID: providerID,
+                coderProviderID: coderProviderID,
                 coderModelID: draft.coderModel,
                 status: draft.status.rawValue,
                 currentStep: draft.visibleStep.rawValue,
@@ -717,7 +723,9 @@ final class SpecWizardSession: ObservableObject {
             errorMessage = "Choose a planning model"
             return nil
         }
-        guard let route = routeProvider(model) else {
+        let storedProviderID = draft.plannerProviderID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let route = routeProvider(model, storedProviderID.isEmpty ? nil : storedProviderID) else {
             errorMessage = SpecPlannerServiceError.unsupportedRoute.localizedDescription
             return nil
         }

@@ -65,6 +65,7 @@ struct SpecWizardView: View {
 private struct SpecWizardContent: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var session: SpecWizardSession
+    @ObservedObject private var autoFreeStore = MyCoderAutoFreeStore.shared
 
     @State private var answerText = ""
     @State private var clarifyText = ""
@@ -87,7 +88,15 @@ private struct SpecWizardContent: View {
     }
 
     private var draft: SpecWizardDraft { session.draft }
-    private var models: [String] { Array(Set(appState.availableModels)).sorted() }
+    private var modelGroups: [SpecModelGroup] {
+        SpecWizardModelCatalog.groups(
+            serverProviders: appState.serverProviders,
+            customProviders: appState.customProviders,
+            localProviders: LocalProviderLogic.load(defaults: appState.defaults),
+            autoFree: autoFreeStore.provider,
+            defaults: appState.defaults
+        )
+    }
     private var checklist: [SpecWizardChecklistLogic.Item] {
         SpecWizardChecklistLogic.items(for: draft)
     }
@@ -290,19 +299,25 @@ private struct SpecWizardContent: View {
     private var modelsCard: some View {
         card(title: L.t("Project models"), icon: "cpu") {
             VStack(alignment: .leading, spacing: 12) {
-                modelRow(
+                SpecModelPicker(
                     title: L.t("Planning model"),
                     hint: L.t("Asks questions and writes the specification and task breakdown."),
-                    selection: $session.draft.plannerModel
+                    groups: modelGroups,
+                    providerID: $session.draft.plannerProviderID,
+                    modelID: $session.draft.plannerModel,
+                    onManageModels: openModelSettings
                 )
                 Divider().opacity(0.5)
-                modelRow(
+                SpecModelPicker(
                     title: L.t("Coding model"),
                     hint: L.t("Implements one task at a time using the specification."),
-                    selection: $session.draft.coderModel
+                    groups: modelGroups,
+                    providerID: $session.draft.coderProviderID,
+                    modelID: $session.draft.coderModel,
+                    onManageModels: openModelSettings
                 )
 
-                if models.isEmpty {
+                if modelGroups.isEmpty {
                     Button(L.t("Configure models…")) { showSettingsHint = true }
                         .buttonStyle(HandCursorButtonStyle())
                         .interfaceFont(size: 11, weight: .medium)
@@ -312,62 +327,9 @@ private struct SpecWizardContent: View {
         }
     }
 
-    private func modelRow(title: String, hint: String, selection: Binding<String>) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                Text(hint)
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 16)
-
-            Menu {
-                if models.isEmpty {
-                    Text(L.t("No models available")).interfaceFont(size: 11)
-                } else {
-                    ForEach(models, id: \.self) { model in
-                        Button {
-                            selection.wrappedValue = model
-                        } label: {
-                            if selection.wrappedValue == model {
-                                Label(model, systemImage: "checkmark")
-                            } else {
-                                Text(model)
-                            }
-                        }
-                    }
-                }
-                Divider()
-                Button(L.t("Manage models")) {
-                    appState.showSettings = true
-                    appState.settingsTab = .providers
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(selection.wrappedValue.isEmpty ? L.t("Choose model") : selection.wrappedValue)
-                        .interfaceFont(size: 12)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .interfaceFont(size: 9)
-                }
-                .foregroundColor(selection.wrappedValue.isEmpty ? Color.mimo.textMuted : Color.mimo.textPrimary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.mimo.controlBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(Color.mimo.border, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 7))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
+    private func openModelSettings() {
+        appState.showSettings = true
+        appState.settingsTab = .providers
     }
 
     private var briefCard: some View {
@@ -467,9 +429,10 @@ private struct SpecWizardContent: View {
         }
     }
 
-    /// The transcript of the interview. It always closes the screen and grows
-    /// downward: oldest turn first, newest — including the model's current
-    /// thinking indicator — last.
+    /// The transcript of answered exchanges. It follows the live question and
+    /// lists the newest exchange first (user directive 2026-10-28), so the
+    /// question the user just answered is directly under the answer card
+    /// instead of at the bottom of a long growing list.
     private var feedCard: some View {
         card(title: L.t("Project questions"), icon: "bubble.left.and.bubble.right") {
             VStack(alignment: .leading, spacing: 12) {
@@ -497,21 +460,30 @@ private struct SpecWizardContent: View {
                         }
                     }
                 } else {
-                    ForEach(Array(session.turns.enumerated()), id: \.offset) { _, turn in
-                        interviewTurn(turn)
+                    if session.isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(L.t("The model is thinking…"))
+                                .interfaceFont(size: 12)
+                                .foregroundColor(Color.mimo.textMuted)
+                        }
                     }
-                }
-
-                if session.isLoading {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(L.t("The model is thinking…"))
-                            .interfaceFont(size: 12)
-                            .foregroundColor(Color.mimo.textMuted)
+                    ForEach(Array(feedTurns.enumerated()), id: \.offset) { _, turn in
+                        interviewTurn(turn)
                     }
                 }
             }
         }
+    }
+
+    /// Answered turns, newest exchange first. The live question is owned by
+    /// `questionCard` above, so it is excluded from the transcript.
+    private var feedTurns: [SpecPlannerTurn] {
+        let history = SpecWizardInterviewLayoutLogic.history(
+            session.turns,
+            excludingLiveQuestion: session.isQuestionCardVisible && session.currentQuestion != nil
+        )
+        return SpecWizardInterviewLayoutLogic.newestFirst(history)
     }
 
     /// What the planner understood, with a way to correct it before the

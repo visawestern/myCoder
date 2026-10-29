@@ -58,6 +58,8 @@ struct ContentView: View {
         }
         .background(Color.mimo.background)
         .environment(\.interfaceFontScale, appState.settings.zoom.fontScale)
+        // Code blocks in chat/reasoning/spec follow Settings → Code Preview.
+        .environment(\.codeDisplaySettings, CodeDisplaySettings(settings: appState.settings))
         .preferredColorScheme(appState.appTheme.preferredColorScheme)
         // RTL layout for Arabic (plan Раздел 2 Блок 2 п.15).
         .environment(\.layoutDirection, appState.appLanguage.isRTL ? .rightToLeft : .leftToRight)

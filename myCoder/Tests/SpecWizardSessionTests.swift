@@ -42,6 +42,15 @@ private final class PlannerGate {
     }
 }
 
+/// Records the model/provider pairs the session asks the host to route.
+private final class ProviderCallRecorder {
+    private(set) var calls: [(model: String, providerID: String?)] = []
+
+    func record(model: String, providerID: String?) {
+        calls.append((model, providerID))
+    }
+}
+
 @Suite("Spec wizard session")
 struct SpecWizardSessionTests {
 
@@ -50,6 +59,9 @@ struct SpecWizardSessionTests {
         responses: [Result<String, Error>],
         projectFiles: [String: String] = [:],
         languageProvider: @escaping () -> AppLanguage = { .english },
+        routeProvider: @escaping (String, String?) -> SpecPlannerRoute? = { model, _ in
+            .autoFree(model: model)
+        },
         body: (SpecWizardSession, ProjectSpecStore, SessionFakeProvider) async throws -> Void
     ) async throws {
         let dir = FileManager.default.temporaryDirectory
@@ -75,7 +87,7 @@ struct SpecWizardSessionTests {
             database: manager,
             providerID: "test-provider",
             planner: SpecPlannerService(provider: provider),
-            routeProvider: { .autoFree(model: $0) },
+            routeProvider: routeProvider,
             languageProvider: languageProvider
         )
         try await body(session, manager.makeSpecStore(), provider)
@@ -89,6 +101,29 @@ struct SpecWizardSessionTests {
         session.draft.plannerModel = "free"
         session.draft.coderModel = "free"
         #expect(session.saveDraft())
+    }
+
+    @Test("The planner route uses the provider stored in the draft")
+    @MainActor
+    func usesDraftProviderForRouting() async throws {
+        let question = #"{"id":"q1","question":"Target OS?","suggested_answers":["macOS"],"done":false}"#
+        let recorder = ProviderCallRecorder()
+        try await withSession(
+            responses: [.success(question)],
+            routeProvider: { model, providerID in
+                recorder.record(model: model, providerID: providerID)
+                return .autoFree(model: model)
+            }
+        ) { session, _, _ in
+            session.draft.plannerModel = "free"
+            session.draft.coderModel = "free"
+            session.draft.plannerProviderID = "custom-provider"
+            _ = await session.submitAnswer("")
+            #expect(recorder.calls.count == 1)
+            #expect(recorder.calls.first?.model == "free")
+            #expect(recorder.calls.first?.providerID == "custom-provider")
+            #expect(session.currentQuestion?.question == "Target OS?")
+        }
     }
 
     @Test("Interview turns persist and completion is derived from the planner")
@@ -117,7 +152,7 @@ struct SpecWizardSessionTests {
                 database: try ProjectDatabaseManager.manager(forProjectPath: session.projectPath),
                 providerID: "test-provider",
                 planner: SpecPlannerService(provider: SessionFakeProvider(responses: [])),
-                routeProvider: { .autoFree(model: $0) }
+                routeProvider: { model, _ in .autoFree(model: model) }
             )
             #expect(second.draft.interviewComplete)
             #expect(second.turns.count == 3)
@@ -326,7 +361,7 @@ struct SpecWizardSessionTests {
                 database: try ProjectDatabaseManager.manager(forProjectPath: session.projectPath),
                 providerID: "test-provider",
                 planner: SpecPlannerService(provider: SessionFakeProvider(responses: [])),
-                routeProvider: { .autoFree(model: $0) }
+                routeProvider: { model, _ in .autoFree(model: model) }
             )
             #expect(second.draft.visibleStep == .setup)
             #expect(second.draft.goal == "Offline notes app")
