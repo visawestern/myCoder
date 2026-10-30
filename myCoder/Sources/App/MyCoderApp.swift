@@ -419,6 +419,15 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Clear all cached sidebar chats. Used after a full database reset so the
+    /// sidebar cannot keep showing chats that no longer exist (bug report
+    /// 2026-10-30).
+    @MainActor
+    func clearSidebarSessionCaches() {
+        sidebarProjectSessions = [:]
+        sidebarProjectlessSessions = []
+    }
+
     /// Store one project's chats for the sidebar tree.
     @MainActor
     func updateSidebarSessions(projectID: String, sessions: [ChatSession]) {

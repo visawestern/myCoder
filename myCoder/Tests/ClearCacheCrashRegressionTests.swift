@@ -19,6 +19,7 @@ import SQLite
 ///  2. The wipe-and-reopen recipe (drop the connection, delete the file +
 ///     sidecars, reopen) yields a working fresh database — which is what
 ///     `AppState.resetStorage` now does via `DatabaseManager.wipeAndReopen()`.
+@MainActor
 final class ClearCacheCrashRegressionTests: XCTestCase {
 
     private func makeSandbox() -> URL {

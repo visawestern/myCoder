@@ -13,6 +13,7 @@ import Foundation
 // ═══════════════════════════════════════════════════════════════════════════
 
 @Suite("Settings actions — crash regression (Round 10)")
+@MainActor
 struct SettingsActionsRegressionTests {
 
     @Test("clearInMemoryState executes without crashing after a normal navigation history")

@@ -343,11 +343,15 @@ extension AppState {
     /// Clears in-memory selection/navigation/sessions/projects (no DB I/O).
     /// Round 10 — the crash fix is verifiable without touching the real
     /// database, so tests never race on ~/.mycoder/mycoder.db.
+    /// Also clears the sidebar chat caches: after a full database reset they
+    /// would otherwise keep showing the old chats (bug report 2026-10-30).
+    @MainActor
     func clearInMemoryState() {
         selectedSession = nil
         selectedWorkspace = nil
         sessions = []
         projects = []
+        clearSidebarSessionCaches()
         clearNavigationHistory()
     }
 
@@ -360,6 +364,7 @@ extension AppState {
     /// StorageResetCrashTests deleted the real ~/.mycoder/mycoder.db).
     /// `resetDatabase` is a closure so tests can substitute a no-op and never
     /// touch `DatabaseManager.shared`.
+    @MainActor
     func resetStorage(scope: StorageResetScope,
                       homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
                       projectPaths: [String] = [],

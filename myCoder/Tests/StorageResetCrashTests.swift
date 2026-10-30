@@ -1,6 +1,7 @@
 import XCTest
 @testable import myCoder
 
+@MainActor
 final class StorageResetCrashTests: XCTestCase {
 
     // Round 10 real claim: the crash happens when resetStorage() is called
