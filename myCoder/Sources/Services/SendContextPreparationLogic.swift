@@ -51,6 +51,7 @@ enum SendContextPreparationLogic {
                         localPlan: LocalQueryPlanResult? = nil,
                         board preparedBoard: ContextBoard? = nil,
                         priorTurns: [ChatHistoryBuilder.Turn] = [],
+                        isPlanMode: Bool = false,
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
@@ -59,8 +60,10 @@ enum SendContextPreparationLogic {
         }
         // The first prompt in a chat has nothing to collect context from —
         // not even an open project (user directive 2026-10-30). No pack, no
-        // warning, the raw message goes out.
-        guard !priorTurns.isEmpty else {
+        // warning, the raw message goes out. Exception: PLAN mode always
+        // compiles context — planning needs the codebase from the very first
+        // prompt (user directive 2026-10-30).
+        guard !priorTurns.isEmpty || isPlanMode else {
             return SendContextPreparation(modelText: message, pack: nil,
                                           warning: extraWarning, status: .firstTurn)
         }
@@ -154,6 +157,7 @@ enum SendContextPreparationLogic {
                             localPlan: LocalQueryPlanResult? = nil,
                             board: ContextBoard? = nil,
                             priorTurns: [ChatHistoryBuilder.Turn] = [],
+                            isPlanMode: Bool = false,
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
@@ -167,6 +171,7 @@ enum SendContextPreparationLogic {
                 localPlan: localPlan,
                 board: board,
                 priorTurns: priorTurns,
+                isPlanMode: isPlanMode,
                 budgetTokens: budgetTokens
             )
         }.value

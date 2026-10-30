@@ -33,6 +33,9 @@ private struct PreparedLocalToolCall {
     let callID: String
     let validationError: WebToolValidationError?
     let approval: PendingToolApproval?
+    /// Set in plan mode for mutating tools: the call is refused without a
+    /// user prompt, and this reason is reported back to the model.
+    let denialReason: String?
 
     var argsSummary: String {
         call.arguments.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
@@ -1645,7 +1648,8 @@ struct ChatPanelView: View {
             extraWarning: contextWarning,
             localPlan: localPlan,
             board: preparedBoard,
-            priorTurns: priorTurnsForContext
+            priorTurns: priorTurnsForContext,
+            isPlanMode: agentMode == .plan
         )
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText
@@ -1926,7 +1930,7 @@ struct ChatPanelView: View {
                 var timelineParts: [MessagePartContent] = []
                 do {
                     for iteration in 0..<maxIterations {
-                        let result = try await EmptyResponseRetryPolicy.withEmptyRetries {
+                        let result = try await RequestRetryPolicy.withRetries {
                             try await streamDirectChat(
                                 baseURL: baseURL,
                                 apiKey: apiKey,
@@ -1960,7 +1964,8 @@ struct ChatPanelView: View {
                             calls,
                             modelContext: response,
                             projectRoot: projectRoot,
-                            accessLevel: appState.accessLevel
+                            accessLevel: appState.accessLevel,
+                            isPlanMode: agentMode == .plan
                         )
                         for item in prepared {
                             timelineParts.append(.toolCall(
@@ -1987,6 +1992,20 @@ struct ChatPanelView: View {
                         var resultsBlock = ""
                         for item in prepared {
                             guard !Task.isCancelled else { break }
+                            // Plan mode: mutating tools are refused without a
+                            // prompt — report the denial back to the model.
+                            if let reason = item.denialReason {
+                                resultsBlock += WebToolProtocolEmulator.formatToolResult(
+                                    name: item.call.name, result: reason
+                                ) + "\n"
+                                timelineParts.append(.toolCall(
+                                    name: item.call.name,
+                                    args: item.argsSummary,
+                                    result: reason,
+                                    callID: item.callID
+                                ))
+                                continue
+                            }
                             if let validationError = item.validationError {
                                 switch await resolveOutOfProjectAccess(item, assistantID: assistantID) {
                                 case .allowed(let grantedRoots):
@@ -2181,7 +2200,7 @@ struct ChatPanelView: View {
                 // Non-streaming send via ACP client (E06: parameters must
                 // actually reach the ACP model, they used to be dropped).
                 // Empty responses are transient: retry before surfacing.
-                let response = try await EmptyResponseRetryPolicy.withEmptyRetries {
+                let response = try await RequestRetryPolicy.withRetries {
                     try await acpClient.sendChatCompletion(
                         messages: acpMessages,
                         model: appState.selectedModel,
@@ -2518,7 +2537,8 @@ struct ChatPanelView: View {
         _ calls: [WebToolCall],
         modelContext: String,
         projectRoot: String,
-        accessLevel: AccessLevel
+        accessLevel: AccessLevel,
+        isPlanMode: Bool
     ) -> [PreparedLocalToolCall] {
         calls.map { call in
             let callID = UUID().uuidString
@@ -2527,6 +2547,14 @@ struct ChatPanelView: View {
             )
             if call.arguments["__mycoder_truncated"] == "1", validationError == nil {
                 validationError = .incompleteJSON
+            }
+            // Plan mode is read-only: mutating tools are refused right away,
+            // without a security prompt (user directive 2026-10-30).
+            var denialReason: String?
+            if case .deny(let reason) = PlanModeToolPolicy.decision(
+                for: call, isPlanMode: isPlanMode
+            ) {
+                denialReason = reason
             }
             var approval: PendingToolApproval?
             if case .pathEscapesProject(let path) = validationError {
@@ -2560,7 +2588,8 @@ struct ChatPanelView: View {
                 call: call,
                 callID: callID,
                 validationError: validationError,
-                approval: approval
+                approval: denialReason == nil ? approval : nil,
+                denialReason: denialReason
             )
         }
     }

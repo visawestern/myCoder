@@ -117,4 +117,22 @@ struct SendContextPreparationFirstTurnTests {
         #expect(preparation.status == .disabled)
         #expect(preparation.modelText == "привет")
     }
+
+    @Test("Режим «План» собирает контекст даже на первом промпте")
+    func planModeCompilesContextOnFirstTurn() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "составь план для UserStore.load",
+            records: try records(for: root),
+            projectPath: root.path,
+            isEnabled: true,
+            priorTurns: [],
+            isPlanMode: true
+        )
+        #expect(preparation.status == .compiled)
+        #expect(preparation.pack != nil)
+        #expect(preparation.pack?.text.contains("UserStore.swift:") == true)
+    }
 }

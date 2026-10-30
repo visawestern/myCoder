@@ -148,16 +148,25 @@ enum ProviderSettingsLogic {
         providerID: String? = nil,
         customProviders: [CustomProvider] = []
     ) -> [String] {
-        guard supportsReasoning(
+        if supportsReasoning(
             for: modelID,
             in: providers,
             providerID: providerID,
             customProviders: customProviders
         ),
-              let variants = model(for: modelID, in: providers, providerID: providerID)?.variants else {
-            return []
+           let variants = model(for: modelID, in: providers, providerID: providerID)?.variants,
+           !variants.isEmpty {
+            return variants.keys.sorted()
         }
-        return variants.keys.sorted()
+        // Many providers do not report reasoning variants themselves, but the
+        // bundled metadata catalog knows them (e.g. mercury-3 → low/medium/
+        // high). Without this fallback the effort selector in the composer
+        // never appears for such models (user directive 2026-10-30).
+        if let meta = ModelMetadataCatalog.shared.lookup(modelID: modelID),
+           let variants = meta.variants, !variants.isEmpty {
+            return variants.keys.sorted()
+        }
+        return []
     }
 
     static func defaultVariant(
