@@ -1819,10 +1819,12 @@ struct ChatPanelView: View {
                         OpenCodeServeSessionStore.shared.remember(sessionID: activeSID, for: chatKey)
                         streamed = recovered
                     } else {
-                        let result = try await OpenCodeServeClient.send(
-                            baseURL: baseURL, headers: headers, modelID: model,
-                            text: modelText, providerID: providerID, sessionID: sid
-                        )
+                        let result = try await RequestRetryPolicy.withRetries {
+                            try await OpenCodeServeClient.send(
+                                baseURL: baseURL, headers: headers, modelID: model,
+                                text: modelText, providerID: providerID, sessionID: sid
+                            )
+                        }
                         OpenCodeServeSessionStore.shared.remember(sessionID: result.sessionID, for: chatKey)
                         streamed = result.content
                     }
