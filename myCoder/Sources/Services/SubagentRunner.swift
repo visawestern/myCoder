@@ -25,7 +25,6 @@ enum SubagentRunner {
     /// Where the sub-agent model call goes. Mirrors the parent chat's send
     /// route so the child runs on the same provider the user selected.
     enum Transport {
-        case autoFree
         case openAICompatible(baseURL: URL, apiKey: String, model: String)
         case unsupported(reason: String)
     }
@@ -139,25 +138,6 @@ enum SubagentRunner {
 
     private static func callModel(conversation: [Message], context: Context) async throws -> String {
         switch context.transport {
-        case .autoFree:
-            var content = ""
-            let stream = MyCoderAutoFreeClient.shared.chatCompletion(
-                model: MyCoderAutoFreeClient.defaultModelID,
-                messages: conversation.map { message in
-                    MyCoderAutoFreeClient.Message(role: SubagentRunner.roleName(message.role), content: message.content)
-                },
-                parameters: ModelCallParameters(),
-                tools: MyCoderAutoFreeClient.gateToolDefinitions(),
-                toolChoice: "none",
-                projectRoot: context.projectRoot,
-                isGitRepo: false
-            )
-            for try await event in stream {
-                if case .content(let text) = event {
-                    content += text
-                }
-            }
-            return content
         case .openAICompatible(let baseURL, let apiKey, let model):
             let result = try await DirectChatClient.send(
                 baseURL: baseURL.absoluteString,

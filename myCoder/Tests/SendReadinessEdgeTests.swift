@@ -8,7 +8,6 @@ struct SendReadinessEdgeTests {
         #expect(SendProviderReadinessLogic.connectionValidationError(
             serverConnected: true,
             selectedProviderID: "   \n",
-            autoFreeReady: true,
             customProviders: [],
             localProviderIDs: [],
             webProviderIDs: [],

@@ -43,7 +43,7 @@ enum SessionSendLogic {
         // Same for local provider ids (Ollama/OpenCode/ACP): they never appear
         // in the serve catalog, and erasing them breaks local sends.
         let providerID: String?
-        if selectedProviderID.hasPrefix("web:") || selectedProviderID == MyCoderAutoFreeProvider.builtInID
+        if selectedProviderID.hasPrefix("web:")
             || localProviderIDs.contains(selectedProviderID) {
             providerID = selectedProviderID
             MyCoderAPIServer.appendLog("📍 buildSendOptions: preserved providerID=\(providerID ?? "nil")")

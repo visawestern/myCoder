@@ -65,7 +65,6 @@ final class SpecWizardSessionStore {
             serverProviders: appState.serverProviders,
             customProviders: appState.customProviders,
             localProviders: LocalProviderLogic.load(defaults: appState.defaults),
-            autoFree: MyCoderAutoFreeStore.shared.provider,
             defaults: appState.defaults
         )
         SpecWizardModelCatalog.pruneUnroutableSelection(

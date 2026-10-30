@@ -539,7 +539,7 @@ struct NotificationRow: View {
                 HStack {
                     Text(notification.title)
                         .interfaceFont(size: 12, weight: .semibold)
-                        .foregroundColor(Color.mimo.textPrimary)
+                        .foregroundColor(notification.isRead ? Color.mimo.textMuted : Color.mimo.textPrimary)
                     Spacer()
                     if !notification.isRead {
                         Circle()
@@ -548,11 +548,11 @@ struct NotificationRow: View {
                     }
                     Text(timeAgo(notification.timestamp))
                         .interfaceFont(size: 10)
-                        .foregroundColor(Color.mimo.textMuted)
+                        .foregroundColor(notification.isRead ? Color.mimo.textMuted.opacity(0.6) : Color.mimo.textMuted)
                 }
                 Text(notification.message)
                     .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textSecondary)
+                    .foregroundColor(notification.isRead ? Color.mimo.textMuted.opacity(0.6) : Color.mimo.textSecondary)
                     .lineLimit(2)
                 
                 if let action = notification.action {
@@ -588,12 +588,14 @@ struct NotificationRow: View {
     }
     
     private var iconColor: Color {
+        let color: Color
         switch notification.type {
-        case .info: return Color.mimo.brand
-        case .success: return Color.mimo.success
-        case .warning: return Color.mimo.warning
-        case .error: return Color.mimo.error
+        case .info: color = Color.mimo.brand
+        case .success: color = Color.mimo.success
+        case .warning: color = Color.mimo.warning
+        case .error: color = Color.mimo.error
         }
+        return notification.isRead ? color.opacity(0.4) : color
     }
     
     private func timeAgo(_ date: Date) -> String {

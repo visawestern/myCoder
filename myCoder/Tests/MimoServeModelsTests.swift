@@ -156,7 +156,7 @@ struct MimoServeModelsTests {
         let json = """
         {
             "id": "mycoder-auto-free",
-            "name": "myCoder Auto Free",
+            "name": "Internal Model",
             "providerID": "mimo",
             "status": "active",
             "capabilities": {"reasoning": true, "toolcall": true},

@@ -81,8 +81,11 @@ enum MarkdownDocumentParser {
             } else {
                 var paragraph = line
                 i += 1
-                while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).isEmpty && !lines[i].hasPrefix("#") && !lines[i].hasPrefix("```") && !lines[i].hasPrefix("- ") && !lines[i].hasPrefix("* ") && !lines[i].hasPrefix("> ") && !isMathBlockStart(lines[i]) {
-                    paragraph += " " + lines[i]
+                while i < lines.count && !lines[i].trimmingCharacters(in: .whitespaces).isEmpty && !lines[i].hasPrefix("#") && !lines[i].hasPrefix("```") && !lines[i].hasPrefix("- ") && !lines[i].hasPrefix("* ") && !lines[i].hasPrefix("> ") && lines[i].range(of: #"^\d+\.\s"#, options: .regularExpression) == nil && !isMathBlockStart(lines[i]) {
+                    // Preserve single newlines so prose with line breaks (e.g.
+                    // enumerated items after a colon) keeps its shape instead of
+                    // being joined with a space (user report 2026-10-30).
+                    paragraph += "\n" + lines[i]
                     i += 1
                 }
                 blocks.append(.paragraph(paragraph))

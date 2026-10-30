@@ -8,7 +8,6 @@ struct SendProviderReadinessLogicTests {
         let error = SendProviderReadinessLogic.connectionValidationError(
             serverConnected: true,
             selectedProviderID: "web:qwen",
-            autoFreeReady: true,
             customProviders: [],
             localProviderIDs: [],
             webProviderIDs: ["qwen"],
@@ -23,7 +22,6 @@ struct SendProviderReadinessLogicTests {
         #expect(SendProviderReadinessLogic.connectionValidationError(
             serverConnected: false,
             selectedProviderID: "web:qwen",
-            autoFreeReady: true,
             customProviders: [],
             localProviderIDs: [],
             webProviderIDs: ["qwen"],
@@ -37,7 +35,6 @@ struct SendProviderReadinessLogicTests {
         let error = SendProviderReadinessLogic.connectionValidationError(
             serverConnected: false,
             selectedProviderID: "serve:gpt",
-            autoFreeReady: true,
             customProviders: [],
             localProviderIDs: [],
             webProviderIDs: [],

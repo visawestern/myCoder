@@ -86,10 +86,6 @@ enum InternalModelResolver {
                       localProviders: [LocalProviderConfig]? = nil,
                       serverProviders: [MimoProviderResponse]? = nil,
                       serverBaseURL: String? = nil) -> SpecPlannerRoute? {
-        if ref.providerID == MyCoderAutoFreeProvider.builtInID {
-            return .autoFree(model: ref.modelID)
-        }
-
         let customs = customProviders ?? Self.customProviders()
         if let custom = customs.first(where: { $0.id == ref.providerID && $0.isEnabled }) {
             let key = custom.getSecureAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,7 +131,6 @@ enum InternalModelResolver {
 
     static func availableModels(customProviders: [CustomProvider],
                                 localProviders: [LocalProviderConfig],
-                                freeModels: [String],
                                 serverProviders: [MimoProviderResponse]? = nil) -> [InternalModelRef] {
         var refs: [InternalModelRef] = []
         var seen = Set<InternalModelRef>()
@@ -157,9 +152,6 @@ enum InternalModelResolver {
                 append(InternalModelRef(providerID: server.id, modelID: model))
             }
         }
-        for model in freeModels {
-            append(InternalModelRef(providerID: MyCoderAutoFreeProvider.builtInID, modelID: model))
-        }
         return refs
     }
 
@@ -167,9 +159,6 @@ enum InternalModelResolver {
                             customProviders: [CustomProvider],
                             localProviders: [LocalProviderConfig],
                             serverProviders: [MimoProviderResponse]? = nil) -> String {
-        if ref.providerID == MyCoderAutoFreeProvider.builtInID {
-            return L.t(AppLocalizationKey.locOpenCodeZen)
-        }
         if let custom = customProviders.first(where: { $0.id == ref.providerID }) {
             return custom.name
         }

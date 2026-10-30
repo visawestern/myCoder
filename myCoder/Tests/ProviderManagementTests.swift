@@ -7,8 +7,8 @@ struct ProviderManagementTests {
     private func customProvider(
         id: String = "opencode-zen",
         name: String = "OpenCode Zen",
-        type: ProviderType = .openCodeZen,
-        baseURL: String = OpenCodeZenCatalog.baseURL,
+        type: ProviderType = .openAI,
+        baseURL: String = "https://api.example.com/v1",
         apiKey: String = "",
         isEnabled: Bool = true,
         models: [String] = ["big-pickle", "beam-free"],
@@ -29,18 +29,6 @@ struct ProviderManagementTests {
     private func makeDefaults() -> (UserDefaults, String) {
         let suite = "ProviderManagementTests.\(UUID().uuidString)"
         return (UserDefaults(suiteName: suite)!, suite)
-    }
-
-    @Test("Legacy anonymous Zen entry is dropped as a duplicate of the built-in Auto Free route")
-    func legacyZenDuplicateIsRemoved() {
-        let kept = ProviderDuplicationLogic.removingDuplicates([customProvider()])
-        #expect(kept.isEmpty)
-    }
-
-    @Test("Zen entry with an API key is kept")
-    func zenWithKeyIsKept() {
-        let provider = customProvider(apiKey: "zen-key", requiresAPIKey: true)
-        #expect(ProviderDuplicationLogic.removingDuplicates([provider]).count == 1)
     }
 
     @Test("Zen entry that exposes paid models is kept")

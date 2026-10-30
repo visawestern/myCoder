@@ -3,7 +3,7 @@ import Testing
 
 @Suite("Status bar effective model")
 struct StatusBarModelLogicTests {
-    @Test("uses effective web/Auto Free model when legacy selectedModel is empty")
+    @Test("uses effective model when legacy selectedModel is empty")
     func effectiveModelWins() {
         #expect(StatusBarModelLogic.displayModel(
             selectedModel: "",

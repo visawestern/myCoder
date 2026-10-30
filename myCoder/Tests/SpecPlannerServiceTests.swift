@@ -37,7 +37,6 @@ struct SpecPlannerServiceTests {
             baseURL: "http://localhost:11434/v1", apiKey: nil, model: "llama"
         ), model: "") == .openAICompatible(baseURL: "http://localhost:11434/v1", apiKey: nil, model: "llama"))
 
-        #expect(SpecPlannerRoute(sendRoute: .autoFree, model: "free") == .autoFree(model: "free"))
         #expect(SpecPlannerRoute(sendRoute: .openCodeServe(
             baseURL: "http://localhost:4096", headers: [:], providerID: "ollama", model: "m"
         ), model: "") == .openCodeServe(
@@ -58,7 +57,7 @@ struct SpecPlannerServiceTests {
             projectName: "Notes",
             brief: brief,
             turns: [SpecPlannerTurn(role: "user", content: "macOS only")],
-            route: .autoFree(model: "free")
+            route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
         )
         #expect(question.id == "scope")
         #expect(provider.requests.count == 1)
@@ -78,7 +77,7 @@ struct SpecPlannerServiceTests {
             projectName: "Notes",
             brief: brief,
             turns: [],
-            route: .autoFree(model: "free"),
+            route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free"),
             language: .russian
         )
         let system = provider.requests[0].messages.first?.content ?? ""
@@ -93,7 +92,7 @@ struct SpecPlannerServiceTests {
         ])
         let service = SpecPlannerService(provider: provider)
         let question = try await service.nextInterviewQuestion(
-            projectName: "N", brief: brief, turns: [], route: .autoFree(model: "free")
+            projectName: "N", brief: brief, turns: [], route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
         )
         #expect(question.done)
         #expect(question.summary == "Ready")
@@ -105,7 +104,7 @@ struct SpecPlannerServiceTests {
         let service = SpecPlannerService(provider: provider)
         await #expect(throws: SpecPlannerParseError.self) {
             _ = try await service.nextInterviewQuestion(
-                projectName: "N", brief: brief, turns: [], route: .autoFree(model: "free")
+                projectName: "N", brief: brief, turns: [], route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
             )
         }
     }
@@ -116,7 +115,7 @@ struct SpecPlannerServiceTests {
         let service = SpecPlannerService(provider: provider)
         await #expect(throws: SpecPlannerServiceError.self) {
             _ = try await service.generateSpecification(
-                projectName: "N", brief: brief, turns: [], route: .autoFree(model: "free")
+                projectName: "N", brief: brief, turns: [], route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
             )
         }
     }
@@ -126,7 +125,7 @@ struct SpecPlannerServiceTests {
         let provider = FakeSpecCompletionProvider(responses: [.success("# Spec\n\nBody")])
         let service = SpecPlannerService(provider: provider)
         let spec = try await service.generateSpecification(
-            projectName: "Notes", brief: brief, turns: [], route: .autoFree(model: "free")
+            projectName: "Notes", brief: brief, turns: [], route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
         )
         #expect(spec == "# Spec\n\nBody")
         #expect(provider.requests[0].messages.last?.content.contains("Offline notes app") == true)
@@ -145,7 +144,7 @@ struct SpecPlannerServiceTests {
         let service = SpecPlannerService(provider: provider)
         let decomposition = try await service.generateDecomposition(
             projectName: "Notes", brief: brief, specification: "# Spec",
-            route: .autoFree(model: "free")
+            route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
         )
         #expect(decomposition.nodes.count == 1)
         #expect(decomposition.nextNode(completed: [])?.key == "N1")
@@ -158,7 +157,7 @@ struct SpecPlannerServiceTests {
         await #expect(throws: SpecPlannerParseError.self) {
             _ = try await service.generateDecomposition(
                 projectName: "N", brief: brief, specification: "# S",
-                route: .autoFree(model: "free")
+                route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
             )
         }
 
@@ -167,7 +166,7 @@ struct SpecPlannerServiceTests {
         await #expect(throws: SpecDecompositionError.self) {
             _ = try await emptyService.generateDecomposition(
                 projectName: "N", brief: brief, specification: "# S",
-                route: .autoFree(model: "free")
+                route: .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: "free")
             )
         }
     }

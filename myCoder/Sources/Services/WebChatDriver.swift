@@ -459,7 +459,7 @@ struct WebChatDriver {
                         continue
                     }
                     if let validationError = WebToolProtocolEmulator.validate(call, projectRoot: projectRoot, accessLevel: accessLevel) {
-                        let msg = "validation error: \(validationError)"
+                        let msg = WebToolProtocolEmulator.validationResultText(for: validationError, callName: call.name)
                         resultsBlock += WebToolProtocolEmulator.formatToolResult(name: call.name, result: msg) + "\n"
                         emit(.toolResult(name: call.name, result: msg))
                         continue

@@ -90,7 +90,10 @@ struct OpenCodeRequestContextTests {
         #expect(headers["x-opencode-project"] == "0123456789abcdef0123456789abcdef01234567")
         #expect(headers["x-opencode-request"] == "msg_1")
         #expect(headers["x-opencode-client"] == "cli")
-        #expect(headers["User-Agent"] == OpenCodeRequestContext.userAgent)
+        // User directive 2026-10-29: the User-Agent must be exactly
+        // `opencode/stable/2.1.4/cli`.
+        #expect(OpenCodeRequestContext.userAgent == "opencode/stable/2.1.4/cli")
+        #expect(headers["User-Agent"] == "opencode/stable/2.1.4/cli")
         #expect(headers["Authorization"] == "Bearer public")
         #expect(headers["x-opencode-parent-session-id"] == nil)
         #expect(headers["x-parent-session-id"] == nil)
@@ -113,48 +116,6 @@ struct OpenCodeRequestContextTests {
         )
         #expect(context.headers["x-opencode-client"] == "cli")
         #expect(context.headers["X-Trace"] == "1")
-    }
-
-    @Test("Auto Free requests carry the OpenCode client headers")
-    func autoFreeRequestsCarryHeaders() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [OpenCodeHeaderRecordingProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-        OpenCodeHeaderRecordingProtocol.reset()
-
-        let client = MyCoderAutoFreeClient(session: session)
-        let sessionID = OpenCodeRequestContext.sessionID(from: "chat-123")
-        let projectID = try #require(OpenCodeRequestContext.projectID(fromPath: "/tmp/project"))
-        let context = OpenCodeRequestContext(
-            sessionID: sessionID,
-            projectID: projectID,
-            requestID: "msg_abc"
-        )
-
-        _ = try await client.listModels(context: context)
-        let modelsRequest = try #require(OpenCodeHeaderRecordingProtocol.captured.first)
-        #expect(modelsRequest.value(forHTTPHeaderField: "x-opencode-session-id") == sessionID)
-        #expect(modelsRequest.value(forHTTPHeaderField: "x-opencode-client") == "cli")
-        #expect(modelsRequest.value(forHTTPHeaderField: "User-Agent") == OpenCodeRequestContext.userAgent)
-        #expect(modelsRequest.value(forHTTPHeaderField: "Authorization") == "Bearer public")
-        #expect(modelsRequest.value(forHTTPHeaderField: "x-opencode-project") == projectID)
-
-        for try await _ in client.chatCompletion(
-            messages: [.init(role: "user", content: "hi")],
-            context: context
-        ) {}
-        let chatRequest = try #require(OpenCodeHeaderRecordingProtocol.captured.last)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-opencode-session-id") == sessionID)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-opencode-session") == sessionID)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-session-affinity") == sessionID)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-session-id") == sessionID)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-opencode-request") == "msg_abc")
-        #expect(chatRequest.value(forHTTPHeaderField: "x-opencode-project") == projectID)
-        #expect(chatRequest.value(forHTTPHeaderField: "x-opencode-client") == "cli")
-        #expect(chatRequest.value(forHTTPHeaderField: "User-Agent") == OpenCodeRequestContext.userAgent)
-        #expect(chatRequest.value(forHTTPHeaderField: "Authorization") == "Bearer public")
-        #expect(chatRequest.value(forHTTPHeaderField: "Accept") == "*/*")
     }
 }
 

@@ -260,11 +260,6 @@ class MessageStore: ObservableObject {
     @MainActor
     func loadFromDatabase(sessionId: String, limit: Int? = nil) {
         self.currentSessionID = sessionId
-        // Heal conversations whose newest part was written to the global store
-        // while the session's project route was unknown — those rows are moved
-        // into the project database before the tail is read, so the tail
-        // includes them.
-        dbBridge.recoverGlobalMessages(sessionId: sessionId)
         let loadedMessages = dbBridge.loadMessageTail(sessionId: sessionId, take: limit)
 
         objectWillChange.send()

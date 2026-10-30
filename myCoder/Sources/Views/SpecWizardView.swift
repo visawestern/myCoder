@@ -65,7 +65,6 @@ struct SpecWizardView: View {
 private struct SpecWizardContent: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var session: SpecWizardSession
-    @ObservedObject private var autoFreeStore = MyCoderAutoFreeStore.shared
 
     @State private var answerText = ""
     @State private var clarifyText = ""
@@ -93,7 +92,6 @@ private struct SpecWizardContent: View {
             serverProviders: appState.serverProviders,
             customProviders: appState.customProviders,
             localProviders: LocalProviderLogic.load(defaults: appState.defaults),
-            autoFree: autoFreeStore.provider,
             defaults: appState.defaults
         )
     }

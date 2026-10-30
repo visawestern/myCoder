@@ -33,10 +33,6 @@ enum ProviderCleanSlateReset {
         "com.mycoder.selectedProviderID",
         "com.mycoder.preferredProviderID",
         "com.mycoder.selectedVariant",
-        // Built-in free route state
-        "com.mycoder.autoFree.model",
-        "com.mycoder.autoFree.locked",
-        "com.mycoder.autoFree.systemPrompt",
         // Misc provider bookkeeping
         "com.mycoder.providersChanged",
         "com.mycoder.webRemoteChatMappings",

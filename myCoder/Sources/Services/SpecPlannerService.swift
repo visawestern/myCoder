@@ -8,7 +8,6 @@ import Foundation
 enum SpecPlannerRoute: Equatable {
     case openAICompatible(baseURL: String, apiKey: String?, model: String)
     case openCodeServe(baseURL: String, headers: [String: String], providerID: String, model: String)
-    case autoFree(model: String)
 
     init?(sendRoute: SendRoute, model: String) {
         switch sendRoute {
@@ -25,8 +24,6 @@ enum SpecPlannerRoute: Equatable {
                 providerID: providerID,
                 model: model.isEmpty ? routeModel : model
             )
-        case .autoFree:
-            self = .autoFree(model: model)
         case .mimoServe, .acp, .web, .none:
             return nil
         }
@@ -78,20 +75,6 @@ struct LiveSpecCompletionProvider: SpecCompletionProviding {
             )
             return result.content
 
-        case .autoFree(let model):
-            let messages = request.messages.map {
-                MyCoderAutoFreeClient.Message(role: $0.role, content: $0.content)
-            }
-            var text = ""
-            for try await event in MyCoderAutoFreeClient.shared.chatCompletion(
-                model: model,
-                messages: messages
-            ) {
-                if case .content(let chunk) = event {
-                    text += chunk
-                }
-            }
-            return text
         }
     }
 }

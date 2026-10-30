@@ -60,7 +60,7 @@ struct SpecWizardSessionTests {
         projectFiles: [String: String] = [:],
         languageProvider: @escaping () -> AppLanguage = { .english },
         routeProvider: @escaping (String, String?) -> SpecPlannerRoute? = { model, _ in
-            .autoFree(model: model)
+            .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: model)
         },
         body: (SpecWizardSession, ProjectSpecStore, SessionFakeProvider) async throws -> Void
     ) async throws {
@@ -112,7 +112,7 @@ struct SpecWizardSessionTests {
             responses: [.success(question)],
             routeProvider: { model, providerID in
                 recorder.record(model: model, providerID: providerID)
-                return .autoFree(model: model)
+                return .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: model)
             }
         ) { session, _, _ in
             session.draft.plannerModel = "free"
@@ -152,7 +152,7 @@ struct SpecWizardSessionTests {
                 database: try ProjectDatabaseManager.manager(forProjectPath: session.projectPath),
                 providerID: "test-provider",
                 planner: SpecPlannerService(provider: SessionFakeProvider(responses: [])),
-                routeProvider: { model, _ in .autoFree(model: model) }
+                routeProvider: { model, _ in .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: model) }
             )
             #expect(second.draft.interviewComplete)
             #expect(second.turns.count == 3)
@@ -361,7 +361,7 @@ struct SpecWizardSessionTests {
                 database: try ProjectDatabaseManager.manager(forProjectPath: session.projectPath),
                 providerID: "test-provider",
                 planner: SpecPlannerService(provider: SessionFakeProvider(responses: [])),
-                routeProvider: { model, _ in .autoFree(model: model) }
+                routeProvider: { model, _ in .openAICompatible(baseURL: "http://127.0.0.1:9999/v1", apiKey: nil, model: model) }
             )
             #expect(second.draft.visibleStep == .setup)
             #expect(second.draft.goal == "Offline notes app")

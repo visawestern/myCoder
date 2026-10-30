@@ -2,7 +2,7 @@ import Foundation
 
 /// Chooses the part flow a message row renders.
 ///
-/// Direct/Auto Free turns used to persist reasoning and tool parts while
+/// Direct turns used to persist reasoning and tool parts while
 /// keeping the answer only in `content`. The row rendered that content above
 /// every part, so a finished reply showed its answer first and the reasoning
 /// spoiler at the very end. New turns store the answer as a real text part;

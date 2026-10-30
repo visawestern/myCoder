@@ -151,6 +151,9 @@ struct Message: Identifiable {
     /// Queued inline approvals for direct local-model tool loops. Multiple
     /// calls can wait at once, across multiple chats.
     var pendingApprovals: [PendingToolApproval]
+    /// Model + send parameters used for this message (persisted; shown in the
+    /// message footer — user directive 2026-10-29).
+    var sendInfo: MessageSendInfo?
 
     /// Elapsed reasoning time. While reasoning is in progress (no end
     /// timestamp yet) this measures from start to now so a live UI can show
@@ -162,7 +165,7 @@ struct Message: Identifiable {
         return end.timeIntervalSince(startedAt)
     }
 
-    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = []) {
+    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil) {
         self.id = id
         self.serverID = serverID
         self.role = role
@@ -188,6 +191,60 @@ struct Message: Identifiable {
         self.pendingApprovalTool = pendingApprovalTool
         self.pendingApprovalMessage = pendingApprovalMessage
         self.pendingApprovals = pendingApprovals
+        self.sendInfo = sendInfo
+    }
+}
+
+/// Metadata persisted with an assistant/user message so the chat can show the
+/// Telegram-style sender line: send time + provider/model chips + the exact
+/// call parameters (user directive 2026-10-29, §15.5). Stored as JSON in the
+/// message `metadata` column.
+struct MessageSendInfo: Codable, Equatable, Hashable {
+    var modelID: String?
+    var providerID: String?
+    var temperature: Double?
+    var topP: Double?
+    var maxTokens: Int?
+    var systemPrompt: String?
+    var variant: String?
+    /// Tool names that were available/used for this send.
+    var tools: [String]
+    var sentAt: Date
+
+    init(
+        modelID: String? = nil,
+        providerID: String? = nil,
+        temperature: Double? = nil,
+        topP: Double? = nil,
+        maxTokens: Int? = nil,
+        systemPrompt: String? = nil,
+        variant: String? = nil,
+        tools: [String] = [],
+        sentAt: Date = Date()
+    ) {
+        self.modelID = modelID
+        self.providerID = providerID
+        self.temperature = temperature
+        self.topP = topP
+        self.maxTokens = maxTokens
+        self.systemPrompt = systemPrompt
+        self.variant = variant
+        self.tools = tools
+        self.sentAt = sentAt
+    }
+
+    init(parameters: ModelCallParameters, modelID: String?, providerID: String?, variant: String? = nil, tools: [String] = [], sentAt: Date = Date()) {
+        self.init(
+            modelID: modelID,
+            providerID: providerID,
+            temperature: parameters.temperature,
+            topP: parameters.topP,
+            maxTokens: parameters.maxTokens,
+            systemPrompt: parameters.systemPrompt,
+            variant: variant,
+            tools: tools,
+            sentAt: sentAt
+        )
     }
 }
 

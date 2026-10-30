@@ -11,8 +11,6 @@ enum SendProviderReadinessLogic {
     static func connectionValidationError(
         serverConnected: Bool,
         selectedProviderID: String,
-        autoFreeID: String = "mycoder-auto-free",
-        autoFreeReady: Bool = true,
         customProviders: [CustomProviderState],
         localProviderIDs: [String],
         webProviderIDs: [String],
@@ -22,12 +20,6 @@ enum SendProviderReadinessLogic {
         let selected = selectedProviderID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selected.isEmpty else {
             return genericProviderError
-        }
-
-        if selected == autoFreeID {
-            return autoFreeReady
-                ? nil
-                : "OpenCode Zen is unavailable. Refresh the anonymous OpenCode free catalog or choose another provider."
         }
 
         if let webID = webID(from: selected) {

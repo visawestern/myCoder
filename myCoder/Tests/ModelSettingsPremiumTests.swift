@@ -64,7 +64,6 @@ struct ModelSettingsPremiumTests {
     func immutableModelSnapshot() throws {
         let source = try sourceText("myCoder/Sources/App/MyCoderApp.swift")
         #expect(source.contains("let discoveredModels = ProviderConnectionValidationLogic.modelIDs(from: data)"))
-        #expect(source.contains("let models: [String] = provider.type == .openCodeZen"))
         #expect(source.contains("let loadedModels = models"))
         #expect(source.contains("MainActor.run { [providerID, loadedModels, modelLoadMessage] in"))
     }

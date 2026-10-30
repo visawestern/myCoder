@@ -2,7 +2,7 @@ import Foundation
 
 /// AI-powered conversation summarization for web-provider session restarts.
 /// When a web model hits its per-chat token limit, the full transcript is
-/// summarized using the local free model (myCoder Auto Free) so the next
+/// summarized using an assigned internal model so the next
 /// chat session can continue with compressed context focused on the current
 /// task. Progressive thresholds prevent premature summarization: the allowed
 /// context window grows by `stepTokens` after each restart so earlier

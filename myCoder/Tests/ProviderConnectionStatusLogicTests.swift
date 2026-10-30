@@ -3,29 +3,12 @@ import Testing
 
 @Suite("Selected provider connection status")
 struct ProviderConnectionStatusLogicTests {
-    @Test("Serve connectivity cannot masquerade as an unavailable Auto Free provider")
-    func serverDoesNotMaskAutoFree() {
-        #expect(!ProviderConnectionStatusLogic.isConnected(
-            selectedID: "mycoder-auto-free",
-            serverProviderIDs: ["serve-provider"],
-            serverConnected: true,
-            autoFreeID: "mycoder-auto-free",
-            autoFreeReady: false,
-            webConnected: nil,
-            localEnabled: false,
-            customReady: false,
-            remembered: nil
-        ))
-    }
-
     @Test("Serve connectivity cannot masquerade as an expired web login")
     func serverDoesNotMaskWeb() {
         #expect(!ProviderConnectionStatusLogic.isConnected(
             selectedID: "web:chatgpt",
             serverProviderIDs: ["serve-provider"],
             serverConnected: true,
-            autoFreeID: "mycoder-auto-free",
-            autoFreeReady: true,
             webConnected: false,
             localEnabled: false,
             customReady: false,
@@ -36,25 +19,21 @@ struct ProviderConnectionStatusLogicTests {
     @Test("ready direct providers report connected without Serve")
     func directProvidersCanBeConnected() {
         #expect(ProviderConnectionStatusLogic.isConnected(
-            selectedID: "mycoder-auto-free",
+            selectedID: "local-ollama",
             serverProviderIDs: [],
             serverConnected: false,
-            autoFreeID: "mycoder-auto-free",
-            autoFreeReady: true,
             webConnected: nil,
-            localEnabled: false,
+            localEnabled: true,
             customReady: false,
             remembered: nil
         ))
         #expect(ProviderConnectionStatusLogic.isConnected(
-            selectedID: "local-ollama",
+            selectedID: "custom-openai",
             serverProviderIDs: [],
             serverConnected: false,
-            autoFreeID: "mycoder-auto-free",
-            autoFreeReady: true,
             webConnected: nil,
-            localEnabled: true,
-            customReady: false,
+            localEnabled: false,
+            customReady: true,
             remembered: nil
         ))
     }

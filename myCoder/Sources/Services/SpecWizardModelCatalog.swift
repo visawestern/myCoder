@@ -18,13 +18,11 @@ struct SpecModelOption: Identifiable, Equatable {
 /// deliberately tri-state: `nil` means "not reported", never "no".
 struct SpecModelMetadata: Equatable {
     enum Source: String, Equatable {
-        case autoFree
         case custom
         case local
 
         var icon: String {
             switch self {
-            case .autoFree: return "sparkles"
             case .custom: return "cloud"
             case .local: return "desktopcomputer"
             }
@@ -32,7 +30,6 @@ struct SpecModelMetadata: Equatable {
 
         var label: String {
             switch self {
-            case .autoFree: return "Free"
             case .custom: return "Cloud"
             case .local: return "Local"
             }
@@ -75,26 +72,17 @@ struct SpecModelGroup: Identifiable, Equatable {
 
 /// Builds the provider → model tree for the wizard's planning/coding pickers.
 /// Pure logic: every value comes from configured providers, the bundled
-/// metadata catalog, user overrides, or the live Auto Free catalog — nothing
+/// metadata catalog, user overrides — nothing
 /// is invented. Disabled providers and disabled models never appear.
 enum SpecWizardModelCatalog {
     static func groups(
         serverProviders: [MimoProviderResponse],
         customProviders: [CustomProvider],
         localProviders: [LocalProviderConfig],
-        autoFree: MyCoderAutoFreeProvider,
         defaults: UserDefaults = .standard
     ) -> [SpecModelGroup] {
         let overrides = ModelMetadataStore.loadAll(defaults: defaults)
         var groups: [SpecModelGroup] = []
-
-        if autoFree.isEnabled {
-            let group = autoFreeGroup(
-                provider: autoFree,
-                defaults: defaults
-            )
-            if !group.models.isEmpty { groups.append(group) }
-        }
 
         let customGroups = customProviders
             .filter { $0.isEnabled && !$0.acpEnabled }
@@ -212,42 +200,6 @@ enum SpecWizardModelCatalog {
 
     // MARK: - Providers
 
-    private static func autoFreeGroup(
-        provider: MyCoderAutoFreeProvider,
-        defaults: UserDefaults
-    ) -> SpecModelGroup {
-        let live = provider.models
-        let liveIDs = Set(live.map(\.id))
-        let fallbackIDs = live.isEmpty
-            ? MyCoderAutoFreeClient.freeModelIDs
-            : []
-        let orderedIDs = live.map(\.id) + fallbackIDs
-            .filter { !liveIDs.contains($0) }
-
-        var seen = Set<String>()
-        let models = orderedIDs.compactMap { modelID -> SpecModelOption? in
-            guard seen.insert(modelID).inserted else { return nil }
-            guard !DisabledModelStore.isDisabled(
-                providerID: provider.id,
-                modelID: modelID,
-                defaults: defaults
-            ) else { return nil }
-            let liveModel = live.first(where: { $0.id == modelID })
-            return SpecModelOption(
-                providerID: provider.id,
-                providerName: provider.displayName,
-                modelID: modelID,
-                metadata: autoFreeMetadata(modelID: modelID, liveModel: liveModel)
-            )
-        }
-        return SpecModelGroup(
-            providerID: provider.id,
-            providerName: provider.displayName,
-            source: .autoFree,
-            models: models
-        )
-    }
-
     // MARK: - Metadata
 
     private static func option(
@@ -293,35 +245,6 @@ enum SpecWizardModelCatalog {
             providerName: providerName,
             modelID: modelID,
             metadata: metadata
-        )
-    }
-
-    private static func autoFreeMetadata(
-        modelID: String,
-        liveModel: MyCoderAutoFreeClient.Model?
-    ) -> SpecModelMetadata {
-        let catalogModel = ModelMetadataCatalog.shared.lookup(modelID: modelID)
-        let catalogCapabilities = catalogModel?.capabilities
-        let context = liveModel?.contextLength ?? catalogModel?.limit?.context
-        let output = catalogModel?.limit?.output
-        let description = liveModel?.description
-            ?? liveModel?.effectiveDescription
-        return SpecModelMetadata(
-            source: .autoFree,
-            displayName: liveModel?.name ?? catalogModel?.name ?? modelID,
-            contextWindow: context,
-            effectiveContextWindow: ContextWindowCatalog.limit(for: modelID, reported: context),
-            outputLimit: output,
-            effectiveOutputLimit: ContextWindowCatalog.outputLimit(for: modelID, reported: output),
-            reasoning: catalogCapabilities?.reasoning,
-            toolCall: true,
-            plan: catalogCapabilities?.plan,
-            vision: catalogCapabilities?.vision,
-            imageGeneration: catalogCapabilities?.imagegen,
-            costInput: nil,
-            costOutput: nil,
-            description: description,
-            isFree: true
         )
     }
 }

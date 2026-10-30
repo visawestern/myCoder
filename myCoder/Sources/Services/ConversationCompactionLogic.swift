@@ -118,7 +118,7 @@ enum ConversationSummarizerError: LocalizedError, Equatable {
 /// Runs one summarization turn through an injected transport. Keeping the
 /// transport a closure makes the service testable without network access and
 /// lets the UI supply the route-specific client (direct OpenAI-compatible,
-/// OpenCode serve, or myCoder Auto Free).
+/// OpenCode serve).
 struct ConversationSummarizer {
     typealias Transport = (String) async throws -> String
 

@@ -14,12 +14,10 @@ import CryptoKit
 struct OpenCodeRequestContext: Equatable {
     static let clientName = "cli"
     
-    /// Matches the official OpenCode client's User-Agent format as of 2026-10-26:
-    /// `opencode/latest/<version>/cli` — the "latest" channel and a pinned version
-    /// that Zen's free tier recognizes. Using a fixed known-good version (2.0.25)
-    /// instead of the app version avoids mismatches when the app updates.
+    /// Matches the official OpenCode client's User-Agent format the user
+    /// explicitly specified (directive 2026-10-29): `opencode/stable/2.1.4/cli`.
     static var userAgent: String {
-        "opencode/latest/2.0.25/cli"
+        "opencode/stable/2.1.4/cli"
     }
     
     static let anonymousAuthorization = "Bearer public"

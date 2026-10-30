@@ -94,9 +94,6 @@ class AppState: ObservableObject {
         if let observer = subagentObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        if let observer = autoFreeSwitchObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
         if let observer = providersObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -361,7 +358,6 @@ class AppState: ObservableObject {
     /// Short-lived feedback for shell actions such as Cmd+Option+Z.
     @Published var shellActionNotice: String?
     @Published var shellActionNoticeTone: UndoActionFeedbackTone = .success
-    private var autoFreeSwitchObserver: NSObjectProtocol?
     private var providersObserver: NSObjectProtocol? = nil
     private var subagentObserver: NSObjectProtocol? = nil
     
@@ -557,19 +553,6 @@ class AppState: ObservableObject {
         LocalizationRuntime.currentLanguage = appLanguage
 
         migrateLegacyPreferences()
-        autoFreeSwitchObserver = NotificationCenter.default.addObserver(
-            forName: .myCoderAutoFreeModelSwitched,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            let appNotification = MyCoderAutoFreeNotificationLogic.make(
-                userInfo: notification.userInfo ?? [:]
-            )
-            self.notificationService.add(appNotification)
-            self.transientProviderNotification = appNotification
-        }
-
         providersObserver = NotificationCenter.default.addObserver(
             forName: .providersChanged,
             object: nil,
@@ -619,7 +602,7 @@ class AppState: ObservableObject {
         // Preserve an existing explicit selection across the rename.
         for key in ["com.mycoder.selectedProviderID", "com.mycoder.preferredProviderID"] {
             let value = defaults.string(forKey: key)
-            if value == "mimo-auto" || value == MyCoderAutoFreeProvider.builtInID {
+            if value == "mimo-auto" {
                 defaults.removeObject(forKey: key)
             }
         }
@@ -1641,9 +1624,7 @@ class AppState: ObservableObject {
                 // Keep refresh and Test Connection on one canonical parser so
                 // blank IDs, fallback names, and duplicate rows behave alike.
                 let discoveredModels = ProviderConnectionValidationLogic.modelIDs(from: data)
-                let models: [String] = provider.type == .openCodeZen
-                    ? OpenCodeZenCatalog.availableModels(from: discoveredModels, apiKey: apiKey)
-                    : discoveredModels
+                let models: [String] = discoveredModels
                 guard !models.isEmpty else {
                     await MainActor.run {
                         self.providerModelLoadMessages[provider.id] = "No models were found in this provider's response. Check its API base URL."
@@ -1653,9 +1634,7 @@ class AppState: ObservableObject {
                 let providerID = provider.id
                 let loadedModels = models
                 let modelCount = loadedModels.count
-                let modelLoadMessage = provider.type == .openCodeZen
-                    ? "Loaded \(modelCount) OpenCode Zen model\(modelCount == 1 ? "" : "s") · \(OpenCodeZenCatalog.accessSummary(hasAPIKey: !apiKey.isEmpty))"
-                    : "Loaded \(modelCount) model\(modelCount == 1 ? "" : "s")."
+                let modelLoadMessage = "Loaded \(modelCount) model\(modelCount == 1 ? "" : "s")."
                 await MainActor.run { [providerID, loadedModels, modelLoadMessage] in
                     if let index = customProviders.firstIndex(where: { $0.id == providerID }) {
                         customProviders[index].models = CustomModelListLogic.mergedModels(
@@ -2251,15 +2230,12 @@ class AppState: ObservableObject {
                 && $0.isEnabled
                 && (!$0.requiresAPIKey || !$0.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        let autoFreeReady = false
         return ProviderConnectionStatusLogic.isConnected(
             selectedID: selectedProviderID,
             serverProviderIDs: serverProviders
                 .filter { !ProviderEnablementStore.isDisabled($0.id, defaults: defaults) }
                 .map(\.id),
             serverConnected: serverConnected,
-            autoFreeID: MyCoderAutoFreeProvider.builtInID,
-            autoFreeReady: autoFreeReady,
             webConnected: webConnected,
             localEnabled: localEnabled,
             customReady: customReady,

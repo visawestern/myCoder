@@ -199,7 +199,7 @@ enum ProviderType: String, Codable, CaseIterable, Identifiable {
         case .openAI: return "https://api.openai.com/v1"
         case .openRouter: return "https://openrouter.ai/api/v1"
         case .openModel: return "https://api.openmodel.ai/v1"
-        case .openCodeZen: return OpenCodeZenCatalog.baseURL
+        case .openCodeZen: return "https://opencode.ai"
         case .ollama: return "http://localhost:11434/v1"
         case .anthropic: return "https://api.anthropic.com/v1"
         case .google: return "https://generativelanguage.googleapis.com/v1"

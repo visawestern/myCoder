@@ -104,3 +104,16 @@ struct ChatViewportFrameKey: PreferenceKey {
         value = nextValue()
     }
 }
+
+/// Frame of the bottom sentinel in the chat scroll space. The old
+/// `onAppear`/`onDisappear` pair was useless inside a `LazyVStack`: the sentinel
+/// stays instantiated after the first layout, so "visible" never became false
+/// and every streamed token yanked the reader to the bottom.
+struct ChatBottomFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect,
+                       nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}

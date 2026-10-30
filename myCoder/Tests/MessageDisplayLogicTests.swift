@@ -1185,13 +1185,13 @@ struct MarkdownTextScaleAndParsingTests {
         }
     }
 
-    @Test("parseMarkdown merges consecutive non-empty lines into a paragraph")
+    @Test("parseMarkdown сохраняет одиночные переносы строк внутри абзаца")
     func parseParagraphMerge() {
         let view = MarkdownText(text: "line one\nline two")
         let blocks = view.parseMarkdown()
         #expect(blocks.count == 1)
         if case .paragraph(let content) = blocks[0] {
-            #expect(content == "line one line two")
+            #expect(content == "line one\nline two")
         }
     }
 

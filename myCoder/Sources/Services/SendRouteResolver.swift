@@ -17,8 +17,6 @@ enum SendRoute: Equatable {
     case openCodeServe(baseURL: String, headers: [String: String], providerID: String, model: String)
     /// Web-chat provider driven through the browser (WebChatDriver).
     case web(configID: String)
-    /// Built-in myCoder Auto Free provider (direct to OpenCode Zen).
-    case autoFree
     /// Nothing usable selected.
     case none
 }
@@ -34,10 +32,6 @@ enum SendRouteResolver {
         localProviders: [LocalProviderConfig],
         webProviderIDs: [String]
     ) -> SendRoute {
-        // 0) Built-in myCoder Auto Free provider (always present).
-        if selectedProviderID == MyCoderAutoFreeProvider.builtInID {
-            return .autoFree
-        }
         // 1) Web provider (option id "web:<id>").
         if let webID = WebProviderConnectivity.configID(fromOptionID: selectedProviderID),
            webProviderIDs.contains(webID) {

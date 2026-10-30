@@ -216,11 +216,13 @@ struct ProviderCascadeTests {
         )
     }
 
-    @Test("Send readiness accepts myCoder Auto Free without MiMo Serve")
-    func sendReadinessAcceptsMyCoderAutoFree() {
+    @Test("Send readiness accepts a connected web provider without MiMo Serve")
+    func sendReadinessAcceptsWebWithoutServe() {
         #expect(SendReadinessLogic.connectionValidationError(
             serverConnected: false,
-            selectedProviderID: MyCoderAutoFreeProvider.builtInID
+            selectedProviderID: "web:qwen",
+            webProviderIDs: ["qwen"],
+            webConnected: true
         ) == nil)
     }
 

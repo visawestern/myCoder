@@ -6,7 +6,6 @@ enum SendReadinessLogic {
     static func connectionValidationError(
         serverConnected: Bool,
         selectedProviderID: String = "",
-        autoFreeReady: Bool = true,
         customProviders: [CustomProvider] = [],
         localProviderIDs: [String] = [],
         webProviderIDs: [String] = [],
@@ -16,8 +15,6 @@ enum SendReadinessLogic {
         SendProviderReadinessLogic.connectionValidationError(
             serverConnected: serverConnected,
             selectedProviderID: selectedProviderID,
-            autoFreeID: MyCoderAutoFreeProvider.builtInID,
-            autoFreeReady: autoFreeReady,
             customProviders: customProviders.map {
                 SendProviderReadinessLogic.CustomProviderState(
                     id: $0.id,
@@ -59,7 +56,6 @@ enum SendReadinessLogic {
         modelID: String,
         providerID: String?,
         serverConnected: Bool = false,
-        autoFreeReady: Bool = true,
         customProviders: [CustomProvider] = [],
         localProviderIDs: [String] = [],
         webProviderIDs: [String] = [],
@@ -71,8 +67,7 @@ enum SendReadinessLogic {
             && connectionValidationError(
                 serverConnected: serverConnected,
                 selectedProviderID: providerID ?? "",
-                autoFreeReady: autoFreeReady,
-                customProviders: customProviders,
+                    customProviders: customProviders,
                 localProviderIDs: localProviderIDs,
                 webProviderIDs: webProviderIDs,
                 serverProviderIDs: serverProviderIDs,
@@ -93,7 +88,6 @@ enum SendReadinessReason {
         modelID: String,
         providerID: String?,
         serverConnected: Bool,
-        autoFreeReady: Bool = true,
         customProviders: [CustomProvider],
         localProviderIDs: [String],
         webProviderIDs: [String],
@@ -117,7 +111,6 @@ enum SendReadinessReason {
         return SendReadinessLogic.connectionValidationError(
             serverConnected: serverConnected,
             selectedProviderID: providerID ?? "",
-            autoFreeReady: autoFreeReady,
             customProviders: customProviders,
             localProviderIDs: localProviderIDs,
             webProviderIDs: webProviderIDs,

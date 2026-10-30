@@ -468,12 +468,5 @@ struct CodeIndexTests {
         ))
         #expect(read.contains("hash verified"))
         #expect(read.contains("6\t    func load(id: String) -> Int {"))
-
-        let definition = MyCoderAutoFreeClient.toolDefinition(for: .codeSearch)
-        #expect(definition.function.parameters.required == ["query"])
-        #expect(definition.function.parameters.properties["query"] != nil)
-        #expect(MyCoderAutoFreeClient.agentToolDefinitions().contains {
-            $0.function.name == "code_search"
-        })
     }
 }

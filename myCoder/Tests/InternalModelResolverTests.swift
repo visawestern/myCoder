@@ -21,14 +21,12 @@ struct InternalModelResolverTests {
         let refs = InternalModelResolver.availableModels(
             customProviders: [custom],
             localProviders: [local],
-            freeModels: ["free-model"],
             serverProviders: [server]
         )
 
         #expect(refs.contains(InternalModelRef(providerID: "custom", modelID: "custom-model")))
         #expect(refs.contains(InternalModelRef(providerID: local.id, modelID: "strata-model")))
         #expect(refs.contains(InternalModelRef(providerID: "google", modelID: "gemini-flash-latest")))
-        #expect(refs.contains(InternalModelRef(providerID: MyCoderAutoFreeProvider.builtInID, modelID: "free-model")))
     }
 
     @Test func serverModelRoutesThroughOpenCodeServe() {

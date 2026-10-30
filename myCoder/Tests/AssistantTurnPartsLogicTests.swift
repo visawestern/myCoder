@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
-/// The direct/Auto Free tool loops persisted reasoning and tool parts but kept
+/// The direct tool loops persisted reasoning and tool parts but kept
 /// the answer only in `content`, which the row renders above the parts — a
 /// finished reply showed its reasoning block at the very end (user report
 /// 2026-10-29). These tests pin the display order.
@@ -47,33 +47,10 @@ struct AssistantTurnPartsLogicTests {
         #expect(kinds(parts) == ["tool:read_file", "text"])
     }
 
-    @Test("Auto Free сохраняет рассуждения по итерациям и добавляет ответ")
-    func autoFreeFinalKeepsTimeline() {
-        let timeline: [MessagePartContent] = [
-            .reasoning("шаг 1"),
-            .toolCall(name: "read_file", args: "{}", result: "ok", callID: "c1")
-        ]
-        let parts = AssistantTurnPartsLogic.autoFreeFinalParts(
-            timelineParts: timeline,
-            answer: "итог"
-        )
-        #expect(kinds(parts) == ["reasoning", "tool:read_file", "text"])
-    }
-
-    @Test("Auto Free поток: рассуждение и текст текущей итерации")
-    func autoFreeStreamingAddsReasoningThenAnswer() {
-        let parts = AssistantTurnPartsLogic.autoFreeStreamingParts(
-            timelineParts: [],
-            reasoning: "думаю",
-            answer: "печатаю"
-        )
-        #expect(kinds(parts) == ["reasoning", "text"])
-    }
-
     @Test("Ответ не дублируется, если текстовая часть уже есть")
     func answerIsNotDuplicated() {
-        let parts = AssistantTurnPartsLogic.autoFreeFinalParts(
-            timelineParts: [.text("итог")],
+        let parts = AssistantTurnPartsLogic.directTimelineParts(
+            timeline: [.text("итог")],
             answer: "итог"
         )
         #expect(kinds(parts) == ["text"])

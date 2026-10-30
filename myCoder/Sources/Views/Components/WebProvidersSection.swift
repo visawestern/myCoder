@@ -769,20 +769,6 @@ struct WebProviderLoginView: View {
                 }())
                 .help(L.t(AppLocalizationKey.locFastDOMDetectionHelp))
 
-                Button(action: findModelsWithAI) {
-                    HStack(spacing: 4) {
-                        MiMoLogoMark(size: 14)
-                        Text(L.t(AppLocalizationKey.locAskMyCoderAutoFree))
-                            .interfaceFont(size: 11)
-                    }
-                    .foregroundColor(Color.mimo.brand)
-                }
-                .buttonStyle(HandCursorButtonStyle())
-                .disabled({
-                    if case .detecting = detectResult { return true }
-                    return !MyCoderAutoFreeStore.shared.provider.isReady
-                }())
-                .help(L.t(AppLocalizationKey.locAskMyCoderAutoFreeHelp))
 
                 // Capture only enabled when we have models OR user explicitly wants session
                 Button(action: capture) {
@@ -916,76 +902,6 @@ struct WebProviderLoginView: View {
                 } else {
                     detectResult = .found(resolvedModels)
                 }
-            }
-        }
-    }
-
-    private func findModelsWithAI() {
-        Task {
-            await MainActor.run { detectResult = .detecting }
-            let bridge = WKWebViewBrowserBridge(webView: webView, selectors: WebVendorSelectors(input: "", sendButton: "", responseContainer: "", stopButton: ""))
-            do {
-                let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
-                let dropdownSelector = [
-                    config.customModelSelector?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                    catalogEntry?.modelDropdown ?? ""
-                ].filter { !$0.isEmpty }.joined(separator: ", ")
-                guard !dropdownSelector.isEmpty else {
-                    await MainActor.run { detectResult = .failed(L.t(AppLocalizationKey.locNoSelectorFound)) }
-                    return
-                }
-
-                // AI detection must inspect the same expanded live menu as DOM
-                // detection. Reading body text first exposes only the currently
-                // selected model, which caused the screenshot's one-of-ten result.
-                let liveModels = await WebModelDiscovery.discoverAllModels(
-                    using: bridge,
-                    dropdownSelector: dropdownSelector,
-                    vendor: config.vendor
-                ) ?? []
-                let structuredCandidates = (try? await bridge.readVisibleModelCandidates()) ?? []
-                let candidateLabels = structuredCandidates.compactMap {
-                    WebModelListParser.normalize($0.label, vendor: config.vendor)
-                }
-                let pageText = (try await bridge.pageText())
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !pageText.isEmpty || !candidateLabels.isEmpty || !liveModels.isEmpty else {
-                    await MainActor.run { detectResult = .failed(L.t(AppLocalizationKey.locNoReadablePageText)) }
-                    return
-                }
-
-                let liveNames = liveModels.map(\.name)
-                let prompt = """
-                Read the visible text from a \(config.displayName) web chat page below. Extract only selectable model names currently visible in its model menu. Return a JSON array of strings, with one exact model label per item and no explanations. Never return headings, effort labels, descriptions, or feature actions. If no model names are visible, return [].
-
-                STRUCTURED LIVE CANDIDATES:
-                \(liveNames.joined(separator: "\\n"))
-
-                PAGE TEXT AFTER MENU EXPANSION:
-                \(String(pageText.prefix(60_000)))
-                """
-                var answer = ""
-                let messages = [
-                    MyCoderAutoFreeClient.Message(
-                        role: "system",
-                        content: "You extract UI model labels exactly. Never invent a model name. Return only valid JSON."
-                    ),
-                    MyCoderAutoFreeClient.Message(role: "user", content: prompt)
-                ]
-                for try await event in MyCoderAutoFreeStore.shared.streamChat(
-                    messages: messages,
-                    tools: MyCoderAutoFreeClient.gateToolDefinitions(),
-                    toolChoice: "none"
-                ) {
-                    if case .content(let text) = event {
-                        answer += text
-                    }
-                }
-                let aiModels = parseAIDetectedModels(answer)
-                let merged = mergeDetectedModels(liveModels: liveModels, aiModels: aiModels)
-                saveDetectedModels(merged)
-            } catch {
-                await MainActor.run { detectResult = .failed(L.t(AppLocalizationKey.locAIDetectionFailed, error.localizedDescription)) }
             }
         }
     }

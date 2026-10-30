@@ -133,6 +133,9 @@ struct CodeBlockSpoilerView: View {
         if settings.showLineNumbers {
             // Line numbers only line up with logical lines, so a numbered
             // block scrolls horizontally instead of soft-wrapping.
+            // The scroll view is pinned to its content height: a chat row can
+            // hand it a short height while being re-measured, and a scroll
+            // view that accepts that proposal clips (and truncates) the code.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 0) {
                     gutter
@@ -140,22 +143,25 @@ struct CodeBlockSpoilerView: View {
                         .fill(palette.border.opacity(0.6))
                         .frame(width: 1)
                     codeText
-                        .fixedSize(horizontal: true, vertical: false)
+                        .fixedSize(horizontal: true, vertical: true)
                         .padding(.leading, 10)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 10)
             }
+            .fixedSize(horizontal: false, vertical: true)
         } else if settings.wrapLongLines {
             codeText
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 codeText
-                    .fixedSize(horizontal: true, vertical: false)
+                    .fixedSize(horizontal: true, vertical: true)
                     .padding(10)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -170,7 +176,7 @@ struct CodeBlockSpoilerView: View {
             .font(codeFont)
             .foregroundColor(palette.lineNumber)
             .multilineTextAlignment(.trailing)
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: true, vertical: true)
             .padding(.trailing, 8)
     }
 

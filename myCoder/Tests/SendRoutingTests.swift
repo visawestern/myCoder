@@ -7,18 +7,22 @@ struct SendRoutingTests {
 
     // MARK: - SendRouteResolver
 
-    @Test func autoFreeRoutesToOpenCodeZen() {
+    @Test func openAICompatibleRouteForCustomProvider() {
         let route = SendRouteResolver.route(
-            selectedProviderID: MyCoderAutoFreeProvider.builtInID,
-            selectedModel: MyCoderAutoFreeProvider.defaultModelID,
+            selectedProviderID: "custom-openai-1",
+            selectedModel: "gpt-4o",
             serverConnected: false,
             isACP: false,
-            customProviders: [],
+            customProviders: [CustomProvider(
+                id: "custom-openai-1",
+                name: "C",
+                type: .openAI,
+                baseURL: "https://api.example.com/v1"
+            )],
             localProviders: [],
             webProviderIDs: []
         )
-        #expect(route == .autoFree)
-        #expect(!SendRouteResolver.requiresServer(route))
+        #expect(route == .openAICompatible(baseURL: "https://api.example.com/v1", apiKey: nil, model: "gpt-4o"))
     }
 
     @Test func everySupportedWebProviderUsesBrowserRoute() {

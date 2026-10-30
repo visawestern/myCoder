@@ -1,7 +1,13 @@
 import SwiftUI
 
-private enum MessageContentSegment: Identifiable {
+enum MessageContentSegment: Identifiable {
     case part(MessagePartContent)
+    /// Consecutive thinking blocks of one agent iteration (or the same
+    /// iteration split by the provider). They are merged into ONE spoiler,
+    /// because they belong to the same thought. A thinking block that follows
+    /// a tool call is a NEW thought and gets its own spoiler, so the chat keeps
+    /// the exact order: reasoning → tool → reasoning → tool → answer.
+    case reasoning([String])
     case toolCalls([ToolCallInspectorStep])
     case approval(PendingToolApproval)
 
@@ -9,6 +15,8 @@ private enum MessageContentSegment: Identifiable {
         switch self {
         case .part(let part):
             return "part-\(part.id)"
+        case .reasoning(let blocks):
+            return "reasoning-\(blocks.joined(separator: "\u{1}").hashValue)"
         case .toolCalls(let calls):
             return "tools-\(calls.first?.id ?? "empty")"
         case .approval(let approval):
@@ -22,6 +30,7 @@ private enum MessageContentSegment: Identifiable {
     ) -> [MessageContentSegment] {
         var segments: [MessageContentSegment] = []
         var calls: [ToolCallInspectorStep] = []
+        var reasoning: [String] = []
         var remainingApprovals = approvals
 
         func flushCalls() {
@@ -30,12 +39,24 @@ private enum MessageContentSegment: Identifiable {
             calls = []
         }
 
+        func flushReasoning() {
+            guard !reasoning.isEmpty else { return }
+            segments.append(.reasoning(reasoning))
+            reasoning = []
+        }
+
         for part in parts {
             if case .routeInfo = part {
                 // Route chips render in the header, not in the content flow.
                 continue
             }
+            if case .reasoning(let text) = part {
+                flushCalls()
+                if !text.isEmpty { reasoning.append(text) }
+                continue
+            }
             if case .toolCall(let name, let args, let result, let callID) = part {
+                flushReasoning()
                 let step = ToolCallInspectorStep(
                     id: part.id,
                     name: name,
@@ -53,10 +74,12 @@ private enum MessageContentSegment: Identifiable {
                     calls.append(step)
                 }
             } else {
+                flushReasoning()
                 flushCalls()
                 segments.append(.part(part))
             }
         }
+        flushReasoning()
         flushCalls()
         for approval in remainingApprovals {
             segments.append(.approval(approval))
@@ -233,6 +256,12 @@ struct MessageRow: View {
             switch segment {
             case .part(let part):
                 partView(part)
+            case .reasoning(let blocks):
+                ThinkingSpoilerView(
+                    reasoning: blocks.joined(separator: "\n\n"),
+                    duration: message.reasoningDuration,
+                    isThinking: isThinkingInProgress
+                )
             case .toolCalls(let calls):
                 if calls.contains(where: isPendingQuestion) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -276,6 +305,10 @@ struct MessageRow: View {
                 }
                 .padding(.horizontal, 4)
             }
+        }
+
+        if let info = message.sendInfo {
+            MessageSendInfoFooter(info: info)
         }
     }
 
@@ -667,9 +700,21 @@ struct SplitToolInspectorView: View {
     let steps: [ToolCallInspectorStep]
     let messageID: String
     let isMessageStreaming: Bool
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
     @State private var selectedStepID: String?
     @AppStorage("com.mycoder.toolInspector.sidebarWidth") private var inspectorSidebarWidth: Double = 120
+
+    init(
+        steps: [ToolCallInspectorStep],
+        messageID: String,
+        isMessageStreaming: Bool,
+        initiallyExpanded: Bool = false
+    ) {
+        self.steps = steps
+        self.messageID = messageID
+        self.isMessageStreaming = isMessageStreaming
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     private var selectedStep: ToolCallInspectorStep? {
         steps.first(where: { $0.id == selectedStepID }) ?? steps.first
@@ -753,23 +798,29 @@ struct SplitToolInspectorView: View {
                 Divider()
 
                 HStack(alignment: .top, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                            Button {
-                                selectedStepID = step.id
-                            } label: {
-                                inspectorStepRow(
-                                    number: index + 1,
-                                    step: step,
-                                    isSelected: step.id == selectedStep.id
-                                )
+                    // The step list is its own vertical scroll surface so many
+                    // steps never get clipped — and a bottom padding keeps the
+                    // last row from touching the footer (user directive
+                    // 2026-10-29: "список действий налазиет на нижний спойлер").
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                                Button {
+                                    selectedStepID = step.id
+                                } label: {
+                                    inspectorStepRow(
+                                        number: index + 1,
+                                        step: step,
+                                        isSelected: step.id == selectedStep.id
+                                    )
+                                }
+                                .buttonStyle(HandCursorButtonStyle())
                             }
-                            .buttonStyle(HandCursorButtonStyle())
                         }
-                        Spacer(minLength: 0)
+                        .padding(.bottom, 10)
                     }
                     .frame(width: inspectorSidebarWidth, alignment: .top)
-                    .frame(minHeight: 120, alignment: .top)
+                    .frame(minHeight: 120, maxHeight: 320, alignment: .top)
                     .background(Color.mimo.surface.opacity(0.55))
 
                     ColumnResizeHandle(width: $inspectorSidebarWidth)
@@ -1124,5 +1175,106 @@ struct CompiledContextSheet: View {
         .padding(16)
         .frame(minWidth: 640, minHeight: 420)
         .background(Color.mimo.background)
+    }
+}
+
+/// Telegram-style sender line for a message: send time + small provider/model/
+/// parameter chips that open a metadata card on tap (user directive
+/// 2026-10-29, §15.5).
+struct MessageSendInfoFooter: View {
+    let info: MessageSendInfo
+
+    @State private var showCard = false
+
+    private var isCustomized: Bool {
+        info.temperature != nil || info.topP != nil || info.maxTokens != nil
+            || !(info.systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || info.variant != nil
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(info.sentAt.formatted(date: .omitted, time: .shortened))
+                .interfaceFont(size: 10)
+                .foregroundColor(Color.mimo.textMuted)
+
+            if let provider = info.providerID, !provider.isEmpty {
+                chip(icon: "network", label: provider, tooltip: "Provider: \(provider)")
+            }
+            if let model = info.modelID, !model.isEmpty {
+                chip(icon: "cpu", label: model, tooltip: "Model: \(model)")
+            }
+            if isCustomized {
+                chip(icon: "slider.horizontal.3", label: "params", tooltip: "Send parameters")
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func chip(icon: String, label: String, tooltip: String) -> some View {
+        Button {
+            showCard = true
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .interfaceFont(size: 9)
+                Text(label)
+                    .interfaceFont(size: 10, design: .monospaced)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.mimo.surfaceHover.opacity(0.6))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(Color.mimo.border.opacity(0.6), lineWidth: 1)
+            )
+            .foregroundColor(Color.mimo.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
+        .popover(isPresented: $showCard) {
+            MessageSendInfoCard(info: info)
+        }
+    }
+}
+
+struct MessageSendInfoCard: View {
+    let info: MessageSendInfo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Message details")
+                .interfaceFont(size: 13, weight: .semibold)
+                .foregroundColor(Color.mimo.textPrimary)
+            row("Sent", info.sentAt.formatted(date: .abbreviated, time: .standard))
+            row("Provider", info.providerID ?? "—")
+            row("Model", info.modelID ?? "—")
+            if let variant = info.variant { row("Variant", variant) }
+            if let temperature = info.temperature { row("Temperature", String(format: "%.2f", temperature)) }
+            if let topP = info.topP { row("Top-p", String(format: "%.2f", topP)) }
+            if let maxTokens = info.maxTokens { row("Max tokens", "\(maxTokens)") }
+            if let system = info.systemPrompt, !system.isEmpty {
+                row("System", system)
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 260)
+        .background(Color.mimo.background)
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .interfaceFont(size: 11, weight: .medium)
+                .foregroundColor(Color.mimo.textMuted)
+                .frame(width: 78, alignment: .leading)
+            Text(value)
+                .interfaceFont(size: 11)
+                .foregroundColor(Color.mimo.textSecondary)
+                .textSelection(.enabled)
+                .lineLimit(4)
+            Spacer(minLength: 0)
+        }
     }
 }

@@ -662,16 +662,6 @@ struct SendReadinessLogicTests {
         #expect(error != nil)
     }
 
-    @Test("myCoder Auto Free is not ready without an available anonymous free catalog")
-    func autoFreeRequiresAvailableCatalog() {
-        let error = SendReadinessLogic.connectionValidationError(
-            serverConnected: false,
-            selectedProviderID: MyCoderAutoFreeProvider.builtInID,
-            autoFreeReady: false
-        )
-        #expect(error?.contains("anonymous OpenCode free catalog") == true)
-    }
-
     // MARK: - sendValidationError
 
     @Test("sendValidationError nil when model and provider are valid")

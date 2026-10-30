@@ -269,6 +269,17 @@ enum OpenCodeServeClient {
     }
 }
 
+/// One streamed unit of an OpenCode serve turn (text delta). Kept as its
+/// own type so the stream API stays stable across transports.
+enum StreamEvent: Equatable {
+    case content(String)
+
+    var text: String {
+        if case .content(let text) = self { return text }
+        return ""
+    }
+}
+
 /// One parsed `/event` line relevant to streaming.
 enum OpenCodeStreamEvent: Equatable {
     /// Text delta for an assistant message part in the given session.

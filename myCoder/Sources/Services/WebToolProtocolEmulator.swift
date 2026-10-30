@@ -280,6 +280,32 @@ enum WebToolProtocolEmulator {
         parseToolCallsWithIssues(from: responseText).calls
     }
 
+    /// Remove complete ```tool … ``` fences from `text`. Tool calls render as
+    /// their own spoiler parts, so leaving the raw fence in the answer text
+    /// would duplicate it (user directive 2026-10-29). Non-tool fences and
+    /// prose are left untouched.
+    static func strippingToolFences(from text: String) -> String {
+        guard text.contains("```tool") else { return text }
+        let ns = text as NSString
+        let pattern = "```tool\\s*\\n(.*?)\\s*```"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+            return text
+        }
+        let stripped = regex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: NSRange(location: 0, length: ns.length),
+            withTemplate: ""
+        )
+        // A removed fence can leave a run of blank lines; collapse it.
+        let collapsed = stripped.replacingOccurrences(
+            of: "\n{3,}",
+            with: "\n\n",
+            options: .regularExpression
+        )
+        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Same parser, plus one report per tool block that could not become an
     /// executable call. A malformed block is never silently dropped: the
     /// driver turns each issue into a `tool_result` error for the model, so a
@@ -1076,6 +1102,23 @@ enum WebToolProtocolEmulator {
             return .pathEscapesProject(path)
         }
         return nil
+    }
+
+    /// Text returned to the model when a tool call fails validation or JSON
+    /// parsing. It carries both the error and the correct call syntax for that
+    /// tool (user directive 2026-10-29), so the model can retry with valid
+    /// JSON instead of guessing. Unknown tools have no schema — only the error
+    /// is returned.
+    static func validationResultText(
+        for error: WebToolValidationError,
+        callName: String
+    ) -> String {
+        let base = "validation error: \(error)"
+        guard let canonical = canonicalToolName(callName),
+              let tool = WebEmulatedTool(rawValue: canonical) else {
+            return base
+        }
+        return base + "\nCorrect call syntax:\n```tool\n\(tool.rawValue) \(tool.argumentSchema)\n```"
     }
 
     static func requiresApproval(_ call: WebToolCall) -> Bool {

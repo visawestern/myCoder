@@ -72,7 +72,7 @@ struct MessageSendOptionsTests {
                 models: [
                     "mycoder-auto-free": MimoProviderModel(
                         id: "mycoder-auto-free",
-                        name: "myCoder Auto Free",
+                        name: "Internal",
                         status: "active",
                         providerID: "mimo",
                         capabilities: MimoModelCapabilities(reasoning: true),
@@ -204,7 +204,7 @@ struct ProviderSettingsLogicTests {
                 models: [
                     "mycoder-auto-free": MimoProviderModel(
                         id: "mycoder-auto-free",
-                        name: "myCoder Auto Free",
+                        name: "Internal",
                         status: "active",
                         providerID: "mimo",
                         capabilities: MimoModelCapabilities(reasoning: true),

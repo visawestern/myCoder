@@ -30,12 +30,6 @@ struct SpecWizardModelCatalogTests {
         )
     }
 
-    private func autoFree(models: [MyCoderAutoFreeClient.Model]) -> MyCoderAutoFreeProvider {
-        var provider = MyCoderAutoFreeProvider()
-        provider.models = models
-        return provider
-    }
-
     @Test("The tree groups models under their provider and hides disabled entries")
     func groupsAndFilters() {
         let defaults = defaults()
@@ -69,45 +63,13 @@ struct SpecWizardModelCatalogTests {
                     models: ["llama3.2:3b"]
                 )
             ],
-            autoFree: autoFree(models: [
-                MyCoderAutoFreeClient.Model(id: "big-pickle"),
-                MyCoderAutoFreeClient.Model(id: "deepseek-v4-flash-free")
-            ]),
             defaults: defaults
         )
 
-        #expect(groups.map(\.providerID) == [
-            MyCoderAutoFreeProvider.builtInID,
-            "custom-1",
-            "local-1"
-        ])
-        #expect(groups[0].models.map(\.modelID) == ["big-pickle", "deepseek-v4-flash-free"])
-        #expect(groups[1].models.map(\.modelID) == ["gpt-4o"])
-        #expect(groups[2].models.map(\.modelID) == ["llama3.2:3b"])
+        #expect(groups.map(\.providerID) == ["custom-1", "local-1"])
+        #expect(groups[0].models.map(\.modelID) == ["gpt-4o"])
+        #expect(groups[1].models.map(\.modelID) == ["llama3.2:3b"])
         #expect(groups.allSatisfy { !$0.models.isEmpty })
-    }
-
-    @Test("Auto Free metadata comes from the bundled catalog and is marked free")
-    func autoFreeMetadata() throws {
-        let defaults = defaults()
-        let groups = SpecWizardModelCatalog.groups(
-            serverProviders: [],
-            customProviders: [],
-            localProviders: [],
-            autoFree: autoFree(models: [
-                MyCoderAutoFreeClient.Model(id: "deepseek-v4-flash-free", contextLength: 200_000)
-            ]),
-            defaults: defaults
-        )
-        let option = try #require(groups.first?.models.first)
-        #expect(option.providerID == MyCoderAutoFreeProvider.builtInID)
-        #expect(option.displayName == "DeepSeek V4 Flash Free")
-        #expect(option.metadata.isFree)
-        #expect(option.metadata.contextWindow == 200_000)
-        #expect(option.metadata.reasoning == true)
-        #expect(option.metadata.vision == false)
-        #expect(option.metadata.toolCall == true)
-        #expect(option.metadata.effectiveContextWindow == 200_000)
     }
 
     @Test("Custom models get catalog metadata and keep the provider tool setting")
@@ -119,7 +81,6 @@ struct SpecWizardModelCatalogTests {
                 customProvider(id: "custom-1", name: "Acme", models: ["gpt-4o"])
             ],
             localProviders: [],
-            autoFree: MyCoderAutoFreeProvider(),
             defaults: defaults
         )
         let option = try #require(
@@ -155,7 +116,6 @@ struct SpecWizardModelCatalogTests {
                 customProvider(id: "custom-1", name: "Acme", models: ["gpt-4o"])
             ],
             localProviders: [],
-            autoFree: MyCoderAutoFreeProvider(),
             defaults: defaults
         )
         let option = try #require(
@@ -180,7 +140,6 @@ struct SpecWizardModelCatalogTests {
                 customProvider(id: "custom-2", name: "Beta", models: ["shared"])
             ],
             localProviders: [],
-            autoFree: MyCoderAutoFreeProvider(),
             defaults: defaults
         )
 
@@ -214,7 +173,6 @@ struct SpecWizardModelCatalogTests {
                 customProvider(id: "custom-1", name: "Acme", models: ["gpt-4o"])
             ],
             localProviders: [],
-            autoFree: MyCoderAutoFreeProvider(),
             defaults: defaults
         )
 
@@ -249,19 +207,5 @@ struct SpecWizardModelCatalogTests {
         )
         #expect(providerID == "")
         #expect(modelID == "gpt-4o")
-    }
-
-    @Test("Auto Free falls back to the trusted model list before the live catalog loads")
-    func autoFreeFallback() {
-        let defaults = defaults()
-        let groups = SpecWizardModelCatalog.groups(
-            serverProviders: [],
-            customProviders: [],
-            localProviders: [],
-            autoFree: MyCoderAutoFreeProvider(),
-            defaults: defaults
-        )
-        #expect(groups.count == 1)
-        #expect(groups[0].models.map(\.modelID) == MyCoderAutoFreeClient.freeModelIDs)
     }
 }

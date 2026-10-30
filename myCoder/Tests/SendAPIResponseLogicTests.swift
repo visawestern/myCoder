@@ -3,7 +3,7 @@ import Testing
 
 @Suite("Send API response metadata")
 struct SendAPIResponseLogicTests {
-    @Test("API response reports effective model for web and Auto Free routes")
+    @Test("API response reports the effective model")
     func effectiveModelWins() {
         #expect(SendAPIResponseLogic.modelID(
             selectedModel: "",

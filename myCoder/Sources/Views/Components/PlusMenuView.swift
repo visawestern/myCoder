@@ -28,7 +28,7 @@ struct PlusMenuView: View {
                         Image(systemName: item.icon)
                             .interfaceFont(size: 12)
                             .frame(width: 16)
-                        Text(item.label)
+                        Text(localizedLabel(for: item))
                             .interfaceFont(size: 13)
                     }
                     .foregroundColor(Color.mimo.textPrimary)
@@ -55,5 +55,17 @@ struct PlusMenuView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: Color.mimo.shadow, radius: 8, x: 0, y: 4)
+    }
+
+    /// Localized labels (user report 2026-10-30: the "+" menu stayed English
+    /// while the interface language was Russian).
+    private func localizedLabel(for item: PlusMenuItem) -> String {
+        switch item {
+        case .addAttachment: return L.t(AppLocalizationKey.locAddAttachment)
+        case .addPhoto: return L.t(AppLocalizationKey.locAddPhoto)
+        case .insertMention: return L.t(AppLocalizationKey.locInsertMention)
+        case .insertCommand: return L.t(AppLocalizationKey.locInsertCommand)
+        case .insertSession: return L.t(AppLocalizationKey.locInsertSession)
+        }
     }
 }

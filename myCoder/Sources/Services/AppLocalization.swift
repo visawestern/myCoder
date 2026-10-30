@@ -475,6 +475,11 @@ enum AppLocalizationKey: String, CaseIterable {
     case locToolsUnavailableForCurrentModel
     case locToolsUnavailableForTheCurrentModelProvider
     case locToolsUnavailableForThisModel
+    case locAddAttachment
+    case locAddPhoto
+    case locInsertMention
+    case locInsertCommand
+    case locInsertSession
     case locTotal
     case locTotalCost
     case locTotalTokens
@@ -792,8 +797,6 @@ enum AppLocalizationKey: String, CaseIterable {
     case locBuiltInBrowserDetection
     case locBrowserDetectionHelp
     case locFastDOMDetectionHelp
-    case locAskMyCoderAutoFree
-    case locAskMyCoderAutoFreeHelp
     case locSaveSessionModels
     case locDetectModelsFirst
     case locNoSelectorFound
@@ -1201,6 +1204,11 @@ enum AppLocalization {
         "locToolsUnavailableForCurrentModel": ["en": "Tools unavailable for current model", "ru": "Инструменты недоступны для текущей модели", "es": "Herramientas no disponibles para el modelo actual", "fr": "Outils indisponibles pour le modèle actuel", "de": "Tools nicht verfügbar für aktuelles Modell", "zh": "当前模型不支持工具", "ja": "現在のモデルではツールが利用できません", "ko": "현재 모델에서 도구를 사용할 수 없습니다", "pt": "Ferramentas indisponíveis para o modelo atual", "ar": "الأدوات غير متاحة للنموذج الحالي"],
         "locToolsUnavailableForTheCurrentModelProvider": ["en": "Tools unavailable for the current model or provider.", "ru": "Инструменты недоступны для текущей модели или провайдера.", "es": "Herramientas no disponibles para el modelo o proveedor actual.", "fr": "Outils indisponibles pour le modèle ou fournisseur actuel.", "de": "Tools nicht verfügbar für das aktuelle Modell oder den Anbieter.", "zh": "当前模型或提供商不支持工具。", "ja": "現在のモデルまたはプロバイダーではツールが利用できません。", "ko": "현재 모델 또는 공급자에서 도구를 사용할 수 없습니다.", "pt": "Ferramentas indisponíveis para o modelo ou provedor atual.", "ar": "الأدوات غير متاحة للنموذج أو المزود الحالي."],
         "locToolsUnavailableForThisModel": ["en": "Tools unavailable for this model", "ru": "Инструменты недоступны для этой модели", "es": "Herramientas no disponibles para este modelo", "fr": "Outils indisponibles pour ce modèle", "de": "Tools nicht verfügbar für dieses Modell", "zh": "此模型不支持工具", "ja": "このモデルではツールが利用できません", "ko": "이 모델에서 도구를 사용할 수 없습니다", "pt": "Ferramentas indisponíveis para este modelo", "ar": "الأدوات غير متاحة لهذا النموذج"],
+        "locAddAttachment": ["en": "Add attachment", "ru": "Добавить вложение", "es": "Agregar archivo adjunto", "fr": "Ajouter une pièce jointe", "de": "Anhang hinzufügen", "zh": "添加附件", "ja": "添付ファイルを追加", "ko": "첨부 파일 추가", "pt": "Adicionar anexo", "ar": "إضافة مرفق"],
+        "locAddPhoto": ["en": "Add photo", "ru": "Добавить фото", "es": "Agregar foto", "fr": "Ajouter une photo", "de": "Foto hinzufügen", "zh": "添加照片", "ja": "写真を追加", "ko": "사진 추가", "pt": "Adicionar foto", "ar": "إضافة صورة"],
+        "locInsertMention": ["en": "Insert @ mention", "ru": "Вставить @упоминание", "es": "Insertar mención @", "fr": "Insérer une mention @", "de": "@-Erwähnung einfügen", "zh": "插入 @提及", "ja": "@メンションを挿入", "ko": "@멘션 삽입", "pt": "Inserir menção @", "ar": "إدراج @إشارة"],
+        "locInsertCommand": ["en": "Insert / command", "ru": "Вставить / команду", "es": "Insertar comando /", "fr": "Insérer une commande /", "de": "/-Befehl einfügen", "zh": "插入 /命令", "ja": "/コマンドを挿入", "ko": "/명령 삽입", "pt": "Inserir comando /", "ar": "إدراج أمر /"],
+        "locInsertSession": ["en": "Insert # session", "ru": "Вставить # сессию", "es": "Insertar sesión #", "fr": "Insérer une session #", "de": "#-Sitzung einfügen", "zh": "插入 #会话", "ja": "#セッションを挿入", "ko": "#세션 삽입", "pt": "Inserir sessão #", "ar": "إدراج جلسة #"],
         "locTotal": ["en": "Total", "ru": "Итого", "es": "Total", "fr": "Total", "de": "Gesamt", "zh": "总计", "ja": "合計", "ko": "합계", "pt": "Total", "ar": "المجموع"],
         "locTotalCost": ["en": "Total cost", "ru": "Общая стоимость", "es": "Costo total", "fr": "Coût total", "de": "Gesamtkosten", "zh": "总费用", "ja": "合計コスト", "ko": "총 비용", "pt": "Custo total", "ar": "التكلفة الإجمالية"],
         "locTotalTokens": ["en": "Total tokens", "ru": "Всего токенов", "es": "Total de tokens", "fr": "Total des jetons", "de": "Token gesamt", "zh": "总 token 数", "ja": "合計トークン", "ko": "총 토큰", "pt": "Total de tokens", "ar": "إجمالي الرموز"],
@@ -1730,8 +1738,6 @@ enum AppLocalization {
         "locBuiltInBrowserDetection": ["en": "Built-in browser detection", "ru": "Определение во встроенном браузере", "es": "Detección en el navegador integrado", "fr": "Détection dans le navigateur intégré", "de": "Erkennung im integrierten Browser", "zh": "内置浏览器检测", "ja": "内蔵ブラウザ検出", "ko": "내장 브라우저 감지", "pt": "Deteção no navegador integrado", "ar": "الاكتشاف في المتصفح المدمج"],
         "locBrowserDetectionHelp": ["en": "Choose how myCoder reads model names from the authenticated web page", "ru": "Выберите, как myCoder считывает названия моделей с авторизованной веб-страницы", "es": "Elige cómo myCoder lee los nombres de modelos de la página web autenticada", "fr": "Choisissez comment myCoder lit les noms de modèles sur la page web authentifiée", "de": "Wählen Sie, wie myCoder Modellnamen von der authentifizierten Webseite liest", "zh": "选择 myCoder 如何从已登录网页读取模型名称", "ja": "認証済みウェブページからMyCoderがモデル名を読む方法を選択", "ko": "MyCoder가 인증된 웹 페이지에서 모델 이름을 읽는 방법 선택", "pt": "Escolha como o myCoder lê os nomes dos modelos na página autenticada", "ar": "اختر كيفية قراءة myCoder لأسماء النماذج من صفحة الويب الموثقة"],
         "locFastDOMDetectionHelp": ["en": "Fast built-in DOM scraping; no AI request", "ru": "Быстрое чтение DOM; запрос к ИИ не выполняется", "es": "Lectura rápida del DOM; no se realiza ninguna solicitud de IA", "fr": "Lecture DOM rapide ; aucune requête IA", "de": "Schnelles DOM-Auslesen; keine KI-Anfrage", "zh": "快速读取 DOM；不会发送 AI 请求", "ja": "高速DOM読み取り。AIリクエストなし", "ko": "빠른 DOM 스크래핑, AI 요청 없음", "pt": "Leitura rápida do DOM; sem pedido de IA", "ar": "استخراج سريع من DOM؛ لا يوجد طلب ذكاء اصطناعي"],
-        "locAskMyCoderAutoFree": ["en": "Ask OpenCode Zen", "ru": "Спросить OpenCode Zen", "es": "Preguntar a OpenCode Zen", "fr": "Interroger OpenCode Zen", "de": "OpenCode Zen fragen", "zh": "询问 OpenCode Zen", "ja": "OpenCode Zen に質問", "ko": "OpenCode Zen에 질문", "pt": "Perguntar ao OpenCode Zen", "ar": "اسأل OpenCode Zen"],
-        "locAskMyCoderAutoFreeHelp": ["en": "Ask OpenCode Zen to read the visible page text and list model names", "ru": "Попросить OpenCode Zen прочитать видимый текст страницы и перечислить модели", "es": "Pide a OpenCode Zen que lea el texto visible y enumere los modelos", "fr": "Demander à OpenCode Zen de lire le texte visible et de lister les modèles", "de": "OpenCode Zen soll den sichtbaren Seitentext lesen und Modellnamen auflisten", "zh": "让 OpenCode Zen 读取可见页面文本并列出模型名称", "ja": "OpenCode Zenに表示中のページテキストを読み取りモデル名を列挙させる", "ko": "OpenCode Zen가 보이는 페이지 텍스트를 읽고 모델 이름을 나열하도록 요청", "pt": "Peça ao OpenCode Zen para ler o texto visível e listar os modelos", "ar": "اطلب من OpenCode Zen قراءة النص الظاهر وسرد أسماء النماذج"],
         "locSaveSessionModels": ["en": "Save session & models", "ru": "Сохранить сессию и модели", "es": "Guardar sesión y modelos", "fr": "Enregistrer la session et les modèles", "de": "Sitzung und Modelle speichern", "zh": "保存会话和模型", "ja": "セッションとモデルを保存", "ko": "세션 및 모델 저장", "pt": "Guardar sessão e modelos", "ar": "حفظ الجلسة والنماذج"],
         "locDetectModelsFirst": ["en": "Detect models first", "ru": "Сначала определите модели", "es": "Detecta primero los modelos", "fr": "Détectez d’abord les modèles", "de": "Erkennen Sie zuerst Modelle", "zh": "请先检测模型", "ja": "先にモデルを検出してください", "ko": "먼저 모델을 감지하세요", "pt": "Detete primeiro os modelos", "ar": "اكتشف النماذج أولاً"],
         "locNoSelectorFound": ["en": "No selector found for this vendor.", "ru": "Для этого провайдера селектор не найден.", "es": "No se encontró ningún selector para este proveedor.", "fr": "Aucun sélecteur trouvé pour ce fournisseur.", "de": "Für diesen Anbieter wurde kein Selektor gefunden.", "zh": "未找到此提供商的选择器。", "ja": "このベンダーのセレクターが見つかりません。", "ko": "이 공급자의 선택기를 찾을 수 없습니다.", "pt": "Não foi encontrado um seletor para este fornecedor.", "ar": "لم يتم العثور على محدد لهذا الموفر."],

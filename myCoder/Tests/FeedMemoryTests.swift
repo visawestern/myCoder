@@ -63,8 +63,10 @@ struct FeedMemoryTests {
     @Test("Chat panel keeps the store's bottom-pin state in sync")
     func chatPanelSyncsPinState() throws {
         let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
-        #expect(source.contains("isPinnedToBottom = true"))
-        #expect(source.contains("isPinnedToBottom = false"))
+        // The current contract: the bottom sentinel reports its real frame and
+        // the visibility result is pushed into the store's pin state.
+        #expect(source.contains("updateChatBottomVisibility"))
+        #expect(source.contains("isPinnedToBottom = visible"))
     }
 
     private func sourceText(_ relativePath: String) throws -> String {

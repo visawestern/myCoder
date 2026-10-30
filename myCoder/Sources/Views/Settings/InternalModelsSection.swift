@@ -1,16 +1,11 @@
 import SwiftUI
 
-/// Assigns the ordered list of models used for myCoder's background work.
-/// Replaces the old hardcoded "myCoder Auto Free" provider card: free models
-/// remain available as one source, but every provider is treated equally.
+/// Assigns the ordered list of models used for myCoder's background work
+/// (user directive 2026-10-30: no auto-free models — only assigned internal
+/// models, taken from configured custom/local/server providers).
 struct InternalModelsSection: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var store = InternalModelStore.shared
-    @ObservedObject private var freeStore = MyCoderAutoFreeStore.shared
-    @ObservedObject private var proxyStore = AutoFreeProxyStore.shared
-    @State private var isRefreshingFree = false
-    @State private var proxyAddress = ""
-    @State private var proxyError: String?
 
     private var customProviders: [CustomProvider] {
         appState.customProviders
@@ -18,11 +13,6 @@ struct InternalModelsSection: View {
 
     private var localProviders: [LocalProviderConfig] {
         LocalProviderLogic.load()
-    }
-
-    private var freeModels: [String] {
-        let catalog = freeStore.provider.models.map(\.id)
-        return catalog.isEmpty ? MyCoderAutoFreeClient.freeModelIDs : catalog
     }
 
     /// Live server catalog while connected, persisted catalog otherwise so
@@ -35,7 +25,6 @@ struct InternalModelsSection: View {
         InternalModelResolver.availableModels(
             customProviders: customProviders,
             localProviders: localProviders,
-            freeModels: freeModels,
             serverProviders: serverProviders
         )
     }
@@ -86,8 +75,6 @@ struct InternalModelsSection: View {
             Text(L.t(AppLocalizationKey.locInternalModelsHint))
                 .interfaceFont(size: 10)
                 .foregroundColor(Color.mimo.textMuted)
-
-            proxySection
         }
         .padding(16)
         .background(Color.mimo.surface)
@@ -95,122 +82,6 @@ struct InternalModelsSection: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onReceive(NotificationCenter.default.publisher(for: .providersChanged)) { _ in
             pruneMissingModels()
-        }
-    }
-
-    /// Exit points for OpenCode Zen's per-IP free-tier limit. A 429 turn is
-    /// retried through the first enabled proxy immediately; if that proxy is
-    /// limited too, the next one is used.
-    private var proxySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "network")
-                    .interfaceFont(size: 11, weight: .semibold)
-                    .foregroundColor(Color.mimo.textSecondary)
-                Text(L.t("OpenCode Zen rate-limit proxies"))
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                Spacer(minLength: 0)
-                if !proxyStore.enabledProxies.isEmpty {
-                    Text(L.t("%d enabled", proxyStore.enabledProxies.count))
-                        .interfaceFont(size: 10)
-                        .foregroundColor(Color.mimo.success)
-                }
-            }
-
-            Text(L.t("When OpenCode Zen answers 429, the next attempt goes out through the first enabled proxy right away. If that proxy is rate-limited too, the next one is used. Without proxies the request keeps the previous session-rotation retry."))
-                .interfaceFont(size: 10)
-                .foregroundColor(Color.mimo.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !proxyStore.proxies.isEmpty {
-                VStack(spacing: 4) {
-                    ForEach(proxyStore.proxies) { proxy in
-                        proxyRow(proxy)
-                    }
-                }
-            }
-
-            HStack(spacing: 6) {
-                TextField(L.t("socks5://host:port"), text: $proxyAddress)
-                    .textFieldStyle(.roundedBorder)
-                    .interfaceFont(size: 11)
-                    .onSubmit(addProxy)
-                Button(L.t("Add")) {
-                    addProxy()
-                }
-                .interfaceFont(size: 11, weight: .medium)
-                .disabled(proxyAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            if let proxyError {
-                Text(proxyError)
-                    .interfaceFont(size: 10)
-                    .foregroundColor(Color.mimo.error)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.top, 8)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.mimo.border)
-                .frame(height: 1)
-        }
-    }
-
-    private func proxyRow(_ proxy: AutoFreeProxy) -> some View {
-        HStack(spacing: 8) {
-            Toggle("", isOn: Binding(
-                get: { proxy.isEnabled },
-                set: { proxyStore.setEnabled($0, id: proxy.id) }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-
-            Text(proxy.displayScheme)
-                .interfaceFont(size: 8, weight: .bold)
-                .foregroundColor(Color.mimo.textMuted)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Color.mimo.background)
-                .clipShape(Capsule())
-
-            Text("\(proxy.host):\(proxy.port)")
-                .interfaceFont(size: 11, weight: .medium, design: .monospaced)
-                .foregroundColor(proxy.isEnabled ? Color.mimo.textPrimary : Color.mimo.textMuted)
-                .lineLimit(1)
-
-            Spacer(minLength: 4)
-
-            Button {
-                proxyStore.remove(id: proxy.id)
-            } label: {
-                Image(systemName: "xmark")
-                    .interfaceFont(size: 9, weight: .semibold)
-                    .foregroundColor(Color.mimo.error)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .help(L.t("Remove proxy"))
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Color.mimo.background)
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.mimo.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
-    }
-
-    private func addProxy() {
-        let candidate = proxyAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !candidate.isEmpty else { return }
-        do {
-            _ = try proxyStore.add(candidate)
-            proxyAddress = ""
-            proxyError = nil
-        } catch {
-            proxyError = error.localizedDescription
         }
     }
 
@@ -231,15 +102,6 @@ struct InternalModelsSection: View {
                         }
                     }
                 }
-            }
-            if freeModels.isEmpty {
-                Divider()
-                Button {
-                    refreshFreeModels()
-                } label: {
-                    Label(L.t(AppLocalizationKey.locRefreshModels), systemImage: "arrow.clockwise")
-                }
-                .disabled(isRefreshingFree)
             }
         } label: {
             HStack(spacing: 4) {
@@ -282,7 +144,6 @@ struct InternalModelsSection: View {
             localProviders: localProviders,
             serverProviders: serverProviders
         )
-        let isFree = ref.providerID == MyCoderAutoFreeProvider.builtInID
         let isAvailable = InternalModelResolver.route(
             for: ref,
             customProviders: customProviders,
@@ -305,15 +166,6 @@ struct InternalModelsSection: View {
                     Text(providerName)
                         .interfaceFont(size: 9)
                         .foregroundColor(Color.mimo.textMuted)
-                    if isFree {
-                        Text(L.t(AppLocalizationKey.locFree))
-                            .interfaceFont(size: 8, weight: .bold)
-                            .foregroundColor(Color.mimo.success)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.mimo.success.opacity(0.12))
-                            .clipShape(Capsule())
-                    }
                     if !isAvailable {
                         Text(L.t(AppLocalizationKey.locUnavailable))
                             .interfaceFont(size: 8, weight: .medium)
@@ -375,15 +227,6 @@ struct InternalModelsSection: View {
         let filtered = store.models.filter { valid.contains($0) }
         if filtered.count != store.models.count {
             store.replaceAll(filtered)
-        }
-    }
-
-    private func refreshFreeModels() {
-        guard !isRefreshingFree else { return }
-        isRefreshingFree = true
-        Task {
-            _ = await freeStore.refreshModels()
-            await MainActor.run { isRefreshingFree = false }
         }
     }
 }

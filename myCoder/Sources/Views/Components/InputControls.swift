@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct AccessLevelMenu: View {
     @EnvironmentObject var appState: AppState
@@ -347,6 +348,16 @@ struct CompactMessageTextField: View {
         )
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
+        // The composer owns a text-editing surface: hovering it must show the
+        // I-beam text cursor, never the arrow/pointing hand the surrounding
+        // panel may set (user directive 2026-10-29).
+        .onHover { inside in
+            if inside {
+                NSCursor.iBeam.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 }
 

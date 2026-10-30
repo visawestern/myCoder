@@ -39,20 +39,6 @@ private struct PreparedLocalToolCall {
     }
 }
 
-private struct AutoFreeNativeToolCall {
-    let id: String
-    let name: String
-    let arguments: String
-
-    var toolCall: MyCoderAutoFreeClient.Message.ToolCall {
-        MyCoderAutoFreeClient.Message.ToolCall(
-            id: id,
-            type: "function",
-            function: .init(name: name, arguments: arguments)
-        )
-    }
-}
-
 struct ChatPanelView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var messageStore = MessageStore()
@@ -97,16 +83,6 @@ struct ChatPanelView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            if let notification = appState.transientProviderNotification {
-                AutoFreeSwitchBanner(notification: notification) {
-                    appState.transientProviderNotification = nil
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(10)
-            }
-
             #if canImport(WebKit)
             // User directive 2026-09-09: for a web provider the live vendor
             // page is VISIBLE in the chat — a small minimap thumbnail by
@@ -165,7 +141,7 @@ struct ChatPanelView: View {
                                     }.padding(.vertical, 8)
                                 } else if messageStore.hasMoreMessages {
                                     Button(L.t(AppLocalizationKey.locLoadingOlderMessages)) {
-                                        loadOlderMessages()
+                                        loadOlderMessages(proxy: proxy)
                                     }
                                     .buttonStyle(HandCursorButtonStyle())
                                     .interfaceFont(size: 12, weight: .medium)
@@ -174,7 +150,7 @@ struct ChatPanelView: View {
                                     .padding(.vertical, 8)
                                     .onAppear {
                                         guard canLoadOlderMessages else { return }
-                                        loadOlderMessages()
+                                        loadOlderMessages(proxy: proxy)
                                     }
                                 }
                                 
@@ -195,15 +171,17 @@ struct ChatPanelView: View {
                                 Color.clear
                                     .frame(height: 1)
                                     .id(ChatScrollLogic.bottomAnchorID)
-                                    .onAppear {
-                                        isChatBottomVisible = true
-                                        messageStore.isPinnedToBottom = true
-                                    }
-                                    .onDisappear {
-                                        isChatBottomVisible = false
-                                        messageStore.isPinnedToBottom = false
-                                    }
-                            }.padding(.vertical, 16)
+                                    .background(
+                                        GeometryReader { geo in
+                                            Color.clear.preference(
+                                                key: ChatBottomFrameKey.self,
+                                                value: geo.frame(in: .named(ChatScrollSpace.name))
+                                            )
+                                        }
+                                    )
+                            }
+                            .padding(.top, 16)
+                            .padding(.bottom, 16 + ChatScrollLogic.bottomContentInset)
                         }
                         .chatScrollSpaceReporter()
                         .onPreferenceChange(ChatRowFrameKey.self) { value in
@@ -211,6 +189,9 @@ struct ChatPanelView: View {
                         }
                         .onPreferenceChange(ChatViewportFrameKey.self) { value in
                             chatViewportFrame = value
+                        }
+                        .onPreferenceChange(ChatBottomFrameKey.self) { value in
+                            updateChatBottomVisibility(bottomFrame: value)
                         }
                         .onChange(of: userRowFrames) { _ in updateCurrentVisibleUserMessage() }
                         .onChange(of: chatViewportFrame) { _ in updateCurrentVisibleUserMessage() }
@@ -521,13 +502,25 @@ struct ChatPanelView: View {
     // ("unable to type-check this expression in reasonable time").
 
     /// Auto-scrolls to the newest message unless the reader scrolled away.
+    ///
+    /// No animation: the revision changes on every streamed token, and a
+    /// restarting animated `scrollTo` fights the user's own scrolling. The
+    /// bottom sentinel reports its real frame now, so a reader who is above the
+    /// bottom keeps their position instead of being yanked back.
     private func autoScrollIfPinned(proxy: ScrollViewProxy) {
         guard ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else { return }
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.15)) {
-                proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
-            }
+            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
         }
+    }
+
+    private func updateChatBottomVisibility(bottomFrame: CGRect) {
+        guard let visible = ChatScrollLogic.bottomVisibility(
+            bottomFrame: bottomFrame,
+            viewport: chatViewportFrame
+        ) else { return }
+        isChatBottomVisible = visible
+        messageStore.isPinnedToBottom = visible
     }
 
     /// Keeps the visible message and the persisted draft in sync with the
@@ -908,20 +901,6 @@ struct ChatPanelView: View {
             let loadedMessages = messages
             let canLoadMore = hasMoreMessages
             let fallbackToLocal = useLocalFallback
-            // Route the session to its project database BEFORE any read or
-            // write. The in-memory route map is rebuilt on every launch, so a
-            // chat opened outside its project's own sidebar (recent chats,
-            // grid view) used to look like a global session: its history was
-            // read from the global database and its new messages were written
-            // there, splitting the conversation across two stores.
-            let sessionDirectory = appState.sessions.first(where: { $0.id == sessionID })?.directory
-                ?? appState.selectedSession?.directory
-            if let sessionDirectory, !sessionDirectory.isEmpty {
-                DatabaseBridge.shared.registerSessionProjectIfKnown(
-                    sessionID: sessionID,
-                    projectPath: sessionDirectory
-                )
-            }
             await MainActor.run {
                 guard messageStore.currentSessionID == sessionID else { return }
 
@@ -1132,7 +1111,6 @@ struct ChatPanelView: View {
         if let error = SendReadinessLogic.connectionValidationError(
             serverConnected: appState.serverConnected,
             selectedProviderID: appState.selectedProviderID,
-            autoFreeReady: MyCoderAutoFreeStore.shared.provider.isReady,
             customProviders: appState.customProviders,
             localProviderIDs: appState.localProviderIDs,
             webProviderIDs: appState.webProviderIDs,
@@ -1189,7 +1167,11 @@ struct ChatPanelView: View {
         // Capture the target chat now: the task may start after the user has
         // already switched to another chat.
         let targetSessionID = messageStore.currentSessionID ?? appState.selectedSession?.id
-        currentTask = Task {
+        // Run the whole turn off the main actor so the UI never freezes while
+        // the model/tools work (user directive 2026-10-30: интерфейс не
+        // блокируется при отправке). UI updates inside hop back to main via
+        // `MainActor.run`/`messageStore`.
+        currentTask = Task.detached(priority: .userInitiated) {
             await sendDirectly(
                 text: text,
                 files: files,
@@ -1334,19 +1316,14 @@ struct ChatPanelView: View {
     /// history, so replacing it locally would be a lie.
     private func supportsLocalHistoryCompaction(_ route: SendRoute) -> Bool {
         switch route {
-        case .openAICompatible, .autoFree: return true
+        case .openAICompatible: return true
         default: return false
         }
     }
 
     private var selectedContextLimit: Int {
         let model = appState.effectiveSelectedModel()
-        var reported: Int?
-        if appState.selectedProviderID == MyCoderAutoFreeProvider.builtInID {
-            reported = MyCoderAutoFreeStore.shared.provider.models
-                .first(where: { $0.id == model })?.contextLength
-        }
-        return ContextWindowCatalog.limit(for: model, reported: reported)
+        return ContextWindowCatalog.limit(for: model, reported: nil)
     }
 
     /// Measured over the MODEL-BOUND history so the badge drops right after a
@@ -1382,27 +1359,6 @@ struct ChatPanelView: View {
                     messages: [DirectChatMessage(role: "user", content: prompt)]
                 )
                 return result.content
-            }
-        case .autoFree:
-            return { prompt in
-                let store = MyCoderAutoFreeStore.shared
-                store.syncModel(self.appState.effectiveSelectedModel())
-                let context = OpenCodeRequestContext(
-                    sessionID: OpenCodeRequestContext.sessionID(
-                        from: self.messageStore.currentSessionID ?? self.appState.selectedSession?.id ?? ""
-                    ),
-                    projectID: OpenCodeRequestContext.projectID(fromPath: self.appState.selectedWorkspace?.path ?? "")
-                )
-                var content = ""
-                for try await event in store.streamChat(
-                    messages: [MyCoderAutoFreeClient.Message(role: "user", content: prompt)],
-                    context: context,
-                    tools: MyCoderAutoFreeClient.gateToolDefinitions(),
-                    toolChoice: "none"
-                ) {
-                    if case .content(let chunk) = event { content += chunk }
-                }
-                return content
             }
         default:
             return { _ in throw ConversationSummarizerError.nothingToCompact }
@@ -1488,7 +1444,6 @@ struct ChatPanelView: View {
         if let error = SendReadinessLogic.connectionValidationError(
             serverConnected: appState.serverConnected,
             selectedProviderID: appState.selectedProviderID,
-            autoFreeReady: MyCoderAutoFreeStore.shared.provider.isReady,
             customProviders: appState.customProviders,
             localProviderIDs: appState.localProviderIDs,
             webProviderIDs: appState.webProviderIDs,
@@ -1641,18 +1596,28 @@ struct ChatPanelView: View {
         var localPlan: LocalQueryPlanResult?
         var preparedBoard: ContextBoard?
         if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled, hasProjectForContext {
-            let board = ContextBoardBuilder.build(
-                projectPath: pointContextProjectRoot,
-                records: pointContextRecords
-            )
+            // Board building extracts symbols/imports/tokens from every indexed
+            // file — heavy CPU on the main actor froze the UI for seconds at
+            // send start (user report 2026-10-30). Build it off-main.
+            let board = await Task.detached(priority: .utility) {
+                ContextBoardBuilder.build(
+                    projectPath: pointContextProjectRoot,
+                    records: pointContextRecords
+                )
+            }.value
             preparedBoard = board
             await MainActor.run { appState.isCompilingContext = true }
-            localPlan = await Self.planLocally(
-                message: text,
-                board: board,
-                memories: projectMemories,
-                localProviders: localProviders
-            )
+            // The local planner runs a local model and can take seconds — run
+            // it off the main actor so the UI stays responsive while it works
+            // (user directive 2026-10-29, §16.2).
+            localPlan = await Task.detached(priority: .utility) {
+                await Self.planLocally(
+                    message: text,
+                    board: board,
+                    memories: projectMemories,
+                    localProviders: localProviders
+                )
+            }.value
         }
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
@@ -1681,11 +1646,23 @@ struct ChatPanelView: View {
         // Everything below writes to this session, even if the user opened
         // another chat while the context was being prepared.
         let sendSessionID = preparedSessionID ?? turnSessionID
+        // Capture the exact model/provider/parameters used for this send so the
+        // message footer can show them (user directive 2026-10-29, §15.5).
+        let sendModelID = sendOptions.modelID ?? appState.effectiveSelectedModel()
+        let sendInfo = MessageSendInfo(
+            parameters: ModelCallParametersStore.parameters(for: sendModelID),
+            modelID: sendModelID,
+            providerID: sendOptions.providerID,
+            variant: sendOptions.variant,
+            tools: [],
+            sentAt: Date()
+        )
         let userMessage = Message(
             role: .user,
             content: text,
             files: files.isEmpty ? nil : files,
-            parts: MessagePartsBuilder.displayParts(text: text, images: images) + contextParts
+            parts: MessagePartsBuilder.displayParts(text: text, images: images) + contextParts,
+            sendInfo: sendInfo
         )
         await MainActor.run {
             // A brand-new chat becomes the visible feed. If the user opened
@@ -1899,7 +1876,6 @@ struct ChatPanelView: View {
                 }
                 // Direct local/OpenAI-compatible models do not execute tools
                 // server-side. Run the same text-protocol loop used by the
-                // Auto Free path: each tool block is executed locally against
                 // the selected project, and its result is fed back so the
                 // model can continue instead of stopping at a raw ```tool block.
                 var executor = ProjectWebToolExecutor(
@@ -1920,7 +1896,11 @@ struct ChatPanelView: View {
                 // reasoning spoiler stayed empty on direct providers.
                 var reasoningChunks: [String] = []
                 var reasoningStartedAt: Date?
-                var toolParts: [MessagePartContent] = []
+                // Chronological timeline: reasoning of an iteration, then the
+                // calls that iteration requested. Keeping it interleaved is
+                // what makes the chat show "thinking → tool → thinking → tool"
+                // instead of one merged thinking block above every call.
+                var timelineParts: [MessagePartContent] = []
                 do {
                     for iteration in 0..<maxIterations {
                         let result = try await streamDirectChat(
@@ -1930,14 +1910,14 @@ struct ChatPanelView: View {
                             messages: conversation,
                             parameters: params,
                             assistantID: assistantID,
-                            toolParts: toolParts,
-                            reasoningChunks: reasoningChunks
+                            timelineParts: timelineParts
                         )
                         let response = result.content
                         finalUsage = result.usage
                         if let reasoning = result.reasoning, !reasoning.isEmpty {
                             if reasoningStartedAt == nil { reasoningStartedAt = Date() }
                             reasoningChunks.append(reasoning)
+                            timelineParts.append(.reasoning(reasoning))
                         }
                         let calls = WebToolProtocolEmulator.parseToolCalls(from: response)
                         if calls.isEmpty || WebToolProtocolEmulator.shouldStopLoop(
@@ -1958,17 +1938,18 @@ struct ChatPanelView: View {
                             accessLevel: appState.accessLevel
                         )
                         for item in prepared {
-                            toolParts.append(.toolCall(
+                            timelineParts.append(.toolCall(
                                 name: item.call.name,
                                 args: item.argsSummary,
-                                result: item.validationError.map { "validation error: \($0)" },
+                                result: item.validationError.map {
+                                    WebToolProtocolEmulator.validationResultText(for: $0, callName: item.call.name)
+                                },
                                 callID: item.callID
                             ))
                         }
                         publishToolParts(
-                            AssistantTurnPartsLogic.directParts(
-                                reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
-                                toolParts: toolParts,
+                            AssistantTurnPartsLogic.directTimelineParts(
+                                timeline: timelineParts,
                                 answer: ""
                             ),
                             assistantID: assistantID
@@ -1992,7 +1973,7 @@ struct ChatPanelView: View {
                                     ) {
                                         resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                             name: item.call.name,
-                                            result: "validation error: \(error)"
+                                            result: WebToolProtocolEmulator.validationResultText(for: error, callName: item.call.name)
                                         ) + "\n"
                                         continue
                                     }
@@ -2000,15 +1981,14 @@ struct ChatPanelView: View {
                                     resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                         name: item.call.name, result: message
                                     ) + "\n"
-                                    toolParts = localToolParts(
-                                        toolParts,
+                                    timelineParts = localToolParts(
+                                        timelineParts,
                                         settingResult: message,
                                         callID: item.callID
                                     )
                                     publishToolParts(
-                                        AssistantTurnPartsLogic.directParts(
-                                            reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
-                                            toolParts: toolParts,
+                                        AssistantTurnPartsLogic.directTimelineParts(
+                                            timeline: timelineParts,
                                             answer: ""
                                         ),
                                         assistantID: assistantID
@@ -2017,7 +1997,7 @@ struct ChatPanelView: View {
                                 case .notApplicable:
                                     resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                         name: item.call.name,
-                                        result: "validation error: \(validationError)"
+                                        result: WebToolProtocolEmulator.validationResultText(for: validationError, callName: item.call.name)
                                     ) + "\n"
                                     continue
                                 }
@@ -2033,15 +2013,14 @@ struct ChatPanelView: View {
                                     resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                         name: item.call.name, result: denial
                                     ) + "\n"
-                                    toolParts = localToolParts(
-                                        toolParts,
+                                    timelineParts = localToolParts(
+                                        timelineParts,
                                         settingResult: denial,
                                         callID: item.callID
                                     )
                                     publishToolParts(
-                                        AssistantTurnPartsLogic.directParts(
-                                            reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
-                                            toolParts: toolParts,
+                                        AssistantTurnPartsLogic.directTimelineParts(
+                                            timeline: timelineParts,
                                             answer: ""
                                         ),
                                         assistantID: assistantID
@@ -2054,15 +2033,14 @@ struct ChatPanelView: View {
                             resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                 name: item.call.name, result: toolResult
                             ) + "\n"
-                            toolParts = localToolParts(
-                                toolParts,
+                            timelineParts = localToolParts(
+                                timelineParts,
                                 settingResult: toolResult,
                                 callID: item.callID
                             )
                             publishToolParts(
-                                AssistantTurnPartsLogic.directParts(
-                                    reasoning: DirectChatClient.mergedReasoning(reasoningChunks),
-                                    toolParts: toolParts,
+                                AssistantTurnPartsLogic.directTimelineParts(
+                                    timeline: timelineParts,
                                     answer: ""
                                 ),
                                 assistantID: assistantID
@@ -2075,9 +2053,8 @@ struct ChatPanelView: View {
                             let reasoning = DirectChatClient.mergedReasoning(reasoningChunks)
                             self.messageStore.update(id: assistantID) { msg in
                                 msg.content = response + "\n\n⏳ Running tools..."
-                                msg.parts = AssistantTurnPartsLogic.directParts(
-                                    reasoning: reasoning,
-                                    toolParts: toolParts,
+                                msg.parts = AssistantTurnPartsLogic.directTimelineParts(
+                                    timeline: timelineParts,
                                     answer: ""
                                 )
                                 msg.reasoning = reasoning ?? ""
@@ -2094,9 +2071,8 @@ struct ChatPanelView: View {
                         self.messageStore.update(id: assistantID) { msg in
                             msg.content = finalText
                             msg.usage = finalUsage
-                            msg.parts = AssistantTurnPartsLogic.directParts(
-                                reasoning: reasoning,
-                                toolParts: toolParts,
+                            msg.parts = AssistantTurnPartsLogic.directTimelineParts(
+                                timeline: timelineParts,
                                 answer: finalText
                             )
                             msg.reasoning = reasoning ?? ""
@@ -2134,295 +2110,6 @@ struct ChatPanelView: View {
                 return
             }
 
-            // ── Built-in myCoder Auto Free provider branch (direct API) ─
-            if case .autoFree = route {
-                let store = MyCoderAutoFreeStore.shared
-                let model = appState.effectiveSelectedModel()
-                await MainActor.run { store.syncModel(model) }
-                let priorTurns = await MainActor.run { () -> [MyCoderAutoFreeHistoryLogic.Turn] in
-                    let modelHistory = ConversationCompactionLogic.historyForModel(
-                        messageStore.messages(in: sendSessionID)
-                    )
-                    let priorMessages = modelHistory.count >= 2
-                        ? Array(modelHistory.dropLast(2))
-                        : []
-                    // Same rule as the direct route: the ledger replaces a long
-                    // raw transcript instead of adding to it.
-                    guard !SendContextPreparationLogic.replacesRawHistory(
-                        preparation,
-                        priorTurnCount: priorMessages.count
-                    ) else { return [] }
-                    return priorMessages.map {
-                        MyCoderAutoFreeHistoryLogic.Turn(
-                            role: roleString($0.role),
-                            content: $0.content,
-                            isFinished: $0.isFinished
-                        )
-                    }
-                }
-                let history = MyCoderAutoFreeHistoryLogic.history(from: priorTurns)
-                let autoFreePayload = autoFreeMessageParts(text: modelText, files: files, images: images)
-                var conversationMessages: [MyCoderAutoFreeClient.Message] = history.map {
-                    MyCoderAutoFreeClient.Message(role: $0.role, content: $0.content)
-                }
-                conversationMessages.append(MyCoderAutoFreeClient.Message(
-                    role: "user",
-                    parts: autoFreePayload.parts
-                ))
-                let attachmentNotice = autoFreePayload.warnings.joined(separator: "\n")
-                let projectRoot = appState.toolWorkingDirectory
-                let autoFreeContext = OpenCodeRequestContext(
-                    sessionID: OpenCodeRequestContext.sessionID(
-                        from: sendSessionID ?? ""
-                    ),
-                    projectID: OpenCodeRequestContext.projectID(fromPath: projectRoot)
-                )
-                var executor = ProjectWebToolExecutor(
-                    projectRoot: projectRoot,
-                    accessLevel: appState.accessLevel
-                )
-                executor.subagentLauncher = subagentLauncher(
-                    projectRoot: projectRoot,
-                    transport: .autoFree,
-                    sessionID: sendSessionID
-                )
-                let maxIterations = 15
-                var streamedContent = ""
-                var streamedReasoningSegments: [String] = []
-                var allToolCallParts: [MessagePartContent] = []
-                do {
-                    for iteration in 0..<maxIterations {
-                        var response = ""
-                        var iterationReasoning = ""
-                        var nativeCalls: [AutoFreeNativeToolCall] = []
-                        for try await event in store.streamChat(
-                            messages: conversationMessages,
-                            projectRoot: projectRoot,
-                            isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil,
-                            context: autoFreeContext
-                        ) {
-                            let e: StreamEvent = event
-                            switch e {
-                            case .content(let text):
-                                response += text
-                            case .reasoning(let text):
-                                iterationReasoning += text
-                            case .toolCall(let id, let name, let arguments):
-                                nativeCalls.append(AutoFreeNativeToolCall(id: id, name: name, arguments: arguments))
-                            }
-                            let display = [attachmentNotice, response].filter { !$0.isEmpty }.joined(separator: "\n\n")
-                            let currentSegments = streamedReasoningSegments + (iterationReasoning.isEmpty ? [] : [iterationReasoning])
-                            let currentParts = AssistantTurnPartsLogic.autoFreeStreamingParts(
-                                timelineParts: allToolCallParts,
-                                reasoning: iterationReasoning,
-                                answer: display
-                            )
-                            await MainActor.run {
-                                self.messageStore.update(id: assistantID) { m in
-                                    m.content = display
-                                    m.reasoning = currentSegments.joined(separator: "\n\n")
-                                    m.parts = currentParts
-                                    m.isStreaming = true
-                                }
-                            }
-                        }
-                        // Accumulate reasoning across iterations
-                        if !iterationReasoning.isEmpty {
-                            streamedReasoningSegments.append(iterationReasoning)
-                            allToolCallParts.append(.reasoning(iterationReasoning))
-                        }
-                        let nativeWebCalls: [(id: String, call: WebToolCall)] = nativeCalls.compactMap { native in
-                            guard let call = MyCoderAutoFreeClient.emulatedToolCall(
-                                name: native.name,
-                                arguments: native.arguments
-                            ) else { return nil }
-                            return (native.id, call)
-                        }
-                        let calls = nativeWebCalls.map(\.call)
-                            + WebToolProtocolEmulator.parseToolCalls(from: response)
-                        if calls.isEmpty || WebToolProtocolEmulator.shouldStopLoop(iteration: iteration, maxIterations: maxIterations, lastResponse: response) {
-                            if calls.isEmpty, let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
-                                conversationMessages.append(MyCoderAutoFreeClient.Message(role: "assistant", content: response))
-                                conversationMessages.append(MyCoderAutoFreeClient.Message(role: "user", content: feedback))
-                                continue
-                            }
-                            streamedContent = response
-                            break
-                        }
-                        let prepared = prepareLocalToolCalls(
-                            calls,
-                            modelContext: response,
-                            projectRoot: projectRoot,
-                            accessLevel: appState.accessLevel
-                        )
-                        for item in prepared {
-                            allToolCallParts.append(.toolCall(
-                                name: item.call.name,
-                                args: item.argsSummary,
-                                result: item.validationError.map { "validation error: \($0)" },
-                                callID: item.callID
-                            ))
-                        }
-                        publishToolParts(allToolCallParts, assistantID: assistantID)
-                        enqueueLocalToolApprovals(
-                            prepared.compactMap(\.approval),
-                            assistantID: assistantID
-                        )
-
-                        var resultsBlock = ""
-                        var nativeResults: [String: String] = [:]
-                        for (index, item) in prepared.enumerated() {
-                            guard !Task.isCancelled else { break }
-                            let nativeID = index < nativeWebCalls.count ? nativeWebCalls[index].id : nil
-                            if let validationError = item.validationError {
-                                switch await resolveOutOfProjectAccess(item, assistantID: assistantID) {
-                                case .allowed(let grantedRoots):
-                                    if let error = WebToolProtocolEmulator.validate(
-                                        item.call,
-                                        projectRoot: projectRoot,
-                                        accessLevel: appState.accessLevel,
-                                        grantedRoots: grantedRoots
-                                    ) {
-                                        let text = "validation error: \(error)"
-                                        if let nativeID {
-                                            nativeResults[nativeID] = text
-                                        } else {
-                                            resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                                                name: item.call.name,
-                                                result: text
-                                            ) + "\n"
-                                        }
-                                        continue
-                                    }
-                                case .denied(let message):
-                                    if let nativeID {
-                                        nativeResults[nativeID] = message
-                                    } else {
-                                        resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                                            name: item.call.name, result: message
-                                        ) + "\n"
-                                    }
-                                    allToolCallParts = localToolParts(
-                                        allToolCallParts,
-                                        settingResult: message,
-                                        callID: item.callID
-                                    )
-                                    publishToolParts(allToolCallParts, assistantID: assistantID)
-                                    continue
-                                case .notApplicable:
-                                    let text = "validation error: \(validationError)"
-                                    if let nativeID {
-                                        nativeResults[nativeID] = text
-                                    } else {
-                                        resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                                            name: item.call.name,
-                                            result: text
-                                        ) + "\n"
-                                    }
-                                    continue
-                                }
-                            }
-                            if let approval = item.approval {
-                                let approved = await awaitLocalToolApproval(
-                                    approval,
-                                    assistantID: assistantID
-                                )
-                                guard !Task.isCancelled else { break }
-                                guard approved else {
-                                    let denial = "user denied permission: \(item.call.name) was not executed. Do not retry the same operation; ask the user how to proceed."
-                                    if let nativeID {
-                                        nativeResults[nativeID] = denial
-                                    } else {
-                                        resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                                            name: item.call.name, result: denial
-                                        ) + "\n"
-                                    }
-                                    allToolCallParts = localToolParts(
-                                        allToolCallParts,
-                                        settingResult: denial,
-                                        callID: item.callID
-                                    )
-                                    publishToolParts(allToolCallParts, assistantID: assistantID)
-                                    continue
-                                }
-                            }
-                            let result = await executor.execute(item.call, userApproved: true)
-                            guard !Task.isCancelled else { break }
-                            if let nativeID {
-                                nativeResults[nativeID] = result
-                            } else {
-                                resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                                    name: item.call.name, result: result
-                                ) + "\n"
-                            }
-                            allToolCallParts = localToolParts(
-                                allToolCallParts,
-                                settingResult: result,
-                                callID: item.callID
-                            )
-                            publishToolParts(allToolCallParts, assistantID: assistantID)
-                        }
-                        if nativeCalls.isEmpty {
-                            conversationMessages.append(MyCoderAutoFreeClient.Message(role: "assistant", content: response))
-                            conversationMessages.append(MyCoderAutoFreeClient.Message(role: "user", content: resultsBlock))
-                        } else {
-                            conversationMessages.append(MyCoderAutoFreeClient.Message(
-                                role: "assistant",
-                                content: response,
-                                toolCalls: nativeCalls.map { $0.toolCall }
-                            ))
-                            for native in nativeCalls {
-                                conversationMessages.append(MyCoderAutoFreeClient.Message(
-                                    role: "tool",
-                                    content: nativeResults[native.id] ?? "",
-                                    toolCallID: native.id
-                                ))
-                            }
-                            if !resultsBlock.isEmpty {
-                                conversationMessages.append(MyCoderAutoFreeClient.Message(role: "user", content: resultsBlock))
-                            }
-                        }
-                        streamedContent = response
-                        // Add tool call parts to message for UI spoilers
-                        await MainActor.run {
-                            self.messageStore.update(id: assistantID) { m in
-                                m.content = [attachmentNotice, response, "\n\n⏳ Running tools..."].filter { !$0.isEmpty }.joined(separator: "\n\n")
-                                m.reasoning = streamedReasoningSegments.joined(separator: "\n\n")
-                                m.parts = allToolCallParts
-                                m.isStreaming = true
-                            }
-                        }
-                    }
-                    let finalDisplay = [attachmentNotice, streamedContent].filter { !$0.isEmpty }.joined(separator: "\n\n")
-                    await MainActor.run {
-                        self.messageStore.update(id: assistantID) { m in
-                            m.content = finalDisplay
-                            m.reasoning = streamedReasoningSegments.joined(separator: "\n\n")
-                            m.parts = AssistantTurnPartsLogic.autoFreeFinalParts(
-                                timelineParts: allToolCallParts,
-                                answer: finalDisplay
-                            )
-                            m.isFinished = true
-                            m.isStreaming = false
-                        }
-                        self.appState.isLoading = false
-                        self.appState.isStreaming = false
-                        self.currentAssistantMessageID = nil
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.messageStore.update(id: assistantID) { m in
-                            m.content = "OpenCode Zen error: \(error.localizedDescription)"
-                            m.isFinished = true
-                            m.isStreaming = false
-                        }
-                        self.appState.isLoading = false
-                        self.appState.isStreaming = false
-                        self.currentAssistantMessageID = nil
-                    }
-                }
-                return
-            }
 
             // ── Web-chat provider branch (browser tool-emulation) ─
             if case .web(let configID) = route {
@@ -2705,8 +2392,7 @@ struct ChatPanelView: View {
         messages: [DirectChatMessage],
         parameters: ModelCallParameters,
         assistantID: String,
-        toolParts: [MessagePartContent],
-        reasoningChunks: [String]
+        timelineParts: [MessagePartContent]
     ) async throws -> DirectChatResult {
         do {
             return try await DirectChatStreamer.stream(
@@ -2716,20 +2402,20 @@ struct ChatPanelView: View {
                 messages: messages,
                 parameters: parameters
             ) { update in
-                let reasoning = DirectChatClient.mergedReasoning(
-                    reasoningChunks + [update.reasoning]
-                )
+                let reasoning = update.reasoning.isEmpty ? nil : update.reasoning
                 self.messageStore.update(id: assistantID) { msg in
                     if !update.content.isEmpty {
                         msg.content = update.content
                     }
-                    msg.reasoning = reasoning ?? ""
-                    if msg.reasoningStartedAt == nil, reasoning != nil {
-                        msg.reasoningStartedAt = Date()
+                    if let reasoning {
+                        msg.reasoning = reasoning
+                        if msg.reasoningStartedAt == nil {
+                            msg.reasoningStartedAt = Date()
+                        }
                     }
-                    msg.parts = AssistantTurnPartsLogic.directParts(
+                    msg.parts = AssistantTurnPartsLogic.directStreamingParts(
+                        timeline: timelineParts,
                         reasoning: reasoning,
-                        toolParts: toolParts,
                         answer: update.content
                     )
                     msg.isStreaming = true
@@ -3056,9 +2742,13 @@ struct ChatPanelView: View {
         )
     }
 
-    func loadOlderMessages() {
+    /// Loads one older page and keeps the reader's current question in place.
+    /// Without this anchor, prepending rows pushes the visible turn down and
+    /// the chat appears to jump to unrelated history.
+    func loadOlderMessages(proxy: ScrollViewProxy) {
         guard let sessionID = messageStore.currentSessionID else { return }
         guard !messageStore.isLoadingOlder else { return }  // Prevent cascade
+        let anchorMessageID = currentUserMessageID ?? displayMessages.last(where: { $0.role == .user })?.id
 
         Task {
             canLoadOlderMessages = false
@@ -3071,6 +2761,12 @@ struct ChatPanelView: View {
             }
             await MainActor.run {
                 canLoadOlderMessages = messageStore.hasMoreMessages
+                guard let anchorMessageID else { return }
+                // The new page needs one layout pass before `scrollTo` can
+                // resolve the anchor row inside the lazy stack.
+                DispatchQueue.main.async {
+                    proxy.scrollTo(anchorMessageID, anchor: .top)
+                }
             }
         }
     }
@@ -3821,58 +3517,6 @@ struct ChatPanelView: View {
         }
     }
 
-    private func autoFreeMessageParts(
-        text: String,
-        files: [FileInfo],
-        images: [ClipboardImage]
-    ) -> (parts: [MyCoderAutoFreeContentPart], warnings: [String]) {
-        var imageDataURLs = images.compactMap { (image: ClipboardImage) -> String? in
-            guard !image.base64.isEmpty else { return nil }
-            return MessagePartsBuilder.dataURL(mimeType: image.mimeType, base64: image.base64)
-        }
-        var textFiles: [MyCoderAutoFreeTextFile] = []
-        var warnings: [String] = []
-
-        for file in files {
-            guard let path = file.path, !path.isEmpty else {
-                warnings.append("Attachment \(file.name) could not be read and was not sent to OpenCode Zen.")
-                continue
-            }
-            let url = URL(fileURLWithPath: path)
-            let mime = MessagePartsBuilder.mimeType(for: file)
-            if MessagePartsBuilder.isImageMimeType(mime) {
-                if let data = try? Data(contentsOf: url), !data.isEmpty {
-                    imageDataURLs.append(MessagePartsBuilder.dataURL(
-                        mimeType: mime,
-                        base64: data.base64EncodedString()
-                    ))
-                } else {
-                    warnings.append("Attachment \(file.name) is an unreadable image and was not sent to OpenCode Zen.")
-                }
-            } else if MyCoderAutoFreeContentLogic.isUnsupportedForTextRoute(fileName: file.name, mimeType: mime) {
-                warnings.append("Attachment \(file.name) is not supported by the free route and was not sent to OpenCode Zen.")
-            } else if let data = try? Data(contentsOf: url),
-                      let content = String(data: data, encoding: .utf8) {
-                let bounded = String(content.prefix(250_000))
-                textFiles.append(MyCoderAutoFreeTextFile(name: file.name, content: bounded))
-                if content.count > bounded.count {
-                    warnings.append("Attachment \(file.name) was truncated to 250,000 characters for the free route.")
-                }
-            } else {
-                warnings.append("Attachment \(file.name) is not a readable text/image file and was not sent to OpenCode Zen.")
-            }
-        }
-
-        return (
-            MyCoderAutoFreeContentLogic.parts(
-                text: text,
-                imageDataURLs: imageDataURLs,
-                textFiles: textFiles
-            ),
-            warnings
-        )
-    }
-
     private func roleString(_ role: MessageRole) -> String {
         switch role {
         case .user: return "user"
@@ -4223,50 +3867,6 @@ struct ScrollToBottomButton: View {
 }
 
 
-struct AutoFreeSwitchBanner: View {
-    let notification: AppNotification
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: notification.type.icon)
-                .interfaceFont(size: 15, weight: .semibold)
-                .foregroundColor(Color.mimo.error)
-                .padding(.top, 1)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(notification.title)
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                Text(notification.message)
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 8)
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .interfaceFont(size: 10, weight: .semibold)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .accessibilityLabel("Dismiss notification")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color.mimo.error.opacity(0.12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.mimo.error.opacity(0.45), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
-    }
-}
 
 /// Reports a chat message row's frame in the chat scroll space (used to
 /// resolve the currently visible user message for the navigator).

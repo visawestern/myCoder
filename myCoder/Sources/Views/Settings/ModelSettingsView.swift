@@ -660,20 +660,6 @@ struct ModelSettingsProviderColumns: View {
             .toggleStyle(VuexySwitchStyle())
             .interfaceFont(size: 11)
 
-            if custom.type == .openCodeZen {
-                HStack(spacing: 7) {
-                    Image(systemName: "sparkles")
-                        .foregroundColor(Color.mimo.violet)
-                    Text(OpenCodeZenCatalog.accessSummary(hasAPIKey: !(custom.getSecureAPIKey() ?? "").isEmpty))
-                        .interfaceFont(size: 10, weight: .medium)
-                        .foregroundColor(Color.mimo.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(8)
-                .background(Color.mimo.violet.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-
             if custom.type == .acp {
                 Toggle(L.t(AppLocalizationKey.locEnableACP), isOn: Binding(
                     get: { custom.acpEnabled },

@@ -19,7 +19,7 @@ enum ChunkedSendSequencer {
         switch route {
         case .web, .acp, .mimoServe, .openCodeServe:
             return .sequentialRequests
-        case .openAICompatible, .autoFree, .none:
+        case .openAICompatible, .none:
             return .singleRequest
         }
     }

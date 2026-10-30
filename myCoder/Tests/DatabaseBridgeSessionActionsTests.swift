@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
-@Suite("DatabaseBridge — sidebar session actions", .serialized)
+@Suite("DatabaseBridge — sidebar session actions (program DB only)", .serialized)
 struct DatabaseBridgeSessionActionsTests {
 
     private func makeTempProjectDir() throws -> String {
@@ -12,67 +12,62 @@ struct DatabaseBridgeSessionActionsTests {
         return dir.path
     }
 
-    @Test("Rename/delete route to the owning project store and report real changes")
-    func renameAndDeleteProjectSession() throws {
-        let projectPath = try makeTempProjectDir()
-        defer {
-            ProjectDatabaseManager.evictProject(projectPath: projectPath)
-            try? FileManager.default.removeItem(atPath: projectPath)
-        }
-
-        let bridge = DatabaseBridge()
-        bridge.createSession(id: "s1", projectId: projectPath, title: "Old", directory: projectPath)
-
-        #expect(bridge.renameSession(id: "s1", title: "New"))
-        let store = try ProjectDatabaseManager.manager(forProjectPath: projectPath)
-        #expect(try store.getAllSessions().first?.title == "New")
-
-        #expect(bridge.renameSession(id: "missing", title: "X") == false)
-        #expect(bridge.deleteSession(id: "s1"))
-        #expect(try store.getAllSessions(includeArchived: true).isEmpty)
-        #expect(bridge.deleteSession(id: "s1") == false)
+    private func programRows(_ projectPath: String, includeArchived: Bool = false) throws -> [SessionRecord] {
+        try DatabaseManager.shared.getSessionsByProject(
+            projectId: ChatSession.normalizedPath(projectPath),
+            includeArchived: includeArchived
+        )
     }
 
-    @Test("Opening a chat does not bump its updated_at (no sidebar reshuffle)")
-    func unarchivingActiveSessionKeepsTimestamp() throws {
+    @Test("Rename/delete живут в базе программы и возвращают реальные изменения")
+    func renameAndDeleteProjectSession() throws {
         let projectPath = try makeTempProjectDir()
-        defer {
-            ProjectDatabaseManager.evictProject(projectPath: projectPath)
-            try? FileManager.default.removeItem(atPath: projectPath)
-        }
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
+        let sessionID = "s1-\(UUID().uuidString)"
 
         let bridge = DatabaseBridge()
-        bridge.createSession(id: "s1", projectId: projectPath, title: "Chat", directory: projectPath)
-        let store = try ProjectDatabaseManager.manager(forProjectPath: projectPath)
-        let before = try #require(store.getAllSessions().first { $0.id == "s1" }).updatedAt
+        bridge.createSession(id: sessionID, projectId: projectPath, title: "Old", directory: projectPath)
 
-        // Selecting a session unarchives it. For an already active session
-        // that must be a no-op — otherwise every click reordered the
-        // sidebar by moving the chat to the top.
-        try store.unarchiveSession(id: "s1")
-        let after = try #require(store.getAllSessions().first { $0.id == "s1" }).updatedAt
+        #expect(bridge.renameSession(id: sessionID, title: "New"))
+        #expect(try programRows(projectPath).first?.title == "New")
+
+        #expect(bridge.renameSession(id: "missing-\(UUID().uuidString)", title: "X") == false)
+        #expect(bridge.deleteSession(id: sessionID))
+        #expect(try programRows(projectPath, includeArchived: true).isEmpty)
+        #expect(bridge.deleteSession(id: sessionID) == false)
+    }
+
+    @Test("Открытие чата не двигает updated_at (нет перестановки сайдбара)")
+    func unarchivingActiveSessionKeepsTimestamp() throws {
+        let projectPath = try makeTempProjectDir()
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
+        let sessionID = "s1-\(UUID().uuidString)"
+
+        let bridge = DatabaseBridge()
+        bridge.createSession(id: sessionID, projectId: projectPath, title: "Chat", directory: projectPath)
+        let before = try #require(programRows(projectPath).first { $0.id == sessionID }).updatedAt
+
+        // Выбор сессии разархивирует её. Для уже активной сессии это должно
+        // быть no-op — иначе каждый клик переставлял чат вверх списка.
+        try DatabaseManager.shared.unarchiveSession(id: sessionID)
+        let after = try #require(programRows(projectPath).first { $0.id == sessionID }).updatedAt
         #expect(after == before)
 
-        // A real archive/unarchive cycle still updates the timestamp.
-        try store.archiveSession(id: "s1")
-        try store.unarchiveSession(id: "s1")
-        let restored = try #require(store.getAllSessions().first { $0.id == "s1" })
+        // Реальный цикл архив/разархив всё же обновляет время.
+        try DatabaseManager.shared.archiveSession(id: sessionID)
+        try DatabaseManager.shared.unarchiveSession(id: sessionID)
+        let restored = try #require(programRows(projectPath, includeArchived: true).first { $0.id == sessionID })
         #expect(restored.isArchived == false)
         #expect(restored.updatedAt >= before)
     }
 
-    @Test("Unarchiving an unknown chat is a no-op, not a crash")
+    @Test("Разархив неизвестного чата — no-op, не падение")
     func unarchivingUnknownSessionDoesNotCrash() throws {
         let projectPath = try makeTempProjectDir()
-        defer {
-            ProjectDatabaseManager.evictProject(projectPath: projectPath)
-            try? FileManager.default.removeItem(atPath: projectPath)
-        }
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
 
-        let store = try ProjectDatabaseManager.manager(forProjectPath: projectPath)
-        // A chat id that is not in this project DB (e.g. a project-less chat
-        // opened from the sidebar) must not bring the app down.
-        try store.unarchiveSession(id: "does-not-exist")
-        #expect(try store.getAllSessions().isEmpty)
+        // Чата нет в базе программы — разархив не должен ронять приложение.
+        try DatabaseManager.shared.unarchiveSession(id: "does-not-exist-\(UUID().uuidString)")
+        #expect(try programRows(projectPath).isEmpty)
     }
 }

@@ -755,7 +755,9 @@ class DatabaseManager {
                 costUsd: row[sessionCostUsd],
                 draftText: row[sessionDraftText],
                 modelId: row[sessionModelId],
-                providerId: row[sessionProviderId]
+                providerId: row[sessionProviderId],
+                parentSessionId: row[sessionParentId],
+                subagentStatus: row[sessionSubagentStatus]
             ))
         }
         return results
@@ -880,7 +882,8 @@ class DatabaseManager {
         modelId: String? = nil,
         providerId: String? = nil,
         reasoning: String? = nil,
-        usage: UsageCapture? = nil
+        usage: UsageCapture? = nil,
+        metadata: String? = nil
     ) throws {
         guard let db = db else { throw DatabaseError.notInitialized }
 
@@ -903,6 +906,7 @@ class DatabaseManager {
             messageCompletionTokens <- usage.map { Int64($0.completionTokens) },
             messageCostUsd <- usage?.costUSD,
             messageReasoning <- reasoning,
+            messageMetadata <- metadata,
             messageIsFinished <- true
         ))
 
@@ -985,7 +989,8 @@ class DatabaseManager {
                 providerId: row[messageProviderId],
                 promptTokens: row[messagePromptTokens].map { Int($0) },
                 completionTokens: row[messageCompletionTokens].map { Int($0) },
-                costUsd: row[messageCostUsd]
+                costUsd: row[messageCostUsd],
+                metadata: row[messageMetadata]
             ))
         }
         return results
@@ -1492,6 +1497,8 @@ struct MessageRecord {
     var promptTokens: Int? = nil
     var completionTokens: Int? = nil
     var costUsd: Double? = nil
+    /// JSON payload with the model + send parameters (`MessageSendInfo`).
+    var metadata: String? = nil
 }
 
 struct MessagePartRecord {

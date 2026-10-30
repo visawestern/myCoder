@@ -1,7 +1,6 @@
 import Foundation
 
 extension Notification.Name {
-    static let myCoderAutoFreeModelSwitched = Notification.Name("MyCoderAutoFreeModelSwitched")
     static let apiSendRequested = Notification.Name("apiSendRequested")
     static let webToolApprovalResolved = Notification.Name("webToolApprovalResolved")
     static let localToolApprovalResolved = Notification.Name("localToolApprovalResolved")
@@ -20,6 +19,9 @@ struct AppNotification: Identifiable, Equatable {
     let type: NotificationType
     let timestamp: Date
     var isRead: Bool
+    /// When the notification was read. Used to gray it out and to age it out
+    /// of the list one hour after reading (user directive 2026-10-29).
+    var readAt: Date?
     var action: NotificationAction?
     
     init(
@@ -29,6 +31,7 @@ struct AppNotification: Identifiable, Equatable {
         type: NotificationType = .info,
         timestamp: Date = Date(),
         isRead: Bool = false,
+        readAt: Date? = nil,
         action: NotificationAction? = nil
     ) {
         self.id = id
@@ -37,6 +40,7 @@ struct AppNotification: Identifiable, Equatable {
         self.type = type
         self.timestamp = timestamp
         self.isRead = isRead
+        self.readAt = readAt
         self.action = action
     }
 }
@@ -77,21 +81,6 @@ enum NotificationAction: Equatable {
     case custom(String)       // URL or action identifier
 }
 
-enum MyCoderAutoFreeNotificationLogic {
-    static func make(userInfo: [AnyHashable: Any]) -> AppNotification {
-        let fromModel = userInfo["fromModel"] as? String ?? L.t(AppLocalizationKey.locPreviousModel)
-        let toModel = userInfo["toModel"] as? String ?? L.t(AppLocalizationKey.locAnotherFreeModel)
-        let reason = userInfo["reason"] as? String ?? L.t(AppLocalizationKey.locProviderError)
-        let isRateLimit = reason == "rate limit"
-        let title = isRateLimit ? L.t(AppLocalizationKey.locFreeModelRateLimited) : L.t(AppLocalizationKey.locFreeModelSwitched)
-        let message = isRateLimit
-            ? L.t(AppLocalizationKey.locFreeModelRateLimitMessage, fromModel, toModel)
-            : L.t(AppLocalizationKey.locFreeModelSwitchedMessage, fromModel, reason, toModel)
-        return AppNotification(title: title,
-                               message: message,
-                               type: isRateLimit ? .error : .warning)
-    }
-}
 
 // MARK: - Notification Service
 
@@ -100,9 +89,30 @@ final class NotificationService: ObservableObject {
     @Published private(set) var unreadCount: Int = 0
     
     private let maxNotifications = 50
+    private var pruneTimer: Timer?
+    /// Read notifications live for one hour, then drop out of the list.
+    static let readLifetime: TimeInterval = 3600
+    
+    init() {
+        startPruneTimer()
+    }
     
     var sortedNotifications: [AppNotification] {
-        notifications.sorted { $0.timestamp > $1.timestamp }
+        pruneExpiredRead()
+        return notifications.sorted { $0.timestamp > $1.timestamp }
+    }
+    
+    /// Drop read notifications whose reading happened earlier than `readLifetime`
+    /// before `now`. Unread notifications stay regardless of age.
+    static func pruneItems(
+        _ items: [AppNotification],
+        now: Date = Date(),
+        readLifetime: TimeInterval = readLifetime
+    ) -> [AppNotification] {
+        items.filter { item in
+            guard item.isRead, let readAt = item.readAt else { return true }
+            return now.timeIntervalSince(readAt) < readLifetime
+        }
     }
     
     func add(_ notification: AppNotification) {
@@ -120,7 +130,22 @@ final class NotificationService: ObservableObject {
         guard let index = notifications.firstIndex(where: { $0.id == id }),
               !notifications[index].isRead else { return }
         notifications[index].isRead = true
+        notifications[index].readAt = Date()
         unreadCount = max(0, unreadCount - 1)
+    }
+    
+    private func pruneExpiredRead() {
+        let before = notifications.count
+        notifications = Self.pruneItems(notifications)
+        if notifications.count != before {
+            objectWillChange.send()
+        }
+    }
+    
+    private func startPruneTimer() {
+        pruneTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            self?.pruneExpiredRead()
+        }
     }
     
     func markAllAsRead() {
