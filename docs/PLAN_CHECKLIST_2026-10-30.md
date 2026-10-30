@@ -10,6 +10,22 @@
 - [x] `ModelSettingsPremiumTests`/`SettingsIntegrationTests` — маркеры исходника обновлены под актуальный UI (`ForEach(familyGroups` вместо старого `displayModels`; фильтр/сортировка/скролл/удаление сохранены).
 - [x] Полный прогон: **3118 тестов, 0 падений**. Коммит `4e262f2`.
 
+## 9. Ревью покрытия: новые тесты для непокрытых типов
+- [x] Скрипт: 1020 типов в Sources; 428 не упоминались в тестах (в основном UI-вью/DTO; выбраны типы с логикой).
+- [x] Новые тестовые файлы (все зелёные):
+  - `UsageStatisticsAggregatorTests` — санитизация стоимости, нормализация имён, агрегаты, фаворит, активные дни, итоги, costLabel;
+  - `StorageResetLogicPlanTests` — планы сброса, дедупликация, сводка, нормализация id проекта;
+  - `ChunkedSendSequencerTests` — стратегия по маршруту, пейлоады с маркерами частей;
+  - `WebChatSignalBoxesTests` — retry/approval/completion сигналы, LimitStabilityBox, RestartCountBox;
+  - `WebSessionLogicInferenceTests` — captcha/лимит/loggedOut/connected + шаги восстановления;
+  - `OutputAccumulatorGitPublishTests` — one-time код, аргументы repo, описания ошибок;
+  - `UserMessageNavigatorLogicTests` — фильтрация, превью, номера, шаги;
+  - `MCPHealthCheckLogicTests` — пробы http/stdio, разрешение PATH, статусы;
+  - `ProjectDeletionExecutorTests` — безопасность и реальное удаление;
+  - `ErrorDescriptionTests` — описания ошибок (AppAction/Keychain/Snapshot/Export/провайдеры);
+  - `OpenCodeSessionStoresTests` — хранилища сессий serve.
+- [x] Полный прогон: 3146 тестов; флейки сетевых/таймерных тестов под нагрузкой (сборка Chromium) — при повторе зелёные.
+
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
 - [x] TDD: `RequestRetryPolicyTests` — пустые ответы (DirectChat/OpenCodeServe/ACP/MimoServe) и HTTP 408/429/500/502/503/504 ретраятся; прочие ошибки (401/403/404, транспорт, parse) — нет; до 10 суммарных попыток; пауза экспоненциальная с потолком 60с.
