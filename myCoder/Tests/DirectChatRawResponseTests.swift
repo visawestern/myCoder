@@ -38,24 +38,27 @@ struct DirectChatRawResponseTests {
         #expect(result.rawEvents.count == 2)
     }
 
-    @Test("Зашифрованный reasoning-канал даёт честный плейсхолдер")
+    @Test("Зашифрованный reasoning-канал даёт честную сводку")
     func encryptedReasoningProducesPlaceholder() {
         var acc = DirectChatStreamAccumulator()
-        let chunk = #"{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"x","format":"mercury-v1","index":0}]}}]}"#
+        let chunk = #"{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"mrt1_v1_abc","format":"mercury-v1","index":0}]}}]}"#
         let update = acc.ingest("data: \(chunk)")
-        #expect(update != nil, "encrypted reasoning должен помечать изменение")
-        #expect(acc.visibleReasoning.contains("зашифровано"))
-        #expect(acc.sawEncryptedReasoning)
-        #expect(acc.result().reasoning?.contains("зашифровано") == true)
+        #expect(update != nil, "reasoning_details должен помечать изменение")
+        let visible = acc.visibleReasoning
+        #expect(visible.contains("Рассуждение"))
+        #expect(visible.contains("mercury-v1"))
+        #expect(visible.contains("mrt1"))
+        #expect(!visible.contains("зашифровано"), "не выдумываем ‘зашифровано’ — это не транспортное шифрование")
+        #expect(acc.result().reasoning == visible)
     }
 
-    @Test("Текстовый reasoning имеет приоритет над плейсхолдером")
+    @Test("Текстовый reasoning имеет приоритет над сводкой details")
     func plainReasoningWinsOverPlaceholder() {
         var acc = DirectChatStreamAccumulator()
         _ = acc.ingest("data: {\"choices\":[{\"delta\":{\"reasoning\":\"думаю\"}}]}")
         _ = acc.ingest(#"data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}]}}]}"#)
         #expect(acc.visibleReasoning == "думаю")
-        #expect(!acc.visibleReasoning.contains("зашифровано"))
+        #expect(!acc.visibleReasoning.contains("Рассуждение"))
     }
 
     @Test("Не-стриминговый send хранит сырое тело")

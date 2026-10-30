@@ -118,6 +118,32 @@ final class PathClickTextView: NSTextView {
 final class FileOpenMenuCoordinator: NSObject {
     func presentOpenWithMenu(for absolutePath: String, at screenPoint: NSPoint) {
         let fileURL = URL(fileURLWithPath: absolutePath)
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: absolutePath, isDirectory: &isDirectory)
+
+        if exists, isDirectory.boolValue {
+            // Папка: открыть её в Finder (или в приложении по умолчанию).
+            let menu = NSMenu()
+            let openInFinder = NSMenuItem(
+                title: L.t("Открыть в Finder"),
+                action: #selector(openInFinder(_:)),
+                keyEquivalent: ""
+            )
+            openInFinder.target = self
+            openInFinder.representedObject = FileOpenTarget(fileURL: fileURL, applicationURL: nil)
+            menu.addItem(openInFinder)
+            let reveal = NSMenuItem(
+                title: L.t("Reveal in Finder"),
+                action: #selector(revealInFinder(_:)),
+                keyEquivalent: ""
+            )
+            reveal.target = self
+            reveal.representedObject = FileOpenTarget(fileURL: fileURL, applicationURL: nil)
+            menu.addItem(reveal)
+            menu.popUp(positioning: nil, at: screenPoint, in: nil)
+            return
+        }
+
         let defaultApp = ChatFileOpenLogic.defaultApplication(fileURL: fileURL)
         let others = ChatFileOpenLogic.applicationsThatCanOpen(fileURL: fileURL)
         let ordered = ChatFileOpenLogic.orderedApplications(default: defaultApp, candidates: others)
@@ -156,6 +182,11 @@ final class FileOpenMenuCoordinator: NSObject {
         menu.addItem(finderItem)
 
         menu.popUp(positioning: nil, at: screenPoint, in: nil)
+    }
+
+    @objc private func openInFinder(_ sender: NSMenuItem) {
+        guard let target = sender.representedObject as? FileOpenTarget else { return }
+        ChatFileOpenLogic.open(fileURL: target.fileURL, applicationURL: nil)
     }
 
     @objc private func openWithDefault(_ sender: NSMenuItem) {
@@ -335,24 +366,16 @@ enum MarkdownAttributedStringBuilder {
         for part in MarkdownInlineParser.parse(content) {
             switch part {
             case .text(let value):
-                result.append(NSAttributedString(string: value, attributes: [
-                    .font: font,
-                    .foregroundColor: color
-                ]))
+                appendTextWithFilePaths(value, to: result, font: font, color: color, projectRoot: projectRoot)
             case .bold(let value):
-                result.append(NSAttributedString(string: value, attributes: [
-                    .font: NSFont.systemFont(ofSize: font.pointSize, weight: .bold),
-                    .foregroundColor: color
-                ]))
+                let boldFont = NSFont.systemFont(ofSize: font.pointSize, weight: .bold)
+                appendTextWithFilePaths(value, to: result, font: boldFont, color: color, projectRoot: projectRoot)
             case .italic(let value):
                 let italic = NSFontManager.shared.convert(
                     NSFont.systemFont(ofSize: font.pointSize),
                     toHaveTrait: .italicFontMask
                 )
-                result.append(NSAttributedString(string: value, attributes: [
-                    .font: italic,
-                    .foregroundColor: color
-                ]))
+                appendTextWithFilePaths(value, to: result, font: italic, color: color, projectRoot: projectRoot)
             case .code(let value):
                 let codeAttributes: [NSAttributedString.Key: Any] = [
                     .font: codeFont,
@@ -360,8 +383,7 @@ enum MarkdownAttributedStringBuilder {
                     .backgroundColor: brand.withAlphaComponent(0.12)
                 ]
                 let attributedCode = NSMutableAttributedString(string: value, attributes: codeAttributes)
-                if ChatFileOpenLogic.looksLikeFilePath(value),
-                   let resolved = ChatFileOpenLogic.resolveFilePath(value, projectRoot: projectRoot) {
+                if let resolved = ChatFileOpenLogic.resolveFilePath(value, projectRoot: projectRoot) {
                     attributedCode.addAttribute(.chatFilePath, value: resolved, range: NSRange(location: 0, length: attributedCode.length))
                 }
                 result.append(attributedCode)
@@ -383,6 +405,53 @@ enum MarkdownAttributedStringBuilder {
                     .backgroundColor: brand.withAlphaComponent(0.06)
                 ]))
             }
+        }
+    }
+
+    /// Appends plain text while marking any substring that resolves to an
+    /// existing file/folder (relative to the project root or absolute) with
+    /// `.chatFilePath` so a click opens the "Open with / Reveal in Finder"
+    /// menu. The visual style stays the surrounding text style — file names
+    /// outside inline code do not get repainted (user request 2026-10-31).
+    private static func appendTextWithFilePaths(
+        _ value: String,
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        color: NSColor,
+        projectRoot: String?
+    ) {
+        let ns = value as NSString
+        guard ns.length > 0 else { return }
+        // Potential path tokens are contiguous non-whitespace runs.
+        guard let regex = try? NSRegularExpression(pattern: #"\S+"#) else {
+            result.append(NSAttributedString(string: value, attributes: [.font: font, .foregroundColor: color]))
+            return
+        }
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        var last = 0
+        for match in regex.matches(in: value, options: [], range: NSRange(location: 0, length: ns.length)) {
+            if match.range.location > last {
+                result.append(NSAttributedString(
+                    string: ns.substring(with: NSRange(location: last, length: match.range.location - last)),
+                    attributes: baseAttributes
+                ))
+            }
+            let token = ns.substring(with: match.range)
+            var attributes = baseAttributes
+            if let resolved = ChatFileOpenLogic.resolveFilePath(token, projectRoot: projectRoot) {
+                attributes[.chatFilePath] = resolved
+            }
+            result.append(NSAttributedString(string: token, attributes: attributes))
+            last = match.range.location + match.range.length
+        }
+        if last < ns.length {
+            result.append(NSAttributedString(
+                string: ns.substring(with: NSRange(location: last, length: ns.length - last)),
+                attributes: baseAttributes
+            ))
         }
     }
 

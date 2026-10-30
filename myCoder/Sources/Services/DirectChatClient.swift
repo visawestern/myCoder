@@ -154,20 +154,44 @@ enum DirectChatClient {
         return nil
     }
 
-    /// Some providers send the thinking channel in an ENCRYPTED form
-    /// (e.g. mercury-3 `delta.reasoning_details` with `reasoning.encrypted`).
-    /// We cannot show the content, but we must NOT silently drop that the
-    /// model reasoned — the UI shows an honest placeholder instead.
-    static func hasEncryptedReasoning(in container: [String: Any]) -> Bool {
-        if let details = container["reasoning_details"] as? [[String: Any]] {
-            if !details.isEmpty {
-                return true
+    /// Some providers send the thinking channel as a list of detail records
+    /// (OpenAI Responses-style `reasoning_details`, e.g. mercury-3's
+    /// `[{type: "reasoning.encrypted", data: "mrt1_v1_…", format: "mercury-v1", …}]`).
+    /// The `data` field is an opaque per-turn reference/token, not the text.
+    /// opencode (fromRequest → openrouter chat) keeps these records when no
+    /// plain text is available — we render a faithful summary of every
+    /// detail so the user sees the provider DID reason, with enough
+    /// information to correlate with the provider logs.
+    static func reasoningDetailsSummary(in container: [String: Any]) -> String? {
+        guard let details = container["reasoning_details"] as? [[String: Any]], !details.isEmpty else {
+            return nil
+        }
+        var lines: [String] = []
+        for detail in details {
+            let type = (detail["type"] as? String) ?? "reasoning"
+            var line = "Рассуждение (\(type))"
+            if let format = detail["format"] as? String, !format.isEmpty {
+                line += " · формат: \(format)"
             }
+            if let data = detail["data"] as? String, !data.isEmpty {
+                // Обрезаем ссылку до первого разделителя — токен длинный.
+                var prefix = ""
+                for scalar in data.unicodeScalars {
+                    if CharacterSet.alphanumerics.contains(scalar) || scalar == "_" {
+                        prefix.unicodeScalars.append(scalar)
+                    } else {
+                        break
+                    }
+                }
+                if prefix.isEmpty { prefix = String(data.prefix(16)) }
+                line += " · id: \(prefix.prefix(16))…"
+            }
+            if let index = detail["index"] as? Int {
+                line += " · #\(index)"
+            }
+            lines.append(line)
         }
-        for key in ["encrypted_reasoning", "provider_reasoning", "reasoning_encrypted"] {
-            if container[key] != nil { return true }
-        }
-        return false
+        return lines.joined(separator: "\n")
     }
 
     private static func reasoningValue(_ raw: Any?) -> String? {

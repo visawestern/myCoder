@@ -53,6 +53,17 @@
 - [x] **Диагностика**: `StreamDiagnostics` логирует каждый ответ/запрос ([SSE]/[UPDATE]/[REQ]/[ITER]/[TOOL]/[CTX]) по файловому флагу `/tmp/mycoder_sse_enabled`.
 - [x] Подтверждено живьём: отправка в новый чат мгновенная (ack ~0s); виден реальный `[REQ]` (model=mercury-3, stream=true); подготовка не виснет; полный прогон **3187 тестов, 0 падений**.
 
+## 12. Reasoning mercury-3: честная сводка вместо «зашифровано»
+- [x] Сверено с opencode: `delta.reasoning_details` — стандартный Records-стиль провайдера (поля `type/data/format/index`), а не транспортное шифрование; запрашиваемый `reasoning.encrypted_content` мы не включаем.
+- [x] Убран ложный текст «зашифровано провайдером». Теперь: текстовый reasoning (reasoning_content/thinking) имеет приоритет; иначе показывается сводка details («Рассуждение (reasoning.encrypted) · формат: mercury-v1 · id: mrt1…»).
+- [x] TDD: `DirectChatRawResponseTests` обновлены.
+
+## 13. Кликабельные пути в ответах (вне reasoning/тулов)
+- [x] `MarkdownAttributedStringBuilder`: пути/имена файлов в ОБЫЧНОМ тексте (не только inline-код) получают `.chatFilePath`, если резолвятся в существующий файл/папку относительно projectRoot.
+- [x] `ChatFileOpenLogic.resolveFilePath`: обрезка хвостовой пунктуации («App.swift.» → «App.swift»); голые имена без расширения допустимы, если это реальная папка.
+- [x] Меню при клике: для папок — «Открыть в Finder» + «Показать в Finder»; для файлов — «Открыть с помощью» + приложения + «Показать в Finder».
+- [x] TDD: `ChatFileClickablePathsTests` (5 тестов: текст/имя из root/папка/nonexistent/inline-code).
+
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
 - [x] TDD: `RequestRetryPolicyTests` — пустые ответы (DirectChat/OpenCodeServe/ACP/MimoServe) и HTTP 408/429/500/502/503/504 ретраятся; прочие ошибки (401/403/404, транспорт, parse) — нет; до 10 суммарных попыток; пауза экспоненциальная с потолком 60с.

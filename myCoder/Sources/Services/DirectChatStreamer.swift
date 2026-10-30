@@ -56,9 +56,10 @@ struct DirectChatStreamAccumulator {
     private(set) var reasoning = ""
     private(set) var usage: UsageCapture?
     private(set) var sawDataLine = false
-    /// True when the provider sent an encrypted reasoning channel (we cannot
-    /// show its content, but we must not pretend the model never reasoned).
-    private(set) var sawEncryptedReasoning = false
+    /// Provider reasoning-detail records (non-text), e.g. mercury-3's
+    /// `reasoning_details`. Kept and summarized when no plain text channel
+    /// exists (opencode parity).
+    private(set) var reasoningDetails: [String] = []
     /// Concatenated non-SSE lines. Some providers ignore `stream: true` and
     /// answer with one plain JSON body; that body is parsed on completion
     /// instead of being mistaken for streaming deltas.
@@ -66,12 +67,11 @@ struct DirectChatStreamAccumulator {
     /// Raw `data:` payloads in arrival order (debug "Сырой ответ" button).
     private(set) var rawEvents: [String] = []
 
-    /// The visible reasoning text: real thinking when available, otherwise an
-    /// honest placeholder for the encrypted channel.
+    /// The visible reasoning text: real thinking when available, otherwise a
+    /// faithful summary of the provider's reasoning-detail records.
     var visibleReasoning: String {
         if !reasoning.isEmpty { return reasoning }
-        if sawEncryptedReasoning { return "🧠 Рассуждение получено (зашифровано провайдером)" }
-        return ""
+        return reasoningDetails.joined(separator: "\n")
     }
 
     /// Feed one line of the HTTP body. Returns the new visible state only when
@@ -148,8 +148,9 @@ struct DirectChatStreamAccumulator {
         if let thinking = DirectChatClient.reasoningText(in: channel) {
             reasoning += thinking
             changed = true
-        } else if DirectChatClient.hasEncryptedReasoning(in: channel), !sawEncryptedReasoning {
-            sawEncryptedReasoning = true
+        }
+        if let details = DirectChatClient.reasoningDetailsSummary(in: channel), !reasoningDetails.contains(details) {
+            reasoningDetails.append(details)
             changed = true
         }
         return changed
@@ -166,8 +167,9 @@ struct DirectChatStreamAccumulator {
         if let thinking = DirectChatClient.reasoningText(in: message), thinking != reasoning {
             reasoning = thinking
             changed = true
-        } else if DirectChatClient.hasEncryptedReasoning(in: message), !sawEncryptedReasoning {
-            sawEncryptedReasoning = true
+        }
+        if let details = DirectChatClient.reasoningDetailsSummary(in: message), !reasoningDetails.contains(details) {
+            reasoningDetails.append(details)
             changed = true
         }
         return changed

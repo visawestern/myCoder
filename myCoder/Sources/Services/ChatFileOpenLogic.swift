@@ -28,8 +28,20 @@ enum ChatFileOpenLogic {
 
     static func resolveFilePath(_ token: String, projectRoot: String?) -> String? {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard looksLikeFilePath(trimmed) else { return nil }
-        var candidate = trimmed
+        // Хвостовая пунктуация (точка/запятая/скобка/кавычка) не является
+        // частью имени файла — «App.swift.» → «App.swift».
+        var candidateRaw = trimmed
+        while let last = candidateRaw.last, ".,;:!?)]}>».»\"'".contains(last) {
+            candidateRaw.removeLast()
+        }
+        guard !candidateRaw.isEmpty else { return nil }
+        // Голые имена без расширения допустимы, только если ведут к
+        // существующей папке (клик по папке → «Открыть в Finder»).
+        let isBareName = !candidateRaw.contains("/") && !candidateRaw.hasPrefix("~")
+        if !looksLikeFilePath(candidateRaw) {
+            guard isBareName else { return nil }
+        }
+        var candidate = candidateRaw
         if candidate.hasPrefix("~") {
             candidate = (candidate as NSString).expandingTildeInPath
         }
