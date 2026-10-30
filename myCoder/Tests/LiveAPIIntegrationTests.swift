@@ -2,9 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
-private var liveTestsEnabled: Bool {
-    ProcessInfo.processInfo.environment["MIMO_LIVE_TESTS"] == "1"
-}
+// Общий opt-in-флаг определён в BackendTaxonomy.swift (liveTestsEnabled).
 
 @Suite("Live API Integration", .serialized)
 struct LiveAPIIntegrationTests {

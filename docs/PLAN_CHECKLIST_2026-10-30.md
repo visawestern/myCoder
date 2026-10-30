@@ -36,6 +36,13 @@
 - [x] Второй батч: `FileSnapshotManagerTests` (DI пути + фикс `invalidMetadata` вместо сырого NSError), `FileDropLogicTests` (pasteboard/legacy/dedup), `DirectWebAPIClientLogicTests` (SSE/cookies/token), `MessageTypeEnumTests`.
 - [x] Повторный замер (3168 тестов): Services **70.5% / 70.4%**, Views 4.7% / 3.3%, **ИТОГО 42.0% функций / 33.6% строк**.
 
+## 10. Классификация тестов по классам бэкендов
+- [x] `BackendTaxonomy.swift` — таксономия: локальная модель, OpenAI-совместимый, веб-провайдер, opencode serve, MiMo Serve, системные; единый opt-in-флаг `liveTestsEnabled`; хелпер `ollamaReachable`.
+- [x] Новый класс **`LiveLocalOllamaModelTests`** — локальная модель Ollama (health, completion, стриминг); отключается без `MIMO_LIVE_TESTS=1`.
+- [x] Новый класс **`LiveOpenAICompatibleModelTests`** — удалённый OpenAI-совместимый провайдер (env `OPENAI_COMPAT_BASE_URL/API_KEY/MODEL`); без env — skipped. **STRATA не включена** (пользователь).
+- [x] Существующие live-сьюты документированы в таксономии (`LiveAPIIntegrationTests` = opencode serve; `LiveIntegrationTests` = MiMo Serve; `LiveClipboardProbeTests`/`LiveImageSendVerificationTests` = системные).
+- [x] Полный прогон: **3174 теста, 0 падений**.
+
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
 - [x] TDD: `RequestRetryPolicyTests` — пустые ответы (DirectChat/OpenCodeServe/ACP/MimoServe) и HTTP 408/429/500/502/503/504 ретраятся; прочие ошибки (401/403/404, транспорт, parse) — нет; до 10 суммарных попыток; пауза экспоненциальная с потолком 60с.
