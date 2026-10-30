@@ -136,6 +136,7 @@ enum TurnContextCompiler {
                         projectRoot: String,
                         memories: [ProjectMemoryChunk] = [],
                         ledger: TaskLedger? = nil,
+                        chatHistory: [ChatHistoryBuilder.Turn] = [],
                         budgetTokens: Int = defaultBudgetTokens,
                         maxFiles: Int = 8,
                         localPlan: LocalQueryPlanResult? = nil) -> CompiledContextPack {
@@ -174,6 +175,12 @@ enum TurnContextCompiler {
                 title: "План запроса",
                 body: planTraceText(localPlan)
             ))
+        }
+        // The chat itself is context: prior turns are part of what the model
+        // needs for a coherent next step (user directive 2026-10-30 — later
+        // prompts in a chat use the studied data AND the chat history).
+        if !chatHistory.isEmpty {
+            sections.append(historySection(chatHistory))
         }
         var citations: [ContextCitation] = []
         var unknowns: [String] = []
@@ -310,6 +317,54 @@ enum TurnContextCompiler {
         case .fallback(let reason):
             return "детерминированный план (локальный планировщик: \(reason))"
         }
+    }
+
+    // MARK: - Chat history
+
+    /// Compact transcript of the prior chat turns. The chat itself is context
+    /// (user directive 2026-10-30): later prompts use the studied data AND
+    /// the history; project-less chats use the history as their only context.
+    static func historySection(_ turns: [ChatHistoryBuilder.Turn],
+                               maxTurns: Int = 12,
+                               maxCharsPerTurn: Int = 800) -> ContextSection {
+        let cleaned = turns.filter { $0.role == "user" || $0.role == "assistant" }
+        let recent = cleaned.count > maxTurns ? Array(cleaned.suffix(maxTurns)) : cleaned
+        var lines: [String] = []
+        for turn in recent {
+            let label = turn.role == "user" ? "Пользователь" : "Ассистент"
+            let body = String(turn.content.prefix(maxCharsPerTurn))
+            lines.append("[\(label)] \(body)")
+        }
+        return ContextSection(title: "История чата", body: lines.joined(separator: "\n"))
+    }
+
+    /// Context pack built ONLY from the chat history — for chats without a
+    /// project, where previous messages are the only context that exists.
+    /// Like `compile`, the user's current message is always included first
+    /// (the request is never shortened or hidden).
+    static func compileChatHistory(message: String,
+                                   turns: [ChatHistoryBuilder.Turn],
+                                   budgetTokens: Int = defaultBudgetTokens,
+                                   maxTurns: Int = 12) -> CompiledContextPack? {
+        let request = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let history = historySection(turns, maxTurns: maxTurns)
+        guard !request.isEmpty || !history.body.isEmpty else { return nil }
+        var sections = [ContextSection(title: "Запрос", body: request)]
+        if !history.body.isEmpty {
+            sections.append(history)
+        }
+        let text = render(sections: sections, unknowns: [], dropped: [])
+        return CompiledContextPack(
+            sections: sections,
+            citations: [],
+            unknowns: [],
+            manifest: ContextManifest(included: [], dropped: [], considered: 0),
+            estimatedTokens: (text.utf8.count + bytesPerToken - 1) / bytesPerToken,
+            text: text,
+            memoryIDs: [],
+            ledgerSummary: nil,
+            planStatus: nil
+        )
     }
 
     // MARK: - Pieces

@@ -16,6 +16,12 @@ enum SendContextStatus: Equatable, Sendable {
     case compiled
     /// The project has an index but it could not be read, or it is empty.
     case failed
+    /// The FIRST prompt in a chat: there is nothing to collect context from
+    /// yet (user directive 2026-10-30). Normal state, no warning.
+    case firstTurn
+    /// A project-less chat with history: the previous chat messages ARE the
+    /// context (user directive 2026-10-30). Normal state, no warning.
+    case chatContext
 }
 
 /// What the send path hands to the provider after context compilation.
@@ -44,16 +50,29 @@ enum SendContextPreparationLogic {
                         extraWarning: String? = nil,
                         localPlan: LocalQueryPlanResult? = nil,
                         board preparedBoard: ContextBoard? = nil,
+                        priorTurns: [ChatHistoryBuilder.Turn] = [],
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
             return SendContextPreparation(modelText: message, pack: nil,
                                           warning: extraWarning, status: .disabled)
         }
-        // A chat without a project has nothing to collect from. Warning here
-        // fired on every message in "Без проекта" even though nothing was
-        // wrong — the send is complete without project evidence.
+        // The first prompt in a chat has nothing to collect context from —
+        // not even an open project (user directive 2026-10-30). No pack, no
+        // warning, the raw message goes out.
+        guard !priorTurns.isEmpty else {
+            return SendContextPreparation(modelText: message, pack: nil,
+                                          warning: extraWarning, status: .firstTurn)
+        }
+        // A chat without a project: the previous chat messages are the only
+        // context that exists. They are compiled into a chat-history pack.
+        // Warning here fired on every message in "Без проекта" even though
+        // nothing was wrong — the send is complete without project evidence.
         guard !projectPath.isEmpty else {
+            if let pack = TurnContextCompiler.compileChatHistory(message: message, turns: priorTurns) {
+                return SendContextPreparation(modelText: pack.text, pack: pack,
+                                              warning: extraWarning, status: .chatContext)
+            }
             return SendContextPreparation(modelText: message, pack: nil,
                                           warning: combinedWarning(nil, extraWarning),
                                           status: .projectless)
@@ -74,6 +93,7 @@ enum SendContextPreparationLogic {
             projectRoot: projectPath,
             memories: memories,
             ledger: ledger,
+            chatHistory: priorTurns,
             budgetTokens: budgetTokens,
             localPlan: localPlan
         )
@@ -133,6 +153,7 @@ enum SendContextPreparationLogic {
                             extraWarning: String? = nil,
                             localPlan: LocalQueryPlanResult? = nil,
                             board: ContextBoard? = nil,
+                            priorTurns: [ChatHistoryBuilder.Turn] = [],
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
@@ -145,6 +166,7 @@ enum SendContextPreparationLogic {
                 extraWarning: extraWarning,
                 localPlan: localPlan,
                 board: board,
+                priorTurns: priorTurns,
                 budgetTokens: budgetTokens
             )
         }.value

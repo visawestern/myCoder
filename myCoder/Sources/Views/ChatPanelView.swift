@@ -1619,6 +1619,22 @@ struct ChatPanelView: View {
                 )
             }.value
         }
+        // Prior turns for context rules (user directive 2026-10-30): the FIRST
+        // prompt of a chat collects no context; later prompts use the studied
+        // data AND the chat history; project-less chats use the history as
+        // their context. Computed BEFORE the user message is appended.
+        let priorTurnsForContext = await MainActor.run { () -> [ChatHistoryBuilder.Turn] in
+            let msgs = messageStore.messages(in: turnSessionID)
+            var history = ConversationCompactionLogic.historyForModel(msgs)
+            // Retry / force-send: the current user message may already be in
+            // the store; it is not part of the PRIOR turns.
+            if (retryPlan != nil || existingUserMessageID != nil), !history.isEmpty {
+                history.removeLast()
+            }
+            return history.map {
+                ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
+            }
+        }
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -1628,7 +1644,8 @@ struct ChatPanelView: View {
             ledger: taskLedger,
             extraWarning: contextWarning,
             localPlan: localPlan,
-            board: preparedBoard
+            board: preparedBoard,
+            priorTurns: priorTurnsForContext
         )
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText
@@ -1857,10 +1874,16 @@ struct ChatPanelView: View {
                 // delivery path as the SYSTEM message, otherwise free/API models
                 // reply "I have no file access" because they never saw a tool list.
                 let projectRoot = appState.toolWorkingDirectory
-                let sysPrompt = WebToolProtocolEmulator.systemPreamble(
+                let baseSysPrompt = WebToolProtocolEmulator.systemPreamble(
                     userSystemPrompt: params.systemPrompt ?? "",
                     projectRoot: projectRoot,
                     isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil
+                )
+                // Plan mode gets the opencode-style plan reminder appended so
+                // the model knows it is planning, not implementing.
+                let sysPrompt = PlanModePromptBuilder.resolve(
+                    agentMode: agentMode,
+                    baseSystemPrompt: baseSysPrompt
                 )
                 let msgs = ChatHistoryBuilder.messages(
                     systemPrompt: sysPrompt, priorTurns: prior, userText: modelText,
@@ -1903,15 +1926,17 @@ struct ChatPanelView: View {
                 var timelineParts: [MessagePartContent] = []
                 do {
                     for iteration in 0..<maxIterations {
-                        let result = try await streamDirectChat(
-                            baseURL: baseURL,
-                            apiKey: apiKey,
-                            model: model,
-                            messages: conversation,
-                            parameters: params,
-                            assistantID: assistantID,
-                            timelineParts: timelineParts
-                        )
+                        let result = try await EmptyResponseRetryPolicy.withEmptyRetries {
+                            try await streamDirectChat(
+                                baseURL: baseURL,
+                                apiKey: apiKey,
+                                model: model,
+                                messages: conversation,
+                                parameters: params,
+                                assistantID: assistantID,
+                                timelineParts: timelineParts
+                            )
+                        }
                         let response = result.content
                         finalUsage = result.usage
                         if let reasoning = result.reasoning, !reasoning.isEmpty {
@@ -2155,14 +2180,17 @@ struct ChatPanelView: View {
 
                 // Non-streaming send via ACP client (E06: parameters must
                 // actually reach the ACP model, they used to be dropped).
-                let response = try await acpClient.sendChatCompletion(
-                    messages: acpMessages,
-                    model: appState.selectedModel,
-                    agent: acpAgent,
-                    variant: acpVariant,
-                    parameters: ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel()),
-                    stream: false
-                )
+                // Empty responses are transient: retry before surfacing.
+                let response = try await EmptyResponseRetryPolicy.withEmptyRetries {
+                    try await acpClient.sendChatCompletion(
+                        messages: acpMessages,
+                        model: appState.selectedModel,
+                        agent: acpAgent,
+                        variant: acpVariant,
+                        parameters: ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel()),
+                        stream: false
+                    )
+                }
 
                 // Convert ACP response to message text and reject a blank completion.
                 let responseText = response.choices.first?.message.content ?? ""

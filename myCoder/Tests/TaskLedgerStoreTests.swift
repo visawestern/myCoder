@@ -155,6 +155,13 @@ struct TaskLedgerStoreTests {
 
     // MARK: - T3: pack and history replacement
 
+    private func priorTurns() -> [ChatHistoryBuilder.Turn] {
+        [
+            ChatHistoryBuilder.Turn(role: "user", content: "предыдущий вопрос", isFinished: true),
+            ChatHistoryBuilder.Turn(role: "assistant", content: "предыдущий ответ", isFinished: true)
+        ]
+    }
+
     @Test("Ledger попадает в ContextPack дословно и со ссылкой на задачу")
     func ledgerReachesPack() throws {
         let root = try makeProjectDir()
@@ -166,7 +173,8 @@ struct TaskLedgerStoreTests {
             records: [],
             projectPath: root.path,
             isEnabled: true,
-            ledger: ledger
+            ledger: ledger,
+            priorTurns: priorTurns()
         )
 
         let pack = try #require(preparation.pack)
@@ -188,7 +196,8 @@ struct TaskLedgerStoreTests {
             records: [],
             projectPath: root.path,
             isEnabled: true,
-            ledger: ledger
+            ledger: ledger,
+            priorTurns: priorTurns()
         )
 
         #expect(!SendContextPreparationLogic.replacesRawHistory(preparation, priorTurnCount: 2))
@@ -200,7 +209,8 @@ struct TaskLedgerStoreTests {
             message: "продолжай",
             records: [],
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(!SendContextPreparationLogic.replacesRawHistory(withoutLedger, priorTurnCount: 20))
     }
@@ -216,7 +226,8 @@ struct TaskLedgerStoreTests {
             records: [],
             projectPath: root.path,
             isEnabled: true,
-            ledger: ledger
+            ledger: ledger,
+            priorTurns: priorTurns()
         )
         let text = preparation.modelText
         #expect(text.contains("## Запрос"))

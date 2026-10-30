@@ -126,3 +126,17 @@ enum SidebarPinStore {
         defaults.set(Array(ids).sorted(), forKey: defaultsKey)
     }
 }
+
+/// Selection rule for the sidebar: a row is highlighted exactly when its
+/// session id equals the currently open session (user directive
+/// 2026-10-30 — the sidebar must show which chat is open in the active
+/// window). Shared by project chat rows and project-less chat rows so both
+/// highlight consistently.
+enum SidebarSelectionLogic {
+    static func isSelected(sessionID: String, selectedSessionID: String?) -> Bool {
+        guard !sessionID.isEmpty, let selectedSessionID, !selectedSessionID.isEmpty else {
+            return false
+        }
+        return sessionID == selectedSessionID
+    }
+}

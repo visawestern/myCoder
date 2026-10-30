@@ -1012,7 +1012,7 @@ struct ProjectlessChatRow: View {
     @State private var isHovered = false
 
     private var isSelected: Bool {
-        appState.selectedSession?.id == node.id
+        SidebarSelectionLogic.isSelected(sessionID: node.id, selectedSessionID: appState.selectedSession?.id)
     }
 
     private var timeBadge: String {
@@ -1066,6 +1066,12 @@ struct ProjectlessChatRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
+        .background(
+            isSelected
+                ? Color.mimo.textPrimary.opacity(0.06)
+                : Color.clear
+        )
+        .cornerRadius(6)
         .onHover { hovering in isHovered = hovering }
     }
 }
@@ -1087,7 +1093,7 @@ struct SessionTaskRow: View {
     }
     
     var isSelected: Bool {
-        appState.selectedSession?.id == session.id
+        SidebarSelectionLogic.isSelected(sessionID: session.id, selectedSessionID: appState.selectedSession?.id)
     }
     
     private var timeBadge: String {

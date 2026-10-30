@@ -27,6 +27,15 @@ struct SendContextPreparationTests {
                                 lastModified: 1_700_000_000, language: "swift", searchableText: text)]
     }
 
+    /// A non-first turn: the chat already has history, so the compiler may
+    /// run (первый промпт контекст не собирает — директива 2026-10-30).
+    private func priorTurns() -> [ChatHistoryBuilder.Turn] {
+        [
+            ChatHistoryBuilder.Turn(role: "user", content: "предыдущий вопрос", isFinished: true),
+            ChatHistoryBuilder.Turn(role: "assistant", content: "предыдущий ответ", isFinished: true)
+        ]
+    }
+
     @Test("Выключенный точечный контекст не меняет текст запроса")
     func disabledLeavesMessageUntouched() throws {
         let root = try makeProject()
@@ -52,7 +61,8 @@ struct SendContextPreparationTests {
             message: "как работает UserStore.load",
             records: try records(for: root),
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(preparation.modelText.contains("UserStore.swift:"))
         #expect(preparation.pack?.citations.isEmpty == false)
@@ -68,7 +78,8 @@ struct SendContextPreparationTests {
             message: "UserStore load",
             records: try records(for: root),
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(!preparation.modelText.contains("<project-context>"))
     }
@@ -82,7 +93,8 @@ struct SendContextPreparationTests {
             message: "UserStore load",
             records: [],
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(preparation.modelText == "UserStore load")
         #expect(preparation.warning != nil)
@@ -97,7 +109,8 @@ struct SendContextPreparationTests {
             message: "как работает UserStore.load",
             records: try records(for: root),
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         let parts = SendContextPreparationLogic.contextParts(preparation)
         #expect(parts.count == 1)
@@ -133,13 +146,15 @@ struct SendContextPreparationTests {
             message: "как работает UserStore.load",
             records: records,
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         let async = await SendContextPreparationLogic.prepareAsync(
             message: "как работает UserStore.load",
             records: records,
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(async == sync)
         #expect(!async.modelText.isEmpty)
@@ -155,7 +170,8 @@ struct SendContextPreparationTests {
             message: message,
             records: try records(for: root),
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(preparation.pack?.citations.isEmpty == false)
         #expect(preparation.modelText.contains(message.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -176,8 +192,8 @@ struct SendContextPreparationTests {
         #expect(preparation.pack == nil)
     }
 
-    @Test("Чат без проекта: тихо, без баннера об ошибке")
-    func projectlessChatIsSilent() throws {
+    @Test("Первый промпт в чате без проекта: тихо, без сборки и без баннера")
+    func projectlessFirstTurnIsSilent() throws {
         let preparation = SendContextPreparationLogic.prepare(
             message: "привет",
             records: [],
@@ -187,7 +203,7 @@ struct SendContextPreparationTests {
         #expect(preparation.modelText == "привет")
         #expect(preparation.pack == nil)
         #expect(preparation.warning == nil)
-        #expect(preparation.status == .projectless)
+        #expect(preparation.status == .firstTurn)
     }
 
     @Test("Нет совпадений в проекте: не ошибка, но и не выдуманный контекст")
@@ -199,7 +215,8 @@ struct SendContextPreparationTests {
             message: "совершенно посторонний текст без имён",
             records: try records(for: root),
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(preparation.modelText == "совершенно посторонний текст без имён")
         #expect(preparation.pack == nil)
@@ -219,7 +236,8 @@ struct SendContextPreparationTests {
             message: "как работает UserStore.load",
             records: indexed,
             projectPath: root.path,
-            isEnabled: true
+            isEnabled: true,
+            priorTurns: priorTurns()
         )
         #expect(preparation.status == .compiled)
         #expect(preparation.pack?.citations.isEmpty == false)

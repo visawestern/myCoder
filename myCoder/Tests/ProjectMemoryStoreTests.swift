@@ -264,7 +264,8 @@ struct ProjectMemoryStoreTests {
             records: [],
             projectPath: root.path,
             isEnabled: true,
-            memories: [memory]
+            memories: [memory],
+            priorTurns: [ChatHistoryBuilder.Turn(role: "user", content: "предыдущий вопрос", isFinished: true)]
         )
         #expect(preparation.warning == nil)
         #expect(preparation.pack?.memoryIDs == [memory.id])
