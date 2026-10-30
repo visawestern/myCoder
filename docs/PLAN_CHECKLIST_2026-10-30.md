@@ -8,6 +8,7 @@
 - [x] `preambleChunksStayUnderByteBudget` — преамбула разрослась до 4047 Б (порог ~3737 Б) и резалась на 2 части; сокращена (identity/rules/policy) при сохранении всех гарантий.
 - [x] `firstMessagePrependsPreamble` — следствие того же: первый ход снова один чанк с тулом-контрактом.
 - [x] `ModelSettingsPremiumTests`/`SettingsIntegrationTests` — маркеры исходника обновлены под актуальный UI (`ForEach(familyGroups` вместо старого `displayModels`; фильтр/сортировка/скролл/удаление сохранены).
+- [x] Полный прогон: **3118 тестов, 0 падений**. Коммит `4e262f2`.
 
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
