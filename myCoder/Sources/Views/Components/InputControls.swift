@@ -348,16 +348,10 @@ struct CompactMessageTextField: View {
         )
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
-        // The composer owns a text-editing surface: hovering it must show the
-        // I-beam text cursor, never the arrow/pointing hand the surrounding
-        // panel may set (user directive 2026-10-29).
-        .onHover { inside in
-            if inside {
-                NSCursor.iBeam.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        // The I-beam over the composer is provided by the text view's own
+        // cursor rects (ZeroInsetTextView.resetCursorRects), not by hover
+        // push/pop — hover-based cursors race with the global StuckCursorFix
+        // monitor and the arrow stayed (user report 2026-10-30).
     }
 }
 

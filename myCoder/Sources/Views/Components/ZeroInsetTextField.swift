@@ -204,9 +204,19 @@ struct ZeroInsetTextField: NSViewRepresentable {
     }
 }
 
-private final class ZeroInsetTextView: NSTextView {
+final class ZeroInsetTextView: NSTextView {
     var onSubmit: (() -> Void)?
     var placeholderString: String = ""
+
+    /// The composer must show the text-insertion (I-beam) cursor over the
+    /// whole input surface. `resetCursorRects` is the standard AppKit
+    /// mechanism — it beats hover-based `NSCursor.push()` hacks that race
+    /// with the global `StuckCursorFix` monitor (user report 2026-10-30:
+    /// the arrow stayed while hovering the message input).
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .iBeam)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)

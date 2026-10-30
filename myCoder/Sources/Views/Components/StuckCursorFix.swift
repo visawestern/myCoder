@@ -14,17 +14,21 @@ enum StuckCursorFix {
     static func install() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { event in
+            // Capture the coordinates at event time; the async hop below must
+            // not read `mouseLocationOutsideOfEventStream` (can be stale when
+            // the window is not key).
+            let location = event.locationInWindow
             DispatchQueue.main.async {
-                StuckCursorFix.restoreArrowIfStuck()
+                StuckCursorFix.restoreArrowIfStuck(at: location)
             }
             return event
         }
     }
 
-    static func restoreArrowIfStuck() {
+    static func restoreArrowIfStuck(at location: NSPoint? = nil) {
         guard NSCursor.current == NSCursor.iBeam else { return }
-        if isOverTextEditingView() { return }
-        if isOverActionView() {
+        if isOverTextEditingView(at: location) { return }
+        if isOverActionView(at: location) {
             NSCursor.pointingHand.set()
         } else {
             NSCursor.arrow.set()
@@ -34,8 +38,8 @@ enum StuckCursorFix {
     /// True when the deepest view under the pointer is a text surface that
     /// legitimately owns the I-beam: an editable/selectable NSTextView or an
     /// enabled NSTextField.
-    static func isOverTextEditingView() -> Bool {
-        guard let hit = hitViewUnderPointer() else { return false }
+    static func isOverTextEditingView(at location: NSPoint? = nil) -> Bool {
+        guard let hit = hitViewUnderPointer(at: location) else { return false }
         var current: NSView? = hit
         while let view = current {
             if let textView = view as? NSTextView {
@@ -53,8 +57,8 @@ enum StuckCursorFix {
     /// plain buttons without an NSButton, but it does publish the button
     /// accessibility role — use that to show the pointing hand instead of the
     /// arrow after a text view leaves its I-beam behind.
-    static func isOverActionView() -> Bool {
-        guard let hit = hitViewUnderPointer() else { return false }
+    static func isOverActionView(at location: NSPoint? = nil) -> Bool {
+        guard let hit = hitViewUnderPointer(at: location) else { return false }
         var current: NSView? = hit
         while let view = current {
             let role = view.accessibilityRole()?.rawValue
@@ -64,12 +68,12 @@ enum StuckCursorFix {
         return false
     }
 
-    private static func hitViewUnderPointer() -> NSView? {
+    private static func hitViewUnderPointer(at location: NSPoint?) -> NSView? {
         guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }),
               let content = window.contentView else {
             return nil
         }
-        let location = window.mouseLocationOutsideOfEventStream
-        return content.hitTest(content.convert(location, from: nil))
+        let point = location ?? window.mouseLocationOutsideOfEventStream
+        return content.hitTest(content.convert(point, from: nil))
     }
 }
