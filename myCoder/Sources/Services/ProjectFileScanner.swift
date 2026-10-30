@@ -14,6 +14,7 @@ enum ProjectFileScanner {
     static func scan(root: String,
                     gitignorePatterns: [String] = [],
                     maxFileSize: Int = ProjectFileIndexLogic.defaultMaxFileSize,
+                    maxRecords: Int = ProjectFileIndexLogic.defaultMaxIndexRecords,
                     fileManager: FileManager = .default) -> [FileIndexRecord] {
         let rootURL = URL(fileURLWithPath: root).standardizedFileURL
         guard let enumerator = fileManager.enumerator(
@@ -24,6 +25,7 @@ enum ProjectFileScanner {
 
         var records: [FileIndexRecord] = []
         for case let fileURL as URL in enumerator {
+            guard records.count < maxRecords else { break }
             let rel = relativePath(of: fileURL, from: rootURL)
             // Prune excluded directories early so we don't descend into them.
             if ProjectFileIndexLogic.shouldExclude(relativePath: rel, gitignorePatterns: gitignorePatterns) {

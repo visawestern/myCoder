@@ -154,6 +154,15 @@ struct Message: Identifiable {
     /// Model + send parameters used for this message (persisted; shown in the
     /// message footer — user directive 2026-10-29).
     var sendInfo: MessageSendInfo?
+    /// Raw server responses (SSE payloads / JSON bodies) for this turn, in
+    /// arrival order. Debug aid behind the "Сырой ответ" button; never shown
+    /// unless the user opens it.
+    var rawResponses: [String]?
+    /// Human-readable outcome of the context compilation for this message:
+    /// a short description of what was collected, or an honest reason when
+    /// nothing was (first turn, project-less chat, no evidence, error). The
+    /// "Контекст" button always opens with this.
+    var contextSummary: String?
 
     /// Elapsed reasoning time. While reasoning is in progress (no end
     /// timestamp yet) this measures from start to now so a live UI can show
@@ -165,7 +174,7 @@ struct Message: Identifiable {
         return end.timeIntervalSince(startedAt)
     }
 
-    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil) {
+    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil, rawResponses: [String]? = nil, contextSummary: String? = nil) {
         self.id = id
         self.serverID = serverID
         self.role = role
@@ -192,6 +201,8 @@ struct Message: Identifiable {
         self.pendingApprovalMessage = pendingApprovalMessage
         self.pendingApprovals = pendingApprovals
         self.sendInfo = sendInfo
+        self.rawResponses = rawResponses
+        self.contextSummary = contextSummary
     }
 }
 

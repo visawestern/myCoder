@@ -33,6 +33,12 @@ enum ProjectFileIndexLogic {
     /// Max file size to index by default (plan Блок 3 п.30), bytes.
     static let defaultMaxFileSize = 5 * 1024 * 1024
 
+    /// Hard cap on records a single scan will index. A huge repo must not
+    /// turn a first context build into an unbounded (~hours) scan on a
+    /// loaded machine (user report 2026-10-30). Real projects rarely exceed
+    /// this; the index stays complete enough for ranking.
+    static let defaultMaxIndexRecords = 30_000
+
     /// Maximum UTF-8 text retained per file for search, keeping snapshots bounded.
     static let defaultSearchableTextMaxBytes = 512 * 1024
 

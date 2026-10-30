@@ -415,7 +415,12 @@ struct ChatPanelView: View {
     private static func recordsForPointContext(projectPath: String) async -> [FileIndexRecord] {
         guard !projectPath.isEmpty else { return [] }
         return await Task.detached(priority: .utility) {
-            PointContextIndexLogic.records(projectPath: projectPath)
+            // Use the already-built index only. A full re-scan on every send
+            // turned a first context build into an unbounded operation on a
+            // huge repo (user report 2026-10-30: «собирает контекст час»).
+            // ProjectFileIndexWatcher builds/updates the index in the
+            // background when a workspace is open.
+            ProjectFileIndexStore.load(projectPath: projectPath)
         }.value
     }
 
@@ -1522,6 +1527,78 @@ struct ChatPanelView: View {
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.
         await autoCompactIfNeeded(route: route, sessionID: turnSessionID)
+        // Prior turns for context rules (user directive 2026-10-30): the FIRST
+        // prompt of a chat collects no context; later prompts use the studied
+        // data AND the chat history; project-less chats use the history as
+        // their context. Computed BEFORE the user message is appended so the
+        // current message never leaks into its own context.
+        let priorTurnsForContext = await MainActor.run { () -> [ChatHistoryBuilder.Turn] in
+            let msgs = messageStore.messages(in: turnSessionID)
+            var history = ConversationCompactionLogic.historyForModel(msgs)
+            // Retry / force-send: the current user message may already be in
+            // the store; it is not part of the PRIOR turns.
+            if (retryPlan != nil || existingUserMessageID != nil), !history.isEmpty {
+                history.removeLast()
+            }
+            return history.map {
+                ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
+            }
+        }
+        // First prompt of a chat (outside plan mode) never collects context —
+        // do not even scan the project for it (a full index scan on a huge
+        // repo took ~an hour on a loaded machine and the UI showed
+        // "собирает контекст" forever). No scan, no spinner.
+        let needsContextPrep = !priorTurnsForContext.isEmpty || agentMode == .plan
+        // Пользователь должен немедленно видеть результат отправки: сначала
+        // создаём/выбираем сессию (запись в БД + сайдбар), открываем её и
+        // пишем в чат отправленное сообщение. Сборка контекста и вызов
+        // модели происходят ПОТОМ (user directive 2026-10-30).
+        let earlyPreparedSessionID = await prepareSessionBeforeAppending(
+            route: route,
+            title: text,
+            sessionID: turnSessionID
+        )
+        let sendSessionID = earlyPreparedSessionID ?? turnSessionID
+        let earlySendModelID = sendOptions.modelID ?? appState.effectiveSelectedModel()
+        let earlySendInfo = MessageSendInfo(
+            parameters: ModelCallParametersStore.parameters(for: earlySendModelID),
+            modelID: earlySendModelID,
+            providerID: sendOptions.providerID,
+            variant: sendOptions.variant,
+            tools: [],
+            sentAt: Date()
+        )
+        let earlyUserMessage = Message(
+            role: .user,
+            content: text,
+            files: files.isEmpty ? nil : files,
+            parts: MessagePartsBuilder.displayParts(text: text, images: images),
+            sendInfo: earlySendInfo
+        )
+        var appendedUserMessageID: String?
+        await MainActor.run {
+            if messageStore.currentSessionID == nil, let sendSessionID {
+                messageStore.currentSessionID = sendSessionID
+            }
+            switch SendUserMessageAppendLogic.action(
+                hasRetryPlan: retryPlan != nil,
+                existingUserMessageID: existingUserMessageID
+            ) {
+            case .appendNew:
+                messageStore.append(earlyUserMessage, to: sendSessionID)
+                appendedUserMessageID = earlyUserMessage.id
+            case .updateExisting:
+                // Force-send уже показал пузырь; контекст прикрепим позже.
+                appendedUserMessageID = existingUserMessageID
+            case .skip:
+                break
+            }
+            if let earlyPreparedSessionID,
+               let preparedSession = appState.sessions.first(where: { $0.id == earlyPreparedSessionID }),
+               appState.selectedSession?.id == nil || appState.selectedSession?.id == sendSessionID {
+                appState.selectedSession = preparedSession
+            }
+        }
         // The point context replaces the old auto-search block: the compiler
         // ranks the index, cites real lines and reports what it could not get.
         // It runs before the session is prepared, so a failure can degrade to
@@ -1538,7 +1615,7 @@ struct ChatPanelView: View {
         var projectMemories: [ProjectMemoryChunk] = []
         var taskLedger: TaskLedger?
         var contextWarning: String?
-        if appState.isPointContextEnabled && hasProjectForContext {
+        if appState.isPointContextEnabled && hasProjectForContext && needsContextPrep {
             await MainActor.run { appState.isCompilingContext = true }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
             // Memory lives in the project database. A read failure must be
@@ -1598,7 +1675,7 @@ struct ChatPanelView: View {
         // any failure is reported as a fallback instead of blocking the send.
         var localPlan: LocalQueryPlanResult?
         var preparedBoard: ContextBoard?
-        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled, hasProjectForContext {
+        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled, hasProjectForContext, needsContextPrep {
             // Board building extracts symbols/imports/tokens from every indexed
             // file — heavy CPU on the main actor froze the UI for seconds at
             // send start (user report 2026-10-30). Build it off-main.
@@ -1622,22 +1699,8 @@ struct ChatPanelView: View {
                 )
             }.value
         }
-        // Prior turns for context rules (user directive 2026-10-30): the FIRST
-        // prompt of a chat collects no context; later prompts use the studied
-        // data AND the chat history; project-less chats use the history as
-        // their context. Computed BEFORE the user message is appended.
-        let priorTurnsForContext = await MainActor.run { () -> [ChatHistoryBuilder.Turn] in
-            let msgs = messageStore.messages(in: turnSessionID)
-            var history = ConversationCompactionLogic.historyForModel(msgs)
-            // Retry / force-send: the current user message may already be in
-            // the store; it is not part of the PRIOR turns.
-            if (retryPlan != nil || existingUserMessageID != nil), !history.isEmpty {
-                history.removeLast()
-            }
-            return history.map {
-                ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
-            }
-        }
+        // Prior turns already computed above (before any potentially heavy
+        // project scan) — do not recompute.
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -1651,65 +1714,30 @@ struct ChatPanelView: View {
             priorTurns: priorTurnsForContext,
             isPlanMode: agentMode == .plan
         )
+        if StreamDiagnostics.isEnabled {
+            StreamDiagnostics.log(
+                "[CTX] status=\(preparation.status) pack=\(preparation.pack.map { "\($0.text.utf8.count)B" } ?? "nil") modelText_bytes=\(preparation.modelText.utf8.count)",
+                file: "/tmp/mycoder_agent.log"
+            )
+        }
         await MainActor.run { appState.isCompilingContext = false }
         let modelText = preparation.modelText
         let contextParts = SendContextPreparationLogic.contextParts(preparation)
-        let preparedSessionID: String?
-        if let retryPlan {
-            preparedSessionID = retryPlan.sessionID
-        } else {
-            preparedSessionID = await prepareSessionBeforeAppending(
-                route: route,
-                title: text,
-                sessionID: turnSessionID
-            )
+        // Сообщение уже показано заранее; теперь прикрепляем результат
+        // сборки контекста к нему.
+        if let appendedUserMessageID {
+            await MainActor.run {
+                self.messageStore.update(id: appendedUserMessageID) { message in
+                    message.parts = MessagePartsBuilder.displayParts(text: text, images: images) + contextParts
+                    message.contextSummary = SendContextPreparationLogic.summary(preparation)
+                    message.sendInfo = earlySendInfo
+                }
+            }
         }
         // Everything below writes to this session, even if the user opened
         // another chat while the context was being prepared.
-        let sendSessionID = preparedSessionID ?? turnSessionID
-        // Capture the exact model/provider/parameters used for this send so the
-        // message footer can show them (user directive 2026-10-29, §15.5).
-        let sendModelID = sendOptions.modelID ?? appState.effectiveSelectedModel()
-        let sendInfo = MessageSendInfo(
-            parameters: ModelCallParametersStore.parameters(for: sendModelID),
-            modelID: sendModelID,
-            providerID: sendOptions.providerID,
-            variant: sendOptions.variant,
-            tools: [],
-            sentAt: Date()
-        )
-        let userMessage = Message(
-            role: .user,
-            content: text,
-            files: files.isEmpty ? nil : files,
-            parts: MessagePartsBuilder.displayParts(text: text, images: images) + contextParts,
-            sendInfo: sendInfo
-        )
-        await MainActor.run {
-            // A brand-new chat becomes the visible feed. If the user opened
-            // another chat meanwhile, leave their selection alone.
-            if messageStore.currentSessionID == nil, let sendSessionID {
-                messageStore.currentSessionID = sendSessionID
-            }
-            switch SendUserMessageAppendLogic.action(
-                hasRetryPlan: retryPlan != nil,
-                existingUserMessageID: existingUserMessageID
-            ) {
-            case .appendNew:
-                messageStore.append(userMessage, to: sendSessionID)
-            case .updateExisting:
-                // Force-send already showed the bubble; keep it exactly one
-                // message and attach the compiled context/attachments now.
-                if let existingUserMessageID {
-                    messageStore.update(id: existingUserMessageID) { message in
-                        message.parts = userMessage.parts
-                        message.files = userMessage.files
-                    }
-                }
-            case .skip:
-                break
-            }
-            if retryPlan == nil, let warning = preparation.warning {
+        if retryPlan == nil, let warning = preparation.warning {
+            await MainActor.run {
                 // Visible degradation: the send goes ahead with the raw
                 // message, and the user is told why no context was added.
                 messageStore.append(Message(
@@ -1717,14 +1745,6 @@ struct ChatPanelView: View {
                     content: "⚠️ \(warning)",
                     isFinished: true
                 ), to: sendSessionID)
-            }
-            if let preparedSessionID,
-               let preparedSession = appState.sessions.first(where: { $0.id == preparedSessionID }),
-               appState.selectedSession?.id == nil || appState.selectedSession?.id == sendSessionID {
-                // Only follow the send when the user is still looking at the
-                // chat it was started in. A background send must not yank the
-                // selection back from the chat the user opened meanwhile.
-                appState.selectedSession = preparedSession
             }
         }
         let parts = MessagePartsBuilder.build(text: modelText, files: files, images: images)
@@ -1773,7 +1793,7 @@ struct ChatPanelView: View {
             // basic auth, NOT OpenAI /v1. Serve sessions persist server-side;
             // reuse ours per chat so follow-ups keep context.
             if case .openCodeServe(let baseURL, let headers, let providerID, let model) = route {
-                let chatKey = preparedSessionID ?? assistantID
+                let chatKey = earlyPreparedSessionID ?? assistantID
                 await MainActor.run {
                     self.messageStore.update(id: assistantID) { msg in
                         msg.content = SendStatusText.waitingForResponse(modelID: model, providerName: "OpenCode")
@@ -1920,6 +1940,8 @@ struct ChatPanelView: View {
                 var conversation = msgs
                 var finalText = ""
                 var finalUsage: UsageCapture? = nil
+                /// Raw server events across every iteration (debug button).
+                var allRawEvents: [String] = []
                 // Thinking channel across iterations (`reasoning_content` /
                 // `reasoning` / `thinking`). It used to be dropped, so the
                 // reasoning spoiler stayed empty on direct providers.
@@ -1945,6 +1967,13 @@ struct ChatPanelView: View {
                         }
                         let response = result.content
                         finalUsage = result.usage
+                        allRawEvents.append(contentsOf: result.rawEvents)
+                        if StreamDiagnostics.isEnabled {
+                            StreamDiagnostics.log(
+                                "[ITER] \(iteration) reasoning_bytes=\(result.reasoning?.utf8.count ?? 0) content_bytes=\(response.utf8.count)",
+                                file: "/tmp/mycoder_agent.log"
+                            )
+                        }
                         if let reasoning = result.reasoning, !reasoning.isEmpty {
                             if reasoningStartedAt == nil { reasoningStartedAt = Date() }
                             reasoningChunks.append(reasoning)
@@ -1961,6 +1990,14 @@ struct ChatPanelView: View {
                             }
                             finalText = response
                             break
+                        }
+                        // Fix the model's prose for this iteration BEFORE its
+                        // tool calls so no server response is lost: the order is
+                        // reasoning → prose → calls → results → next iteration.
+                        let iterationProse = WebToolProtocolEmulator.strippingToolFences(from: response)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !iterationProse.isEmpty {
+                            timelineParts.append(.text(iterationProse))
                         }
                         let prepared = prepareLocalToolCalls(
                             calls,
@@ -2076,6 +2113,12 @@ struct ChatPanelView: View {
                             }
                             let toolResult = await executor.execute(item.call, userApproved: true)
                             guard !Task.isCancelled else { break }
+                            if StreamDiagnostics.isEnabled {
+                                StreamDiagnostics.log(
+                                    "[TOOL] \(item.call.name) result_bytes=\(toolResult.utf8.count)",
+                                    file: "/tmp/mycoder_agent.log"
+                                )
+                            }
                             resultsBlock += WebToolProtocolEmulator.formatToolResult(
                                 name: item.call.name, result: toolResult
                             ) + "\n"
@@ -2117,6 +2160,7 @@ struct ChatPanelView: View {
                         self.messageStore.update(id: assistantID) { msg in
                             msg.content = finalText
                             msg.usage = finalUsage
+                            msg.rawResponses = allRawEvents.isEmpty ? nil : allRawEvents
                             msg.parts = AssistantTurnPartsLogic.directTimelineParts(
                                 timeline: timelineParts,
                                 answer: finalText

@@ -12,11 +12,16 @@ struct DirectChatResult: Equatable {
     let content: String
     let reasoning: String?
     let usage: UsageCapture?
+    /// Raw SSE data payloads (or the raw JSON body for non-streaming) in
+    /// server arrival order. Debug aid surfaced by the "Сырой ответ" button.
+    let rawEvents: [String]
 
-    init(content: String, reasoning: String? = nil, usage: UsageCapture? = nil) {
+    init(content: String, reasoning: String? = nil, usage: UsageCapture? = nil,
+         rawEvents: [String] = []) {
         self.content = content
         self.reasoning = reasoning
         self.usage = usage
+        self.rawEvents = rawEvents
     }
 }
 
@@ -149,6 +154,22 @@ enum DirectChatClient {
         return nil
     }
 
+    /// Some providers send the thinking channel in an ENCRYPTED form
+    /// (e.g. mercury-3 `delta.reasoning_details` with `reasoning.encrypted`).
+    /// We cannot show the content, but we must NOT silently drop that the
+    /// model reasoned — the UI shows an honest placeholder instead.
+    static func hasEncryptedReasoning(in container: [String: Any]) -> Bool {
+        if let details = container["reasoning_details"] as? [[String: Any]] {
+            if !details.isEmpty {
+                return true
+            }
+        }
+        for key in ["encrypted_reasoning", "provider_reasoning", "reasoning_encrypted"] {
+            if container[key] != nil { return true }
+        }
+        return false
+    }
+
     private static func reasoningValue(_ raw: Any?) -> String? {
         if let text = raw as? String { return text }
         if let dict = raw as? [String: Any] {
@@ -266,6 +287,9 @@ enum DirectChatClient {
         if let key = apiKey, !key.isEmpty { headers["Authorization"] = "Bearer \(key)" }
         let body = requestBody(model: model, messages: messages, parameters: parameters)
         let data = try JSONSerialization.data(withJSONObject: body)
+        if StreamDiagnostics.isEnabled {
+            StreamDiagnostics.log("[REQ] \(url) body=\(String(data: data, encoding: .utf8) ?? "")")
+        }
         guard let (status, respData) = await transport.post(url: url, headers: headers, body: data) else {
             throw DirectChatError.transport("No response from \(url)")
         }
@@ -281,7 +305,11 @@ enum DirectChatClient {
             }
             throw DirectChatError.decode
         }
-        return result
+        let rawBody = String(data: respData, encoding: .utf8) ?? ""
+        return DirectChatResult(content: result.content,
+                                reasoning: result.reasoning,
+                                usage: result.usage,
+                                rawEvents: rawBody.isEmpty ? [] : [rawBody])
     }
 }
 

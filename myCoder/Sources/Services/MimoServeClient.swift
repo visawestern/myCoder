@@ -203,6 +203,12 @@ class MimoServeClient {
     ) async throws -> [MimoMessageResponse] {
         let body = options.requestBody(parts: parts, parameters: parameters)
         let data = try JSONSerialization.data(withJSONObject: body)
+        if StreamDiagnostics.isEnabled {
+            StreamDiagnostics.log(
+                "[REQ] \(url(for: .sessionPrompt(sessionID))) body=\(String(data: data, encoding: .utf8) ?? "")",
+                file: "/tmp/mycoder_sse.log"
+            )
+        }
         let url = url(for: .sessionPrompt(sessionID))
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

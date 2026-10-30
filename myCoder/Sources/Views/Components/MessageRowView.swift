@@ -248,6 +248,9 @@ struct MessageRow: View {
         } else {
             formattedContent
         }
+        if let raw = message.rawResponses, !raw.isEmpty {
+            RawResponseSpoilerView(rawEvents: raw)
+        }
     }
 
     @ViewBuilder
@@ -293,6 +296,16 @@ struct MessageRow: View {
 
         if let added = message.tokensAdded, let removed = message.tokensRemoved, added + removed > 0 {
             FileChangeSummaryRow(path: message.agentName ?? "Changes", additions: added, deletions: removed)
+        }
+
+        // Кнопка «Контекст» показывается всегда: либо с собранным пакетом
+        // (часть .compiledContext выше), либо с честной причиной отсутствия.
+        if let summary = message.contextSummary,
+           !message.parts.contains(where: {
+               if case .compiledContext = $0 { return true }
+               return false
+           }) {
+            contextSummaryButton(summary)
         }
 
         let legacyImages = MessageDisplayLogic.attachedImagesForDisplay(message)
@@ -452,6 +465,33 @@ struct MessageRow: View {
             .sheet(isPresented: $showCompiledContext) {
                 CompiledContextSheet(text: compiledContextText)
             }
+        }
+    }
+
+    /// Честная кнопка «Контекст», когда пакет не собран: показывает причину
+    /// (первый промпт, чат без проекта, нет соответствий, ошибка) вместо
+    /// пустого окна (user complaint 2026-10-30).
+    @ViewBuilder
+    private func contextSummaryButton(_ summary: String) -> some View {
+        Button {
+            compiledContextText = ""
+            showCompiledContext = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text.magnifyingglass")
+                Text(L.t(AppLocalizationKey.locShowCompiledContext))
+            }
+            .interfaceFont(size: 11, weight: .medium)
+            .foregroundColor(Color.mimo.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.mimo.subtleFill)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(HandCursorButtonStyle())
+        .help(summary)
+        .sheet(isPresented: $showCompiledContext) {
+            CompiledContextSheet(text: "", fallback: summary)
         }
     }
 
@@ -1125,8 +1165,16 @@ struct WebToolApprovalCardView: View {
 /// Shows the text as-is (no summary) with a copy button.
 struct CompiledContextSheet: View {
     let text: String
+    /// Показывается, когда `text` пуст — честная причина, почему контекст
+    /// не собран (первый промпт, чат без проекта, нет соответствий, ошибка).
+    var fallback: String? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+
+    private var displayText: String {
+        if !text.isEmpty { return text }
+        return fallback ?? "Контекст не собран."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1137,7 +1185,7 @@ struct CompiledContextSheet: View {
                 Spacer(minLength: 8)
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    NSPasteboard.general.setString(displayText, forType: .string)
                     copied = true
                 } label: {
                     Label(L.t(AppLocalizationKey.locCopyAll), systemImage: "doc.on.doc")
@@ -1156,7 +1204,7 @@ struct CompiledContextSheet: View {
             }
 
             ScrollView {
-                Text(text)
+                Text(displayText)
                     .interfaceFont(size: 11, design: .monospaced)
                     .foregroundColor(Color.mimo.textSecondary)
                     .textSelection(.enabled)

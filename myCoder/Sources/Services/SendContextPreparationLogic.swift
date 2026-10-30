@@ -176,4 +176,43 @@ enum SendContextPreparationLogic {
             )
         }.value
     }
+
+    /// Human-readable summary of what context compilation did (or why it did
+    /// nothing). Shown in the "Контекст" sheet so the user never sees an
+    /// empty window: either the collected pack's contents, or an honest
+    /// reason (first turn, project-less chat, no evidence, error, disabled).
+    static func summary(_ preparation: SendContextPreparation) -> String {
+        switch preparation.status {
+        case .compiled:
+            guard let pack = preparation.pack else {
+                return "Собран точечный контекст."
+            }
+            var facts: [String] = []
+            if !pack.manifest.included.isEmpty {
+                facts.append("файлов: \(pack.manifest.included.count)")
+            }
+            if !pack.memoryIDs.isEmpty {
+                facts.append("память: \(pack.memoryIDs.count)")
+            }
+            if let ledger = pack.ledgerSummary, !ledger.isEmpty {
+                facts.append("состояние задачи")
+            }
+            if facts.isEmpty {
+                facts.append("\(pack.text.utf8.count) Б")
+            }
+            return "Собран точечный контекст: " + facts.joined(separator: ", ")
+        case .chatContext:
+            return "Проект не открыт — контекст собран из истории чата."
+        case .firstTurn:
+            return "Первый промпт в чате — контекст не собирался (правило: ещё нечего собирать)."
+        case .projectless:
+            return "Чат без проекта — точечного проектного контекста нет."
+        case .noEvidence:
+            return "Не найдено соответствий в проекте — отправлен исходный запрос."
+        case .failed:
+            return preparation.warning ?? "Ошибка сборки контекста."
+        case .disabled:
+            return "Точечный контекст выключен."
+        }
+    }
 }
