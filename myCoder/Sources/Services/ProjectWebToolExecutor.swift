@@ -530,7 +530,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             if let planResult = updatePlanItem(id: id, status: status) {
                 return planResult
             }
-            return "error: no task with id '\(id)' — use todo_read to see ids"
+            return "error: no task with id '\(id)' — use task_list or todo_read to see ids"
         }
         if let content, !content.isEmpty {
             todos[idx]["content"] = content

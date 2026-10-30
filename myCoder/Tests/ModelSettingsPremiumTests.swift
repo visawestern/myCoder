@@ -46,7 +46,7 @@ struct ModelSettingsPremiumTests {
         let source = try sourceText("myCoder/Sources/Views/Settings/ModelSettingsView.swift")
         #expect(source.contains("locFilterModels"))
         #expect(source.contains("ModelSortOrder"))
-        #expect(source.contains("ForEach(displayModels"))
+        #expect(source.contains("ForEach(familyGroups"))
         #expect(!source.contains("ModelSettingsListLogic"))
         #expect(!source.contains("prefix(10)"))
         #expect(!source.contains("collapsedModelGroups"))

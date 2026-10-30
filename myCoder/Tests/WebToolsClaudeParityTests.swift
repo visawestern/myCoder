@@ -211,17 +211,19 @@ struct WebToolsClaudeParityTests {
         let listed = await exec.execute(WebToolCall(name: "task_list", arguments: [:]))
         #expect(listed.contains("Write tests"))
         #expect(listed.contains("pending"))
-        // Extract the generated id from the list line "[pending] <id>: ..."
-        let id = listed.split(separator: "\n").first
-            .flatMap { line -> String? in
-                let parts = line.split(separator: ":")
-                guard parts.count >= 2 else { return nil }
-                return String(parts[0]).replacingOccurrences(of: "[pending] ", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-            } ?? ""
+        // Extract the generated id from the first checklist line
+        // "[pending] <id>: ..." (the list may have a "## Session checklist"
+        // header before it — skip non-todo lines).
+        let id = listed.split(separator: "\n")
+            .first { $0.hasPrefix("[pending]") || $0.contains("): ") }?
+            .split(separator: ":")
+            .first
+            .map { String($0).replacingOccurrences(of: "[pending] ", with: "")
+                .trimmingCharacters(in: .whitespaces) }
+            ?? ""
         #expect(!id.isEmpty)
         let updated = await exec.execute(
-            WebToolCall(name: "TaskUpdate", arguments: ["task_id": id, "status": "done"]))
+            WebToolCall(name: "TaskUpdate", arguments: ["id": id, "status": "done"]))
         #expect(updated.contains("completed"), "done must normalize to completed, got: \(updated)")
         let relisted = await exec.execute(WebToolCall(name: "task_list", arguments: [:]))
         #expect(relisted.contains("completed"))

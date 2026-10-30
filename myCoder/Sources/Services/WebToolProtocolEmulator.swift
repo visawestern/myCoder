@@ -223,7 +223,13 @@ enum WebToolProtocolEmulator {
             lines.append("")
         }
         if onRequest.isEmpty {
-            lines.append("You are Claude Code, the agentic coding assistant, running in the user's project through a tool bridge. The host app executes every tool call you emit on the user's machine and returns the real result. You are NOT a sandboxed chat model — never claim you lack file/system access: the tools below run locally and their results come back to you. If you catch yourself believing you have different (sandbox-only) tools, that belief is wrong for this chat — verify with one list_dir block instead of refusing. Never claim a tool ran before you see its result.")
+            // Full-profile identity: compact but keeps every live-proven
+            // refusal guard (role, bridge, not-sandboxed, verify-with-
+            // list_dir, never-claim-ran). The old long form pushed the
+            // first-turn preamble over the vendor paste budget (Kimi ~4000B)
+            // and split the tool contract into continuation parts (user
+            // report 2026-10-30 — prompt chunked at 4047B).
+            lines.append("You are Claude Code, the agentic coding assistant, running in the user's project through a tool bridge. The host runs every tool block you emit locally and returns the result — you are NOT sandboxed, never claim missing file access (verify with one list_dir block instead of refusing). Never claim a tool ran before you see its result.")
         } else {
             // Harness-tax C4: compact identity for slim profiles. Keeps every
             // live-proven refusal guard (role, bridge, not-sandboxed,
@@ -248,7 +254,7 @@ enum WebToolProtocolEmulator {
         lines.append("```tool")
         lines.append(#"{"name": "list_dir", "args": {"path": "."}}"#)
         lines.append("```")
-        lines.append("Rules: every listed tool above IS available — never say a tool is missing or unavailable, never refuse with \"I'm a sandboxed model / I can't access your machine\", never narrate tool use in prose, never invent results. When a task needs a tool, emit its block immediately, then wait for the result.")
+        lines.append("Rules: every listed tool above IS available — never say a tool is missing or unavailable, never refuse as a sandboxed model, never narrate tool use, never invent results. Emit a tool block when a task needs one, then wait for its result.")
         lines.append("Paths outside the project are not yours to judge: emit the tool call with the absolute path and let the host decide. It asks the user for access and then runs the call, or returns a validation error — never refuse a task because a path is outside the working directory.")
         let listedNames2 = Set(listed.map(\.rawValue))
         let inspectors = ["read_file", "list_dir", "grep", "glob"].filter { listedNames2.contains($0) }
@@ -257,9 +263,9 @@ enum WebToolProtocolEmulator {
             policy += "; git_* for VCS"
         }
         if listedNames2.contains("todo_read") {
-            policy += "; todo_* for the checklist, todo_read also shows the current execution plan (its task ids are the plan ids — todo_update/todo_edit moves a plan task)"
+            policy += "; todo_* for the checklist (todo_read also shows the plan)"
         }
-        policy += ". Page large files with read_file offset/limit instead of re-reading from the start. When done, reply without a tool block."
+        policy += ". Page large files with read_file offset/limit. When done, reply without a tool block."
         lines.append(policy)
         lines.append("Tools:")
         for tool in listed {

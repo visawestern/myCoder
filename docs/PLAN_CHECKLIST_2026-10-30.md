@@ -2,6 +2,13 @@
 
 Рабочий план задач текущей сессии. Статусы: ⬜ не начато, 🔵 в работе, ✅ готово.
 
+## 8. Исправление всех известных падений тестов (8 шт.)
+- [x] `taskCreateListUpdateRoundTrip` — парсинг id из формата «## Session checklist [pending] <id>: …»; аргумент `task_id` → канонический `id` по схеме.
+- [x] `taskUpdateMissingIdErrorsHonestly` — текст ошибки теперь называет оба инструмента: «use task_list or todo_read to see ids».
+- [x] `preambleChunksStayUnderByteBudget` — преамбула разрослась до 4047 Б (порог ~3737 Б) и резалась на 2 части; сокращена (identity/rules/policy) при сохранении всех гарантий.
+- [x] `firstMessagePrependsPreamble` — следствие того же: первый ход снова один чанк с тулом-контрактом.
+- [x] `ModelSettingsPremiumTests`/`SettingsIntegrationTests` — маркеры исходника обновлены под актуальный UI (`ForEach(familyGroups` вместо старого `displayModels`; фильтр/сортировка/скролл/удаление сохранены).
+
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
 - [x] TDD: `RequestRetryPolicyTests` — пустые ответы (DirectChat/OpenCodeServe/ACP/MimoServe) и HTTP 408/429/500/502/503/504 ретраятся; прочие ошибки (401/403/404, транспорт, parse) — нет; до 10 суммарных попыток; пауза экспоненциальная с потолком 60с.
