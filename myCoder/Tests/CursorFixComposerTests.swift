@@ -64,4 +64,48 @@ final class CursorFixComposerTests: XCTestCase {
             "пустой фон не должен считаться текстовой поверхностью"
         )
     }
+
+    func testMonitorEnsuresIBeamOverTextSurface() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let textView = ZeroInsetTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        textView.isEditable = true
+        textView.isSelectable = true
+        window.contentView = textView
+        window.orderFront(nil)
+        window.displayIfNeeded()
+
+        let center = NSPoint(x: 200, y: 50)
+        // Принудительно ставим стрелку (имитация застрявшего состояния) — и
+        // монитор должен ВЕРНУТЬ I-beam над текстовой поверхностью, даже если
+        // курсор-ректы по какой-то причине не применились (центральная
+        // карточка пустого состояния).
+        NSCursor.arrow.set()
+        StuckCursorFix.restoreArrowIfStuck(at: center)
+        XCTAssertEqual(
+            NSCursor.current,
+            NSCursor.iBeam,
+            "над текстовой поверхностью должен гарантироваться I-beam"
+        )
+    }
+
+    func testMonitorLeavesArrowOverPlainBackground() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let background = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        window.contentView = background
+        window.orderFront(nil)
+        window.displayIfNeeded()
+
+        let center = NSPoint(x: 200, y: 50)
+        NSCursor.arrow.set()
+        StuckCursorFix.restoreArrowIfStuck(at: center)
+        XCTAssertEqual(
+            NSCursor.current,
+            NSCursor.arrow,
+            "над пустым фоном стрелка не должна меняться"
+        )
+    }
 }

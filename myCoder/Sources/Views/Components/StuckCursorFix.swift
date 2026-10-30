@@ -26,8 +26,21 @@ enum StuckCursorFix {
     }
 
     static func restoreArrowIfStuck(at location: NSPoint? = nil) {
+        // Text-editing surfaces (an editable/selectable NSTextView or an
+        // enabled NSTextField) must ALWAYS show the I-beam. Cursor rects via
+        // `resetCursorRects` are the primary mechanism (ZeroInsetTextView),
+        // but they can lag or never fire when the window is not key, the view
+        // is still animating into place (centered empty-state card), or the
+        // hosting view hasn't re-established rects yet — so we guarantee the
+        // I-beam here instead of only restoring the arrow (user report
+        // 2026-10-30: arrow over the centered initial-chat input).
+        if isOverTextEditingView(at: location) {
+            if NSCursor.current != NSCursor.iBeam {
+                NSCursor.iBeam.set()
+            }
+            return
+        }
         guard NSCursor.current == NSCursor.iBeam else { return }
-        if isOverTextEditingView(at: location) { return }
         if isOverActionView(at: location) {
             NSCursor.pointingHand.set()
         } else {
