@@ -218,6 +218,35 @@ final class ZeroInsetTextView: NSTextView {
         addCursorRect(bounds, cursor: .iBeam)
     }
 
+    /// Native cursor delivery: SwiftUI hosting can skip cursor-rect
+    /// registration for representable views, so the I-beam never took over
+    /// (the global monitor then fought AppKit's arrow reset). A tracking
+    /// area with `.cursorUpdate` is the designed mechanism — AppKit asks us
+    /// for the cursor when the pointer enters the field, with no fighting.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas {
+            removeTrackingArea(area)
+        }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.activeInKeyWindow, .cursorUpdate, .mouseEnteredAndExited],
+                owner: self,
+                userInfo: nil
+            )
+        )
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        ZeroInsetTextView.cursorUpdateFired += 1
+        NSCursor.iBeam.set()
+    }
+
+    /// Diagnostic counter (exposed via `/api/debug/cursor`): how many times
+    /// AppKit asked this field for its cursor (native tracking-area path).
+    static var cursorUpdateFired = 0
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholderString.isEmpty else { return }

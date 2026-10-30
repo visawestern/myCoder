@@ -171,6 +171,8 @@ final class MyCoderAPIServer {
             return handleInspect(body: body)
         case ("POST", "/api/inspect"):
             return handleInspect(body: body)
+        case ("GET", "/api/debug/cursor"):
+            return handleCursorDebug()
         case ("POST", "/api/discover-models"):
             return handleDiscoverModels()
         case ("POST", "/api/add-account"):
@@ -203,6 +205,21 @@ final class MyCoderAPIServer {
         }
         _ = semaphore.wait(timeout: .now() + 10)
         return jsonResponse(["count": actions.count, "actions": actions])
+    }
+
+    /// Read-only diagnostic: reports the CURRENT mouse cursor identity
+    /// (NSCursor.current), the mouse position, and the view chain under the
+    /// pointer for every visible window. Used to verify cursor behavior in the
+    /// running app (e.g. I-beam over the composer) without guessing.
+    private func handleCursorDebug() -> String {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: [String: Any] = ["error": "timed out"]
+        Task { @MainActor in
+            result = CursorDiagnostics.snapshot()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 10)
+        return jsonResponse(result)
     }
 
     private func handleState() -> String {
