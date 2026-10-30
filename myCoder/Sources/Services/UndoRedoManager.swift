@@ -7,12 +7,22 @@ class FileSnapshotManager {
     
     private let fileManager = FileManager.default
     private let snapshotsBasePath: String
-    
-    private init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let snapshotsDir = home.appendingPathComponent(".mycoder/snapshots")
-        try? FileManager.default.createDirectory(at: snapshotsDir, withIntermediateDirectories: true)
-        self.snapshotsBasePath = snapshotsDir.path
+
+    /// `snapshotsBasePath` injectable for tests; production uses
+    /// `~/.mycoder/snapshots` (the shared instance keeps the default).
+    init(snapshotsBasePath: String? = nil) {
+        if let snapshotsBasePath {
+            self.snapshotsBasePath = snapshotsBasePath
+            try? FileManager.default.createDirectory(
+                atPath: snapshotsBasePath,
+                withIntermediateDirectories: true
+            )
+        } else {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let snapshotsDir = home.appendingPathComponent(".mycoder/snapshots")
+            try? FileManager.default.createDirectory(at: snapshotsDir, withIntermediateDirectories: true)
+            self.snapshotsBasePath = snapshotsDir.path
+        }
     }
     
     /// Сохранить снимок файла перед изменением
@@ -56,8 +66,18 @@ class FileSnapshotManager {
         
         // Читаем метаданные
         let metaData = try Data(contentsOf: URL(fileURLWithPath: metaPath))
-        guard let meta = try JSONSerialization.jsonObject(with: metaData) as? [String: Any],
-              let filePath = meta["filePath"] as? String else {
+        // Битый JSON обязан дать `invalidMetadata`, а не сырой Cocoa-код
+        // (JSONSerialization бросает NSError), чтобы ошибка была понятной.
+        let meta: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: metaData) as? [String: Any] else {
+                throw SnapshotError.invalidMetadata
+            }
+            meta = decoded
+        } catch {
+            throw SnapshotError.invalidMetadata
+        }
+        guard let filePath = meta["filePath"] as? String else {
             throw SnapshotError.invalidMetadata
         }
         

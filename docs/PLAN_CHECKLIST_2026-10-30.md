@@ -25,6 +25,16 @@
   - `ErrorDescriptionTests` — описания ошибок (AppAction/Keychain/Snapshot/Export/провайдеры);
   - `OpenCodeSessionStoresTests` — хранилища сессий serve.
 - [x] Полный прогон: 3146 тестов; флейки сетевых/таймерных тестов под нагрузкой (сборка Chromium) — при повторе зелёные.
+- [x] `MessageTypeEnumTests` — связка MessageType↔AgentMode, роли, действия (добавлено).
+- [x] Замер покрытия (llvm-cov, `swift test --enable-code-coverage`, 3149 тестов, только Sources):
+  - Services: **70.0% функций / 69.8% строк**;
+  - Models: **60.8% / 68.3%**;
+  - Theme: 60.8% / 81.7%;
+  - App: 39.8% / 34.5%;
+  - Views: 2.4% / 1.4% (UI не покрыт юнит-тестами);
+  - **ИТОГО: 40.8% функций / 32.2% строк**.
+- [x] Второй батч: `FileSnapshotManagerTests` (DI пути + фикс `invalidMetadata` вместо сырого NSError), `FileDropLogicTests` (pasteboard/legacy/dedup), `DirectWebAPIClientLogicTests` (SSE/cookies/token), `MessageTypeEnumTests`.
+- [x] Повторный замер (3168 тестов): Services **70.5% / 70.4%**, Views 4.7% / 3.3%, **ИТОГО 42.0% функций / 33.6% строк**.
 
 ## 1. Ошибка «The provider returned an empty response…» + ретраи
 - [x] Проверить интерпретацию: пустой ответ = транзиентный сбой (модель вернула 0 токенов), а не ошибка конфигурации.
