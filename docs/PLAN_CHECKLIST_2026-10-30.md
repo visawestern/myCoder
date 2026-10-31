@@ -103,3 +103,39 @@
 - [x] Полный прогон тестов (3118; только 8 известных дорегрессионных падений).
 - [x] Сборка `./build-app.sh`.
 - [x] Коммит `d3ce4f0`.
+
+## 14. Автопрокрутка: без метаний и «залипания» (2026-10-31)
+- [x] Причина метаний: автопрокрутка вызывалась на каждый токен стрима и слала отдельный `scrollTo` через `async` — десятки прокруток/с, каждая в устаревший фрейм якоря.
+- [x] Причина «скаканий» при чтении старых сообщений: `isChatBottomVisible` обновляется с задержкой 1–2 кадра; в этом окне код дёргал обратно вниз.
+- [x] Реализация (`ChatPanelView` + `ChatScrollLogic`):
+  - коалесценция: максимум одна прокрутка за `minScrollInterval` (50 мс), отложенная на 16 мс;
+  - подавление после колеса пользователя (`userScrollSuppression` 0.5 с, локальный `NSEvent`-монитор `.scrollWheel`);
+  - пропуск прокрутки, когда якорь уже «приклеен» к низу (`anchorIsGlued`, слак 6 pt);
+  - принудительная прокрутка при появлении НОВОГО сообщения (`shouldScrollAfterNewMessage`), даже если фрейм якоря не успел обновиться;
+  - `.animation` убран со всего ScrollView (оставлен только у плавающей кнопки).
+- [x] TDD: `ChatScrollLogicTests` (glued/дрейф/интервалы), `ChatScrollBehaviorTests` (new-message), live-проверка.
+- [x] Live: правка файла в проекте — события FSEvents обновляют индекс (см. п.15); прокрутка на новом билде.
+
+## 15. Индексация проекта: baseline один раз + событийные апдейты (2026-10-31)
+- [x] Причина: у personalfairytales (159 ГБ, `.voice-runtime` 141 ГБ) индекс вообще не существовал — он строился только при открытии `@`-пикера/поиска; send не сканирует, а пустой индекс выглядел `.failed` + «⚠️ Не удалось собрать точечный контекст».
+- [x] Baseline: при открытии воркспейса, если `file_index.json` нет, один фоновый bounded-скан (`PointContextIndexLogic.records`).
+- [x] Событийное переиндексирование: `ProjectFileIndexEventUpdater` — по FSEvents пере-индексируются ТОЛЬКО затронутые файлы/папки (с лимитом 2000 файлов на батч); мерж в `file_index.json`.
+- [x] Вотчер: накопление путей (union) вместо last-writer-wins (heartbeat `.voice-data/.worker.heartbeat` забивал дебаунс); `shouldInvalidate` игнорирует исключённые деревья.
+- [x] Ограничения: `defaultExcludes` += `.voice-runtime/.voice-data/.backups/.codegraph/.pytest_cache/.mypy_cache/.ruff_cache/.repowise/.DS_Store`; байтовый бюджет скана `defaultMaxScanBytes` (400 МБ); хранимый текст записи урезан до 96 КБ (`defaultIndexSearchableTextMaxBytes`).
+- [x] `ProjectFileIndexStore`: кэш декодированного индекса (по projectPath+mtime) — send больше не декодирует 122 МБ JSON (было 17.5к записей → минуты; стало 417 → 1.6 МБ).
+- [x] Пустой индекс ≠ ошибка: `.failed` → `.noEvidence` (тихо, без баннера; отправка идёт исходным запросом).
+- [x] TDD: `ProjectFileIndexEventUpdaterTests` (9), `ProjectFileScannerLimitTests` (байтовый бюджет + урезание текста), `ProjectFileIndexWatcherLogicTests` (excludes), `SendContextPreparationTests` (noEvidence/план).
+
+## 16. Reasoning: только настоящий текст, никаких «зашифрованных» сводок (2026-10-31)
+- [x] Удалён `DirectChatClient.reasoningDetailsSummary` и сбор `reasoningDetails` в `DirectChatStreamAccumulator`.
+- [x] `visibleReasoning` = только `reasoning_content`/`reasoning`/`thinking`; пусто → `nil` (в UI блока рассуждений нет).
+- [x] Сырые ответы (`rawEvents`) для кнопки «Сырой ответ» сохранены.
+- [x] TDD: `DirectChatRawResponseTests` — encrypted details не показываются; текстовый reasoning показывается.
+- [x] Live (mercury-3): `[ITER] reasoning_bytes=0`, `messages.reasoning` пуст.
+
+## Live-проверка через API (2026-10-31)
+- [x] Baseline pft: 417 записей, 1.6 МБ, без утечек исключённых путей.
+- [x] build-чат: «какие файлы есть в корне проекта?» → `[CTX] status=compiled pack=21556B`; пакет уходит модели как text-parts; `compiled_context` прикреплён к user-сообщению; баннера нет.
+- [x] plan-чат: первый промпт → `[CTX] status=compiled pack=21886B`, баннера нет.
+- [x] Событийный апдейт: правка `web-app/README.md` → `[REINDEX] saved stored=417 updated=417`, хэш записи обновился.
+- [x] Полный прогон: 3213 тестов (3 флаки-падения перезапущены — зелёные).

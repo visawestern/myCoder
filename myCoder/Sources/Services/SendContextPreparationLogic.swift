@@ -81,11 +81,15 @@ enum SendContextPreparationLogic {
                                           status: .projectless)
         }
         guard !records.isEmpty || !memories.isEmpty || ledger != nil else {
+            // No index yet (baseline still building), an empty project, or no
+            // memories/ledger. This is a normal state, not a failure: the raw
+            // message goes out and no error banner is shown (a project without
+            // an index is not a broken one — it is just not indexed yet).
             return SendContextPreparation(
                 modelText: message,
                 pack: nil,
-                warning: combinedWarning(L.t(AppLocalizationKey.locContextCompilationFailed), extraWarning),
-                status: .failed
+                warning: combinedWarning(nil, extraWarning),
+                status: .noEvidence
             )
         }
 

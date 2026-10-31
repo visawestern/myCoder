@@ -59,6 +59,19 @@ struct ChatPanelView: View {
     @State private var isChatBottomVisible = true
     @State private var userRowFrames: [String: CGRect] = [:]
     @State private var chatViewportFrame: CGRect = .zero
+    /// Last measured frame of the bottom sentinel (used to decide whether a
+    /// scroll is actually needed).
+    @State private var lastBottomFrame: CGRect = .zero
+    /// Timestamp of the user's last wheel scroll: auto-scroll is suppressed
+    /// right after, so reading older messages is never yanked back.
+    @State private var lastUserScrollAt = Date.distantPast
+    /// Timestamp of the last auto-scroll (throttle).
+    @State private var lastAutoScrollAt = Date.distantPast
+    /// One scheduled auto-scroll at a time (coalescing).
+    @State private var pendingAutoScrollTask: Task<Void, Never>?
+    /// Message count of the last revision: growth means a new message arrived.
+    @State private var lastKnownMessageCount = 0
+    @State private var scrollEventMonitor: Any?
     @State private var currentUserMessageID: String?
     @State private var canLoadOlderMessages = false
     @State private var scrolledSessionID: String?
@@ -217,8 +230,13 @@ struct ChatPanelView: View {
                             scheduleDraftSave(newText)
                         }
                         .onAppear {
+                            installScrollWheelMonitor()
                             scrollToBottomOnAppear(proxy: proxy)
                             applyPendingMessageFocus(proxy: proxy)
+                        }
+                        .onDisappear {
+                            pendingAutoScrollTask?.cancel()
+                            removeScrollWheelMonitor()
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if ChatScrollLogic.showsScrollToBottomButton(
@@ -233,6 +251,7 @@ struct ChatPanelView: View {
                                 .padding(.trailing, 16)
                                 .padding(.bottom, 12)
                                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                                .animation(.easeOut(duration: 0.15), value: isChatBottomVisible)
                             }
                         }
                         .overlay(alignment: .trailing) {
@@ -247,7 +266,6 @@ struct ChatPanelView: View {
                             }
                             .padding(.trailing, 12)
                         }
-                        .animation(.easeOut(duration: 0.15), value: isChatBottomVisible)
                     }
 
                     ComposerAttachmentPreview(store: attachmentStore)
@@ -410,16 +428,13 @@ struct ChatPanelView: View {
         )
     }
 
-    /// The send path must not depend on the user opening the @ picker first:
-    /// a missing index is built once (see `PointContextIndexLogic`).
+    /// The send path must not depend on the user opening the @ picker first.
+    /// It uses the already-built index only: the baseline is built once in the
+    /// background when a workspace opens, and FSEvents keep it fresh via
+    /// `ProjectFileIndexEventUpdater` — the send path never scans.
     private static func recordsForPointContext(projectPath: String) async -> [FileIndexRecord] {
         guard !projectPath.isEmpty else { return [] }
         return await Task.detached(priority: .utility) {
-            // Use the already-built index only. A full re-scan on every send
-            // turned a first context build into an unbounded operation on a
-            // huge repo (user report 2026-10-30: «собирает контекст час»).
-            // ProjectFileIndexWatcher builds/updates the index in the
-            // background when a workspace is open.
             ProjectFileIndexStore.load(projectPath: projectPath)
         }.value
     }
@@ -512,23 +527,73 @@ struct ChatPanelView: View {
     /// Auto-scrolls to the newest message unless the reader scrolled away.
     ///
     /// No animation: the revision changes on every streamed token, and a
-    /// restarting animated `scrollTo` fights the user's own scrolling. The
-    /// bottom sentinel reports its real frame now, so a reader who is above the
-    /// bottom keeps their position instead of being yanked back.
+    /// restarting animated `scrollTo` fights the user's own scrolling.
+    /// The scroll is throttled and coalesced:
+    /// - at most one scroll per `minScrollInterval` (a burst of tokens → one
+    ///   scroll per chunk, not one per token);
+    /// - suppressed for `userScrollSuppression` after the user's wheel scroll,
+    ///   so reading older messages is never yanked back while the pin state
+    ///   (measured from layout preferences) is still catching up;
+    /// - skipped entirely when the bottom anchor is already glued to the
+    ///   viewport bottom (no drift → nothing to do).
     private func autoScrollIfPinned(proxy: ScrollViewProxy) {
-        guard ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else { return }
-        DispatchQueue.main.async {
+        let messageCount = displayMessages.count
+        let hasNewMessage = ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: lastKnownMessageCount,
+            newCount: messageCount
+        )
+        if lastKnownMessageCount != messageCount {
+            lastKnownMessageCount = messageCount
+        }
+        guard hasNewMessage || ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else { return }
+        guard Date().timeIntervalSince(lastUserScrollAt) >= ChatScrollLogic.userScrollSuppression else { return }
+        guard Date().timeIntervalSince(lastAutoScrollAt) >= ChatScrollLogic.minScrollInterval else { return }
+        guard pendingAutoScrollTask == nil else { return }
+
+        pendingAutoScrollTask = Task { @MainActor in
+            defer { pendingAutoScrollTask = nil }
+            try? await Task.sleep(nanoseconds: ChatScrollLogic.coalesceNanoseconds)
+            guard !Task.isCancelled else { return }
+            guard Date().timeIntervalSince(lastUserScrollAt) >= ChatScrollLogic.userScrollSuppression else { return }
+            if !hasNewMessage {
+                guard isChatBottomVisible else { return }
+                if ChatScrollLogic.anchorIsGlued(bottomFrame: lastBottomFrame, viewport: chatViewportFrame) {
+                    return
+                }
+            }
+            lastAutoScrollAt = Date()
             proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
         }
     }
 
     private func updateChatBottomVisibility(bottomFrame: CGRect) {
+        lastBottomFrame = bottomFrame
         guard let visible = ChatScrollLogic.bottomVisibility(
             bottomFrame: bottomFrame,
             viewport: chatViewportFrame
         ) else { return }
         isChatBottomVisible = visible
         messageStore.isPinnedToBottom = visible
+    }
+
+    /// Watches the user's wheel scrolling in this window. The timestamp is
+    /// used to suppress auto-scroll for a beat after the user scrolls, so
+    /// browsing older messages never gets yanked to the bottom.
+    private func installScrollWheelMonitor() {
+        guard scrollEventMonitor == nil else { return }
+        scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [self] event in
+            if event.window != nil, NSApp.keyWindow === event.window {
+                lastUserScrollAt = Date()
+            }
+            return event
+        }
+    }
+
+    private func removeScrollWheelMonitor() {
+        if let monitor = scrollEventMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        scrollEventMonitor = nil
     }
 
     /// Keeps the visible message and the persisted draft in sync with the

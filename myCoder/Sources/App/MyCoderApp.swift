@@ -2338,7 +2338,7 @@ class AppState: ObservableObject {
         let watcher = ProjectFileIndexWatcher(
             projectPath: path,
             generation: generation
-        ) { [weak self] eventPath, eventGeneration in
+        ) { [weak self] eventPath, eventGeneration, changedPaths in
             DispatchQueue.main.async {
                 guard let self,
                       ProjectFileIndexWatcherLogic.shouldApply(
@@ -2348,10 +2348,56 @@ class AppState: ObservableObject {
                           activeGeneration: self.projectFileIndexGeneration
                       ) else { return }
                 self.projectFilesCache = nil
+                self.reindexProjectFileChanges(paths: changedPaths, generation: eventGeneration)
             }
         }
         projectFileIndexWatcher = watcher
         watcher.start()
+
+        // Baseline: build the project file index once (and only when it is
+        // missing) in the background. Every later change is handled
+        // event-by-event by `reindexProjectFileChanges` — no repeated full
+        // scans. The scan is bounded (30k records, 5 MB/file) and skips the
+        // generated/media directories in `defaultExcludes`.
+        Task.detached(priority: .utility) {
+            _ = PointContextIndexLogic.records(projectPath: path)
+        }
+    }
+
+    /// Event-driven incremental re-index: FSEvents reported files/directories
+    /// that changed; update only those in the stored index and persist the
+    /// result. Runs off the main actor (disk I/O + hashing).
+    private func reindexProjectFileChanges(paths: [String], generation: UInt64) {
+        let path = selectedWorkspace?.path ?? ""
+        guard !path.isEmpty, !paths.isEmpty else { return }
+        if StreamDiagnostics.isEnabled {
+            StreamDiagnostics.log(
+                "[REINDEX] start paths=\(paths.joined(separator: ","))",
+                file: "/tmp/mycoder_agent.log"
+            )
+        }
+        Task.detached(priority: .utility) {
+            let stored = ProjectFileIndexStore.load(projectPath: path)
+            let updated = ProjectFileIndexEventUpdater.apply(
+                changedPaths: paths,
+                stored: stored,
+                projectPath: path
+            )
+            if updated != stored {
+                ProjectFileIndexStore.save(projectPath: path, records: updated)
+                if StreamDiagnostics.isEnabled {
+                    StreamDiagnostics.log(
+                        "[REINDEX] saved stored=\(stored.count) updated=\(updated.count)",
+                        file: "/tmp/mycoder_agent.log"
+                    )
+                }
+            } else if StreamDiagnostics.isEnabled {
+                StreamDiagnostics.log(
+                    "[REINDEX] no-change stored=\(stored.count)",
+                    file: "/tmp/mycoder_agent.log"
+                )
+            }
+        }
     }
 
     @MainActor

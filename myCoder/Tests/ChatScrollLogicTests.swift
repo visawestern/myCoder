@@ -45,4 +45,52 @@ struct ChatScrollLogicTests {
         let bottom = CGRect(x: 0, y: 601, width: 800, height: 1)
         #expect(ChatScrollLogic.bottomVisibility(bottomFrame: bottom, viewport: viewport) == true)
     }
+
+    // MARK: - «Приклеенность» якоря (прокрутка нужна только при дрейфе)
+
+    @Test("Якорь у нижней кромки вьюпорта — приклеен, прокрутка не нужна")
+    func anchorGluedNearBottom() {
+        let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
+        #expect(ChatScrollLogic.anchorIsGlued(
+            bottomFrame: CGRect(x: 0, y: 596, width: 800, height: 4),
+            viewport: viewport
+        ))
+        #expect(ChatScrollLogic.anchorIsGlued(
+            bottomFrame: CGRect(x: 0, y: 599, width: 800, height: 1),
+            viewport: viewport
+        ))
+    }
+
+    @Test("Якорь дрейфует ниже вьюпорта — нужна прокрутка")
+    func anchorDriftedIsNotGlued() {
+        let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
+        #expect(!ChatScrollLogic.anchorIsGlued(
+            bottomFrame: CGRect(x: 0, y: 620, width: 800, height: 4),
+            viewport: viewport
+        ))
+        #expect(!ChatScrollLogic.anchorIsGlued(
+            bottomFrame: CGRect(x: 0, y: 590, width: 800, height: 1),
+            viewport: viewport
+        ))
+    }
+
+    @Test("Пустые фреймы — не приклеены (без действий)")
+    func emptyFramesNotGlued() {
+        let viewport = CGRect(x: 0, y: 0, width: 800, height: 600)
+        #expect(!ChatScrollLogic.anchorIsGlued(
+            bottomFrame: .zero,
+            viewport: viewport
+        ))
+        #expect(!ChatScrollLogic.anchorIsGlued(
+            bottomFrame: CGRect(x: 0, y: 596, width: 800, height: 4),
+            viewport: .zero
+        ))
+    }
+
+    @Test("Интервалы подавления и коалесценции — разумные")
+    func suppressionIntervalsAreReasonable() {
+        #expect(ChatScrollLogic.userScrollSuppression >= 0.4)
+        #expect(ChatScrollLogic.minScrollInterval >= 0.03)
+        #expect(ChatScrollLogic.coalesceNanoseconds >= 8_000_000)
+    }
 }

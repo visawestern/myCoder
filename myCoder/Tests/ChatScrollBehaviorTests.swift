@@ -28,6 +28,18 @@ struct ChatScrollBehaviorTests {
         #expect(!ChatScrollLogic.showsScrollToBottomButton(isBottomVisible: false, messageCount: 0))
     }
 
+    @Test("Новое сообщение — принудительная прокрутка")
+    func newMessageForcesScroll() {
+        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 1, newCount: 2))
+        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 0, newCount: 1))
+    }
+
+    @Test("Без роста числа сообщений — прокрутка не принудительная")
+    func noGrowthNoForcedScroll() {
+        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 2, newCount: 2))
+        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 3, newCount: 2))
+    }
+
     @Test("Chat panel renders the floating scroll button and forces scroll on load")
     func chatPanelWiresScrollBehaviors() throws {
         let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")

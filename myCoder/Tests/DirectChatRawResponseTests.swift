@@ -3,7 +3,8 @@ import Foundation
 @testable import myCoder
 
 /// Сырые ответы сервера фиксируются в порядке прихода (кнопка
-/// «Сырой ответ»), а зашифрованный reasoning-канал не теряется.
+/// «Сырой ответ»), а не-текстовые reasoning_details (например,
+/// `reasoning.encrypted` у mercury-3) не показываются вовсе.
 @Suite("Сырые ответы сервера (rawEvents)")
 struct DirectChatRawResponseTests {
 
@@ -38,27 +39,24 @@ struct DirectChatRawResponseTests {
         #expect(result.rawEvents.count == 2)
     }
 
-    @Test("Зашифрованный reasoning-канал даёт честную сводку")
-    func encryptedReasoningProducesPlaceholder() {
+    @Test("Зашифрованные reasoning_details не показываются (только настоящий текст)")
+    func encryptedReasoningProducesNothing() {
         var acc = DirectChatStreamAccumulator()
         let chunk = #"{"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"mrt1_v1_abc","format":"mercury-v1","index":0}]}}]}"#
         let update = acc.ingest("data: \(chunk)")
-        #expect(update != nil, "reasoning_details должен помечать изменение")
-        let visible = acc.visibleReasoning
-        #expect(visible.contains("Рассуждение"))
-        #expect(visible.contains("mercury-v1"))
-        #expect(visible.contains("mrt1"))
-        #expect(!visible.contains("зашифровано"), "не выдумываем ‘зашифровано’ — это не транспортное шифрование")
-        #expect(acc.result().reasoning == visible)
+        #expect(update == nil, "reasoning_details без текста не меняют видимое состояние")
+        #expect(acc.visibleReasoning.isEmpty)
+        #expect(acc.result().reasoning == nil)
     }
 
-    @Test("Текстовый reasoning имеет приоритет над сводкой details")
+    @Test("Текстовый reasoning показывается; details игнорируются")
     func plainReasoningWinsOverPlaceholder() {
         var acc = DirectChatStreamAccumulator()
         _ = acc.ingest("data: {\"choices\":[{\"delta\":{\"reasoning\":\"думаю\"}}]}")
         _ = acc.ingest(#"data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"x"}]}}]}"#)
         #expect(acc.visibleReasoning == "думаю")
         #expect(!acc.visibleReasoning.contains("Рассуждение"))
+        #expect(acc.result().reasoning == "думаю")
     }
 
     @Test("Не-стриминговый send хранит сырое тело")

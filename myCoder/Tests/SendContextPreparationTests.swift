@@ -84,8 +84,8 @@ struct SendContextPreparationTests {
         #expect(!preparation.modelText.contains("<project-context>"))
     }
 
-    @Test("Пустой индекс — видимая деградация, отправка продолжается")
-    func emptyIndexDegradesVisibly() throws {
+    @Test("Пустой индекс — тихо (noEvidence), без баннера; отправка продолжается")
+    func emptyIndexIsSilentNoEvidence() throws {
         let root = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -97,7 +97,27 @@ struct SendContextPreparationTests {
             priorTurns: priorTurns()
         )
         #expect(preparation.modelText == "UserStore load")
-        #expect(preparation.warning != nil)
+        #expect(preparation.pack == nil)
+        #expect(preparation.warning == nil)
+        #expect(preparation.status == .noEvidence)
+    }
+
+    @Test("Первый промпт в план-режиме с пустым индексом — тихо, без баннера")
+    func planFirstTurnEmptyIndexIsSilent() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "перечисли файлы проекта",
+            records: [],
+            projectPath: root.path,
+            isEnabled: true,
+            priorTurns: [],
+            isPlanMode: true
+        )
+        #expect(preparation.status == .noEvidence)
+        #expect(preparation.warning == nil)
+        #expect(preparation.modelText == "перечисли файлы проекта")
     }
 
     @Test("Пакет прикрепляется к user-сообщению как часть compiledContext")

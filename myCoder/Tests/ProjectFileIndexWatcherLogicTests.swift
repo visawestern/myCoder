@@ -24,6 +24,22 @@ struct ProjectFileIndexWatcherLogicTests {
         ))
     }
 
+    @Test("excluded trees (media/generated) do not invalidate")
+    func excludedPathsIgnored() {
+        #expect(!ProjectFileIndexWatcherLogic.shouldInvalidate(
+            changedPath: "/tmp/project/.voice-data/.worker.heartbeat",
+            projectPath: "/tmp/project"
+        ))
+        #expect(!ProjectFileIndexWatcherLogic.shouldInvalidate(
+            changedPath: "/tmp/project/node_modules/pkg/index.js",
+            projectPath: "/tmp/project"
+        ))
+        #expect(ProjectFileIndexWatcherLogic.shouldInvalidate(
+            changedPath: "/tmp/project/web-app/app/page.tsx",
+            projectPath: "/tmp/project"
+        ))
+    }
+
     @Test("stale watcher callbacks cannot update a switched project")
     func staleGenerationRejected() {
         #expect(ProjectFileIndexWatcherLogic.shouldApply(

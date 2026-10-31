@@ -56,10 +56,6 @@ struct DirectChatStreamAccumulator {
     private(set) var reasoning = ""
     private(set) var usage: UsageCapture?
     private(set) var sawDataLine = false
-    /// Provider reasoning-detail records (non-text), e.g. mercury-3's
-    /// `reasoning_details`. Kept and summarized when no plain text channel
-    /// exists (opencode parity).
-    private(set) var reasoningDetails: [String] = []
     /// Concatenated non-SSE lines. Some providers ignore `stream: true` and
     /// answer with one plain JSON body; that body is parsed on completion
     /// instead of being mistaken for streaming deltas.
@@ -67,11 +63,12 @@ struct DirectChatStreamAccumulator {
     /// Raw `data:` payloads in arrival order (debug "Сырой ответ" button).
     private(set) var rawEvents: [String] = []
 
-    /// The visible reasoning text: real thinking when available, otherwise a
-    /// faithful summary of the provider's reasoning-detail records.
+    /// The visible reasoning text: real plain thinking only. Providers that
+    /// send non-text reasoning records (e.g. mercury-3's
+    /// `reasoning.encrypted` details) contribute nothing readable, so nothing
+    /// is shown (user directive 2026-10-31: normal reasoning or none).
     var visibleReasoning: String {
-        if !reasoning.isEmpty { return reasoning }
-        return reasoningDetails.joined(separator: "\n")
+        reasoning
     }
 
     /// Feed one line of the HTTP body. Returns the new visible state only when
@@ -126,8 +123,12 @@ struct DirectChatStreamAccumulator {
     }
 
     func result() -> DirectChatResult {
-        DirectChatResult(content: content, reasoning: visibleReasoning, usage: usage,
-                         rawEvents: rawEvents)
+        DirectChatResult(
+            content: content,
+            reasoning: visibleReasoning.isEmpty ? nil : visibleReasoning,
+            usage: usage,
+            rawEvents: rawEvents
+        )
     }
 
     /// Result of a response body that was not SSE at all.
@@ -149,10 +150,6 @@ struct DirectChatStreamAccumulator {
             reasoning += thinking
             changed = true
         }
-        if let details = DirectChatClient.reasoningDetailsSummary(in: channel), !reasoningDetails.contains(details) {
-            reasoningDetails.append(details)
-            changed = true
-        }
         return changed
     }
 
@@ -166,10 +163,6 @@ struct DirectChatStreamAccumulator {
         }
         if let thinking = DirectChatClient.reasoningText(in: message), thinking != reasoning {
             reasoning = thinking
-            changed = true
-        }
-        if let details = DirectChatClient.reasoningDetailsSummary(in: message), !reasoningDetails.contains(details) {
-            reasoningDetails.append(details)
             changed = true
         }
         return changed

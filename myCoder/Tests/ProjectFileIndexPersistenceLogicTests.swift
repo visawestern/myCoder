@@ -25,9 +25,9 @@ struct ProjectFileIndexPersistenceLogicTests {
         #expect(result == scanned)
     }
 
-    @Test("indexing settings expose honest availability")
+    @Test("indexing settings expose honest availability (событийно)")
     func settingsAvailability() {
-        #expect(!IndexingSettingsLogic.automaticIndexingIsAvailable)
-        #expect(IndexingSettingsLogic.statusMessage.contains("not available"))
+        #expect(IndexingSettingsLogic.automaticIndexingIsAvailable)
+        #expect(!IndexingSettingsLogic.statusMessage.contains("not available"))
     }
 }

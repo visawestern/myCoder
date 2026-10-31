@@ -39,8 +39,23 @@ enum ProjectFileIndexLogic {
     /// this; the index stays complete enough for ranking.
     static let defaultMaxIndexRecords = 30_000
 
+    /// Hard cap on total bytes read during one scan. The record cap alone is
+    /// not enough: a media-heavy repo can still read dozens of GB before
+    /// hitting it, stalling the machine while the user works (observed:
+    /// personalfairytales, 159 GB with a 141 GB `.voice-runtime`).
+    static let defaultMaxScanBytes = 400 * 1024 * 1024
+
     /// Maximum UTF-8 text retained per file for search, keeping snapshots bounded.
     static let defaultSearchableTextMaxBytes = 512 * 1024
+
+    /// Maximum UTF-8 text STORED per index record. The snapshot is decoded on
+    /// every context build, so storing up to 512 KB of text per file makes a
+    /// big repo's index hundreds of MB and seconds-long decodes (observed:
+    /// 17.5k records → 122 MB JSON → minutes of JSONDecoder per send).
+    /// Truncating to 96 KB keeps ranking/citations intact for the vast
+    /// majority of files (a relevant line sits near the top) and shrinks the
+    /// snapshot ~5x.
+    static let defaultIndexSearchableTextMaxBytes = 96 * 1024
 
     /// Whether a relative path should be excluded given exclude dir names and
     /// user gitignore-style patterns.

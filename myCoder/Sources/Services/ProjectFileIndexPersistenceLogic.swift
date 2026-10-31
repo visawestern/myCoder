@@ -38,6 +38,10 @@ enum ProjectFileIndexPersistenceLogic {
 }
 
 enum IndexingSettingsLogic {
-    static let automaticIndexingIsAvailable = false
-    static let statusMessage = "Automatic indexing is not available yet; @ file suggestions refresh on demand."
+    /// Automatic indexing is event-driven: FSEvents update the project index
+    /// for changed files/directories without rescanning the whole project.
+    /// A one-time bounded baseline is built in the background when a workspace
+    /// opens (see PointContextIndexLogic).
+    static let automaticIndexingIsAvailable = true
+    static let statusMessage = "Automatic indexing tracks file changes via FSEvents."
 }

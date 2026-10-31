@@ -91,10 +91,16 @@ enum MyCoderPaths {
         component == appDirName
     }
 
-    /// Indexer excludes: canonical app-data directory only.
+    /// Indexer excludes: canonical app-data directory + generated/artifact
+    /// directories. `defaultExcludes` must stay conservative (source dirs
+    /// are never excluded), but media/voice runtimes and backup folders can
+    /// be hundreds of GB and would make any baseline scan unbounded
+    /// (observed: personalfairytales with 141 GB `.voice-runtime`).
     static let defaultExcludes: [String] = [
         ".git", "node_modules", ".build", "DerivedData", ".mycoder",
-        "dist", "build", ".next", ".venv", "venv", "__pycache__", ".idea", ".swiftpm"
+        "dist", "build", ".next", ".venv", "venv", "__pycache__", ".idea", ".swiftpm",
+        ".voice-runtime", ".voice-data", ".backups", ".codegraph",
+        ".pytest_cache", ".mypy_cache", ".ruff_cache", ".repowise", ".DS_Store"
     ]
 
     static func bundleKey(_ suffix: String) -> String {

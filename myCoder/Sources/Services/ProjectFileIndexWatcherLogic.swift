@@ -8,7 +8,16 @@ enum ProjectFileIndexWatcherLogic {
         let project = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         guard !project.isEmpty, changed == project || changed.hasPrefix(project + "/") else { return false }
         let relative = changed == project ? "" : String(changed.dropFirst(project.count + 1))
-        return !relative.split(separator: "/").contains(where: { MyCoderPaths.isAppDataPathComponent(String($0)) })
+        if relative.split(separator: "/").contains(where: { MyCoderPaths.isAppDataPathComponent(String($0)) }) {
+            return false
+        }
+        // Excluded (generated/media) trees are not indexed, so changes inside
+        // them must not invalidate the index (e.g. a voice-runtime heartbeat
+        // that touches `.voice-data` every second).
+        if !relative.isEmpty, ProjectFileIndexLogic.shouldExclude(relativePath: relative) {
+            return false
+        }
+        return true
     }
 
     static func shouldApply(

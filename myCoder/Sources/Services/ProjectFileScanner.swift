@@ -15,6 +15,7 @@ enum ProjectFileScanner {
                     gitignorePatterns: [String] = [],
                     maxFileSize: Int = ProjectFileIndexLogic.defaultMaxFileSize,
                     maxRecords: Int = ProjectFileIndexLogic.defaultMaxIndexRecords,
+                    maxReadBytes: Int = ProjectFileIndexLogic.defaultMaxScanBytes,
                     fileManager: FileManager = .default) -> [FileIndexRecord] {
         let rootURL = URL(fileURLWithPath: root).standardizedFileURL
         guard let enumerator = fileManager.enumerator(
@@ -24,6 +25,7 @@ enum ProjectFileScanner {
         ) else { return [] }
 
         var records: [FileIndexRecord] = []
+        var readBytes = 0
         for case let fileURL as URL in enumerator {
             guard records.count < maxRecords else { break }
             let rel = relativePath(of: fileURL, from: rootURL)
@@ -41,10 +43,12 @@ enum ProjectFileScanner {
                                                     gitignorePatterns: gitignorePatterns,
                                                     maxFileSize: maxFileSize) else { continue }
             guard let data = try? Data(contentsOf: fileURL) else { continue }
+            readBytes += data.count
+            guard readBytes <= maxReadBytes else { break }
             let mtime = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
             let ext = (rel as NSString).pathExtension
             let searchableText: String? = {
-                let prefix = Data(data.prefix(ProjectFileIndexLogic.defaultSearchableTextMaxBytes))
+                let prefix = Data(data.prefix(ProjectFileIndexLogic.defaultIndexSearchableTextMaxBytes))
                 guard !prefix.contains(0),
                       let text = String(data: prefix, encoding: .utf8) else { return nil }
                 return text

@@ -74,4 +74,22 @@ struct PointContextIndexLogicTests {
         #expect(result.isEmpty)
         #expect(saveCount == 0)
     }
+
+    @Test("Реальный скан сохраняется и перечитывается из file_index.json")
+    func realScanPersistsToDisk() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("idx-real-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "import Foundation\nfinal class A {}".write(
+            to: root.appendingPathComponent("A.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let first = PointContextIndexLogic.records(projectPath: root.path)
+        #expect(first.isEmpty == false)
+        let reloaded = ProjectFileIndexStore.load(projectPath: root.path)
+        #expect(reloaded.map(\.path) == first.map(\.path))
+    }
 }
