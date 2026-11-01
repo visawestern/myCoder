@@ -25,7 +25,7 @@ struct EmptyChatStateView: View {
                         ProgressView()
                             .controlSize(.regular)
                             .scaleEffect(1.15)
-                        Text(L.t(AppLocalizationKey.locLoadingChat))
+                        Text(L.t(AppLocalizationKey.locLoadingMessages))
                             .interfaceFont(size: 14, weight: .medium)
                             .foregroundColor(Color.mimo.textMuted)
                             .multilineTextAlignment(.center)

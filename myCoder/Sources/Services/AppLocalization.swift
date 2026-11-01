@@ -380,6 +380,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case locLibrary
     case locLightCodeTheme
     case locLoadingChat
+    case locLoadingMessages
     case locLoadingOlderMessages
     case locLocalProviders
     case locManageCustomModelProvidersAndViewServerconnecte
@@ -1108,6 +1109,7 @@ enum AppLocalization {
         "locLibrary": ["en": "Library", "ru": "Библиотека", "es": "Biblioteca", "fr": "Bibliothèque", "de": "Bibliothek", "zh": "库", "ja": "ライブラリ", "ko": "라이브러리", "pt": "Biblioteca", "ar": "المكتبة"],
         "locLightCodeTheme": ["en": "Light code theme", "ru": "Светлая тема кода", "es": "Tema de código claro", "fr": "Thème de code clair", "de": "Helles Code-Theme", "zh": "浅色代码主题", "ja": "ライトコードテーマ", "ko": "라이트 코드 테마", "pt": "Tema de código claro", "ar": "سمة الكود الفاتحة"],
         "locLoadingChat": ["en": "Loading chat…", "ru": "Загрузка чата…", "es": "Cargando chat…", "fr": "Chargement du chat…", "de": "Chat wird geladen…", "zh": "正在加载聊天…", "ja": "チャットを読み込み中…", "ko": "채팅 로딩 중…", "pt": "Carregando chat…", "ar": "جارٍ تحميل الدردشة…"],
+        "locLoadingMessages": ["en": "Loading messages…", "ru": "Загружаем сообщения…", "es": "Cargando mensajes…", "fr": "Chargement des messages…", "de": "Nachrichten werden geladen…", "zh": "正在加载消息…", "ja": "メッセージを読み込み中…", "ko": "메시지 로딩 중…", "pt": "Carregando mensagens…", "ar": "جارٍ تحميل الرسائل…"],
         "locLoadingOlderMessages": ["en": "Loading older messages...", "ru": "Загрузка старых сообщений...", "es": "Cargando mensajes anteriores...", "fr": "Chargement des anciens messages...", "de": "Ältere Nachrichten laden...", "zh": "加载较早的消息...", "ja": "古いメッセージを読み込み中...", "ko": "이전 메시지 로딩 중...", "pt": "Carregando mensagens anteriores...", "ar": "تحميل الرسائل القديمة..."],
         "locLocalProviders": ["en": "Local providers", "ru": "Локальные провайдеры", "es": "Proveedores locales", "fr": "Fournisseurs locaux", "de": "Lokale Anbieter", "zh": "本地提供商", "ja": "ローカルプロバイダー", "ko": "로컬 공급자", "pt": "Provedores locais", "ar": "المزودون المحليون"],
         "locMcpServers": ["en": "MCP Servers", "ru": "MCP-серверы", "es": "Servidores MCP", "fr": "Serveurs MCP", "de": "MCP-Server", "zh": "MCP 服务器", "ja": "MCPサーバー", "ko": "MCP 서버", "pt": "Servidores MCP", "ar": "خوادم MCP"],

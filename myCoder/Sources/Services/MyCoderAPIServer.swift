@@ -203,6 +203,11 @@ final class MyCoderAPIServer {
             return handleScroll(body: body, query: query)
         case ("GET", "/api/screenshot"):
             return handleScreenshot(query: query)
+        case ("GET", "/api/markdown-perf"):
+            return jsonResponse(MarkdownAttributedStringBuilder.statsSnapshot().dictionary)
+        case ("POST", "/api/markdown-perf/reset"):
+            MarkdownAttributedStringBuilder.resetStats()
+            return jsonResponse(["ok": true])
         default:
             return notFound()
         }
@@ -543,11 +548,22 @@ final class MyCoderAPIServer {
         let data = body.data(using: .utf8)
         let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         let action = json?["action"] as? String ?? ""
+        let receivedAt = Date()
         Task { @MainActor in
             defer { semaphore.signal() }
+            let taskStartedAt = Date()
+            result["diag"] = [
+                "waitMs": (taskStartedAt.timeIntervalSince(receivedAt) * 1000).rounded(),
+                "workMs": 0
+            ]
             guard !action.isEmpty else {
                 result = ["ok": false, "error": "action is required (scrollBy|toTop|toBottom|toAnchor|wheel)"]
                 return
+            }
+            defer {
+                var diag = result["diag"] as? [String: Any] ?? [:]
+                diag["workMs"] = ((Date().timeIntervalSince(taskStartedAt)) * 1000).rounded()
+                result["diag"] = diag
             }
             switch action {
             case "scrollBy":

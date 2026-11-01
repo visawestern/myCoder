@@ -139,6 +139,10 @@ class AppState: ObservableObject {
     /// turn that keeps running in the background stays visible while the user
     /// reads another chat.
     @Published var streamingSessionIDs: Set<String> = []
+    /// Session whose chat history load is currently in flight. The composer
+    /// shows the loading line while this is non-nil (mirrors
+    /// `MessageStore.loadingSessionID`).
+    @Published var loadingChatSessionID: String?
     /// True while the host compiles the point context for the next send
     /// (user directive D1: the loader says "собираем точечный контекст").
     @Published var isCompilingContext = false

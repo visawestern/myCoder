@@ -149,7 +149,7 @@ struct ChatPanelView: View {
                                     HStack(spacing: 8) {
                                         Spacer()
                                         ProgressView().scaleEffect(0.8)
-                                        Text(L.t(AppLocalizationKey.locLoadingChat))
+                                        Text(L.t(AppLocalizationKey.locLoadingMessages))
                                             .interfaceFont(size: 12)
                                             .foregroundColor(Color.mimo.textMuted)
                                         Spacer()
@@ -323,6 +323,7 @@ struct ChatPanelView: View {
                         messageQueue: messageQueue,
                         contextUsage: currentContextUsage,
                         isCompilingContext: appState.isCompilingContext,
+                        isLoadingMessages: messageStore.isLoadingMessages,
                         onForceSendQueued: forceSendQueued,
                         onEditQueued: editQueuedMessage
                     )
@@ -382,7 +383,8 @@ struct ChatPanelView: View {
         .onChange(of: messageStore.loadedSessionID) { sessionID in
             handleLoadedSessionChange(sessionID)
         }
-        .onChange(of: messageStore.loadingSessionID) { _ in
+        .onChange(of: messageStore.loadingSessionID) { newID in
+            appState.loadingChatSessionID = newID
             flushPendingSpecNodePrompt()
         }
         .onAppear {
@@ -781,6 +783,7 @@ struct ChatPanelView: View {
             composerHoldsQueuedMessage = false
             return
         }
+        prepareMarkdownPrewarmProfile()
         if SessionReloadLogic.shouldReloadMessages(
             hasCachedMessages: messageStore.hasLoadedMessages(sessionID: sessionID)
         ) {
@@ -799,6 +802,21 @@ struct ChatPanelView: View {
             ?? appState.selectedWorkspace?.path ?? "global"
         appState.showPanelForChatIfPooled(projectID: projectID, chatID: sessionID)
         #endif
+    }
+
+    /// Prewarming only pays off when it uses exactly the render profile of the
+    /// visible rows (scaled font, theme, code settings). A fixed 14 pt / stale
+    /// theme produced entries the renderer never asked for, so it looked like
+    /// a cache but every row still rebuilt.
+    private func prepareMarkdownPrewarmProfile() {
+        messageStore.markdownPrewarmProjectRoot = appState.toolWorkingDirectory
+        messageStore.markdownPrewarmFontSize = InterfaceTypography.scaled(
+            14,
+            scale: appState.settings.zoom.fontScale
+        )
+        messageStore.markdownPrewarmTextColor = Color.mimo.textPrimary
+        messageStore.markdownPrewarmCodeSettings = CodeDisplaySettings(settings: appState.settings)
+        messageStore.markdownPrewarmIsLightInterface = Color.mimo.isLightTheme
     }
 
     private func handleLoadedSessionChange(_ sessionID: String?) {
@@ -829,6 +847,7 @@ struct ChatPanelView: View {
         }
         if let sessionID = appState.selectedSession?.id {
             previousSessionID = sessionID
+            prepareMarkdownPrewarmProfile()
             loadSessionMessages(sessionID: sessionID)
         }
         flushPendingSpecNodePrompt()

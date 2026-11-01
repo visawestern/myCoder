@@ -544,6 +544,10 @@ struct BottomInputBar: View {
     var contextUsage: ContextUsage? = nil
     /// True while the host compiles the point context for the outgoing message.
     var isCompilingContext: Bool = false
+    /// True while the chat's message history is being loaded (first open of a
+    /// session or an older-page fetch). Shown as a status line like the
+    /// context-compiling line, so loading is never invisible.
+    var isLoadingMessages: Bool = false
     var onForceSendQueued: (QueuedMessage) -> Void = { _ in }
     var onEditQueued: (QueuedMessage) -> Void = { _ in }
     @EnvironmentObject var appState: AppState
@@ -617,6 +621,19 @@ struct BottomInputBar: View {
                         .controlSize(.small)
                         .scaleEffect(0.7)
                     Text(L.t(AppLocalizationKey.locCompilingPointContext))
+                        .interfaceFont(size: 11)
+                        .foregroundColor(Color.mimo.textMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else if isLoadingMessages {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                    Text(L.t(AppLocalizationKey.locLoadingMessages))
                         .interfaceFont(size: 11)
                         .foregroundColor(Color.mimo.textMuted)
                     Spacer(minLength: 0)

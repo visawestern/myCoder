@@ -509,7 +509,8 @@ final class AppActionRouter {
                 "showSearch": appState.showSearch,
                 "showProjectCreation": appState.showProjectCreation,
                 "projectCreationMode": appState.projectCreationMode.rawValue,
-                "showNotifications": appState.showNotifications
+                "showNotifications": appState.showNotifications,
+                "isLoadingMessages": appState.loadingChatSessionID != nil
             ],
             "activeSpecWizardProjectPath": appState.activeSpecWizardProjectPath ?? NSNull(),
             "workspaces": appState.workspaces.map(workspaceRow),

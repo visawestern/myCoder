@@ -53,6 +53,22 @@ class MessageStore: ObservableObject {
         DatabaseBridge.shared
     }
 
+    /// Root used to resolve relative file paths while pre-rendering markdown
+    /// in the background. Set by the chat panel (it knows the workspace).
+    var markdownPrewarmProjectRoot: String? = nil
+
+    /// Render profile used for prewarming. It must match the profile the chat
+    /// rows actually pass to `SelectableMarkdownTextView` (scaled font, theme,
+    /// code settings), otherwise every prewarmed entry is a cache miss.
+    var markdownPrewarmFontSize: CGFloat = 14
+    var markdownPrewarmTextColor: Color = Color.mimo.textPrimary
+    var markdownPrewarmCodeSettings: CodeDisplaySettings = .default
+    var markdownPrewarmIsLightInterface: Bool = Color.mimo.isLightTheme
+
+    /// Only the newest prewarm pass matters (each one covers the whole visible
+    /// feed); cancelling the previous task avoids piling up work on refreshes.
+    private var markdownPrewarmTask: Task<Void, Never>?
+
     /// Kept in sync with the chat's bottom anchor. While the user reads old
     /// history, pruning is deferred so rows never disappear under the cursor;
     /// the deferred prune runs as soon as the feed is pinned to the bottom again.
@@ -252,6 +268,44 @@ class MessageStore: ObservableObject {
         }
     }
 
+    // MARK: - Markdown pre-rendering
+
+    /// Pre-build the attributed markdown for large messages in the background
+    /// right after history loads. The first scroll into a big message then
+    /// finds a ready layout instead of stalling the main thread (user report
+    /// 2026-11-01: thumb spins at the message boundary).
+    ///
+    /// The chat splits a message at fenced code blocks and gives only the
+    /// prose segments to the selectable markdown renderer; code blocks have
+    /// their own view. Prewarming the raw message text would therefore build
+    /// entries no row ever asks for, so the same split is applied here.
+    private func scheduleMarkdownPrewarm(for messages: [Message]? = nil) {
+        let source = messages ?? self.messages
+        let proseTexts = MarkdownCodeSegmentLogic.proseTexts(
+            from: source.filter { !$0.isStreaming }.map(\.content)
+        )
+
+        markdownPrewarmTask?.cancel()
+        markdownPrewarmTask = nil
+        guard !proseTexts.isEmpty else { return }
+
+        let fontSize = markdownPrewarmFontSize
+        let textColor = markdownPrewarmTextColor
+        let root = markdownPrewarmProjectRoot
+        let settings = markdownPrewarmCodeSettings
+        let isLight = markdownPrewarmIsLightInterface
+        markdownPrewarmTask = Task.detached(priority: .utility) {
+            MarkdownAttributedStringBuilder.prewarm(
+                texts: proseTexts,
+                fontSize: fontSize,
+                textColor: textColor,
+                projectRoot: root,
+                codeSettings: settings,
+                isLightInterface: isLight
+            )
+        }
+    }
+
     // MARK: - History
 
     /// Загрузить сообщения сессии из локальной БД (вместо API).
@@ -296,6 +350,7 @@ class MessageStore: ObservableObject {
         )
         feeds[sessionId] = feed
         refreshStreamingSessions()
+        scheduleMarkdownPrewarm(for: loadedMessages)
     }
 
     /// Догрузить одну страницу более старых сообщений из локальной БД
@@ -399,6 +454,7 @@ class MessageStore: ObservableObject {
         if allServerIDs.isSubset(of: localIDs) {
             hasMoreMessages = false
         }
+        scheduleMarkdownPrewarm(for: newMessages)
         return true
     }
 
@@ -426,6 +482,7 @@ class MessageStore: ObservableObject {
         feeds[visibleKey] = feed
 
         pruneIfNeeded()
+        scheduleMarkdownPrewarm(for: incoming)
         return appendedCount
     }
 

@@ -14,8 +14,7 @@ enum MarkdownDisplaySegment: Equatable {
 /// so the message has to be split at fences first; everything outside fences
 /// keeps the existing selectable renderer.
 enum MarkdownCodeSegmentLogic {
-    static func segments(from text: String) -> [MarkdownDisplaySegment] {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    static func segments(from text: String) -> [MarkdownDisplaySegment] {        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
 
@@ -60,5 +59,20 @@ enum MarkdownCodeSegmentLogic {
 
         flushProse()
         return segments
+    }
+
+    /// Prose pieces of one message, exactly as the chat hands them to the
+    /// selectable markdown renderer. Prewarming these (and not the raw
+    /// message with its fenced code blocks) is what makes a prewarmed entry
+    /// actually hit when the row appears.
+    static func proseTexts(from text: String) -> [String] {
+        segments(from: text).compactMap { segment in
+            guard case .prose(let prose) = segment else { return nil }
+            return prose
+        }
+    }
+
+    static func proseTexts(from texts: [String]) -> [String] {
+        texts.flatMap { proseTexts(from: $0) }
     }
 }

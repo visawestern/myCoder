@@ -45,7 +45,8 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
     func updateNSView(_ textView: NSTextView, context: Context) {
         guard let pathView = textView as? PathClickTextView else { return }
         pathView.menuCoordinator = context.coordinator
-        let attributed = MarkdownAttributedStringBuilder.build(
+        MarkdownAttributedStringBuilder.noteNSViewUpdate()
+        let attributed = MarkdownAttributedStringBuilder.cachedBuild(
             text: text,
             fontSize: scaledFontSize,
             textColor: textColor,
@@ -67,10 +68,18 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
     func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: NSTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? textView.bounds.width
         guard width > 0 else { return nil }
-        let height = MarkdownAttributedStringBuilder.measuredHeight(
-            for: textView,
+        MarkdownAttributedStringBuilder.noteSizeThatFitsCall()
+        let height = MarkdownAttributedStringBuilder.cachedMeasuredHeight(
+            text: text,
+            fontSize: scaledFontSize,
+            textColor: textColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: Color.mimo.isLightTheme,
             width: width
-        )
+        ) {
+            MarkdownAttributedStringBuilder.measuredHeight(for: textView, width: width)
+        }
         return CGSize(width: width, height: height)
     }
 
@@ -220,7 +229,374 @@ extension NSAttributedString.Key {
 }
 
 /// Builds the attributed string of a markdown message and measures its height.
+/// Live counters for the markdown render and layout caches.
+///
+/// A scrolling stall has exactly two expensive candidates on the main thread:
+/// parsing a message into an attributed string, and TextKit laying that string
+/// out at the current width. Guessing between them is not acceptable, so the
+/// counters are exposed through `GET /api/markdown-perf` and verified with a
+/// real scroll pass.
+struct MarkdownRenderStats: Equatable {
+    var cacheHits = 0
+    var cacheMisses = 0
+    var buildCount = 0
+    var buildTotalMilliseconds = 0.0
+    var buildMaxMilliseconds = 0.0
+    var prewarmRuns = 0
+    var prewarmBuilt = 0
+    var heightHits = 0
+    var heightMisses = 0
+    var heightTotalMilliseconds = 0.0
+    var heightMaxMilliseconds = 0.0
+    var cacheEntries = 0
+    var cacheCharacters = 0
+    var heightEntries = 0
+    var nsViewUpdates = 0
+    var sizeThatFitsCalls = 0
+
+    var dictionary: [String: Any] {
+        [
+            "cacheHits": cacheHits,
+            "cacheMisses": cacheMisses,
+            "buildCount": buildCount,
+            "buildTotalMs": (buildTotalMilliseconds * 1000).rounded() / 1000,
+            "buildMaxMs": (buildMaxMilliseconds * 1000).rounded() / 1000,
+            "prewarmRuns": prewarmRuns,
+            "prewarmBuilt": prewarmBuilt,
+            "heightHits": heightHits,
+            "heightMisses": heightMisses,
+            "heightTotalMs": (heightTotalMilliseconds * 1000).rounded() / 1000,
+            "heightMaxMs": (heightMaxMilliseconds * 1000).rounded() / 1000,
+            "cacheEntries": cacheEntries,
+            "cacheCharacters": cacheCharacters,
+            "heightEntries": heightEntries,
+            "nsViewUpdates": nsViewUpdates,
+            "sizeThatFitsCalls": sizeThatFitsCalls
+        ]
+    }
+}
+
 enum MarkdownAttributedStringBuilder {
+    // MARK: - Render cache
+    //
+    // Building the attributed string is expensive (parser + regex + syntax
+    // highlighting), and TextKit laying it out at a width is expensive again.
+    // Both used to run on the main thread every time a lazy row materialized,
+    // which is what made scrolling "stall" at the boundary of a big message.
+    //
+    // Two caches now sit in front of that work:
+    //   * attributed strings, keyed by everything that changes the output;
+    //   * measured heights, keyed by the same profile plus the layout width.
+    //
+    // Both are written from the main thread (row updates) and from a utility
+    // task (prewarm), so every access is guarded by `cacheLock`. Eviction is
+    // FIFO with a character budget: large chats cannot grow the cache without
+    // bound, and an entry larger than the whole budget is still kept because
+    // it is exactly the message the user is scrolling through.
+
+    private struct RenderKey: Hashable {
+        let text: String
+        let fontSize: CGFloat
+        let textColorRGBA: UInt32
+        let isLight: Bool
+        let lightTheme: String
+        let darkTheme: String
+        let codeFontSize: Int
+        let showLineNumbers: Bool
+        let wrapLongLines: Bool
+        let projectRoot: String?
+    }
+
+    private struct HeightKey: Hashable {
+        let render: RenderKey
+        let width: CGFloat
+    }
+
+    private static let cacheLock = NSLock()
+    private static var cache: [RenderKey: NSAttributedString] = [:]
+    private static var cacheOrder: [RenderKey] = []
+    private static var cacheCharacters = 0
+    private static let maxCacheEntries = 120
+    private static let maxCacheCharacters = 16_000_000
+
+    private static var heightCache: [HeightKey: CGFloat] = [:]
+    private static var heightOrder: [HeightKey] = []
+    private static let maxHeightEntries = 300
+
+    private static var stats = MarkdownRenderStats()
+
+    private static func rgba(_ color: Color) -> UInt32 {
+        let ns = NSColor(color).usingColorSpace(.sRGB)
+        let r = UInt32(max(0, min(1, ns?.redComponent ?? 0)) * 255)
+        let g = UInt32(max(0, min(1, ns?.greenComponent ?? 0)) * 255)
+        let b = UInt32(max(0, min(1, ns?.blueComponent ?? 0)) * 255)
+        let a = UInt32(max(0, min(1, ns?.alphaComponent ?? 1)) * 255)
+        return (r << 24) | (g << 16) | (b << 8) | a
+    }
+
+    private static func key(
+        text: String,
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String?,
+        codeSettings: CodeDisplaySettings,
+        isLightInterface: Bool
+    ) -> RenderKey {
+        RenderKey(
+            text: text,
+            fontSize: fontSize,
+            textColorRGBA: rgba(textColor),
+            isLight: isLightInterface,
+            lightTheme: codeSettings.lightThemeName,
+            darkTheme: codeSettings.darkThemeName,
+            codeFontSize: codeSettings.fontSize,
+            showLineNumbers: codeSettings.showLineNumbers,
+            wrapLongLines: codeSettings.wrapLongLines,
+            projectRoot: projectRoot
+        )
+    }
+
+    private static func evictIfNeededLocked() {
+        while (cache.count > maxCacheEntries || cacheCharacters > maxCacheCharacters),
+              cacheOrder.count > 1 {
+            let victim = cacheOrder.removeFirst()
+            if let removed = cache.removeValue(forKey: victim) {
+                cacheCharacters -= removed.length
+            }
+        }
+    }
+
+    /// Build from cache when possible. Identical output to `build`.
+    static func cachedBuild(
+        text: String,
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String? = nil,
+        codeSettings: CodeDisplaySettings = .default,
+        isLightInterface: Bool = Color.mimo.isLightTheme
+    ) -> NSAttributedString {
+        cachedBuildWithStatus(
+            text: text,
+            fontSize: fontSize,
+            textColor: textColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: isLightInterface
+        ).attributed
+    }
+
+    private static func cachedBuildWithStatus(
+        text: String,
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String?,
+        codeSettings: CodeDisplaySettings,
+        isLightInterface: Bool
+    ) -> (attributed: NSAttributedString, wasHit: Bool) {
+        let renderKey = key(
+            text: text,
+            fontSize: fontSize,
+            textColor: textColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: isLightInterface
+        )
+
+        cacheLock.lock()
+        if let cached = cache[renderKey] {
+            stats.cacheHits += 1
+            cacheLock.unlock()
+            return (cached, true)
+        }
+        stats.cacheMisses += 1
+        cacheLock.unlock()
+
+        let started = DispatchTime.now().uptimeNanoseconds
+        let built = build(
+            text: text,
+            fontSize: fontSize,
+            textColor: textColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: isLightInterface
+        )
+        let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+
+        cacheLock.lock()
+        stats.buildCount += 1
+        stats.buildTotalMilliseconds += elapsedMs
+        stats.buildMaxMilliseconds = max(stats.buildMaxMilliseconds, elapsedMs)
+        if cache[renderKey] == nil {
+            cache[renderKey] = built
+            cacheOrder.append(renderKey)
+            cacheCharacters += built.length
+            evictIfNeededLocked()
+        }
+        cacheLock.unlock()
+        return (built, false)
+    }
+
+    /// Pre-render the prose segments of large messages right after history
+    /// loads, so the first time their row appears the attributed string is
+    /// already built. `texts` must be exactly the strings handed to
+    /// `SelectableMarkdownTextView` (prose only, code fences excluded) and
+    /// `fontSize`/`textColor` must match that renderer, otherwise every entry
+    /// misses the cache and the work is wasted.
+    ///
+    /// Returns the number of entries actually built (cache misses).
+    @discardableResult
+    static func prewarm(
+        texts: [String],
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String?,
+        codeSettings: CodeDisplaySettings = .default,
+        isLightInterface: Bool,
+        threshold: Int = 800
+    ) -> Int {
+        guard !texts.isEmpty else { return 0 }
+        var built = 0
+        for text in texts where text.count >= threshold {
+            if Task.isCancelled { break }
+            let result = cachedBuildWithStatus(
+                text: text,
+                fontSize: fontSize,
+                textColor: textColor,
+                projectRoot: projectRoot,
+                codeSettings: codeSettings,
+                isLightInterface: isLightInterface
+            )
+            if !result.wasHit { built += 1 }
+        }
+        cacheLock.lock()
+        stats.prewarmRuns += 1
+        stats.prewarmBuilt += built
+        cacheLock.unlock()
+        return built
+    }
+
+    /// Height of the laid-out text at `width`, cached by the full render
+    /// profile. Re-measuring the same message on every SwiftUI pass was the
+    /// other half of the scroll stall.
+    static func cachedMeasuredHeight(
+        text: String,
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String?,
+        codeSettings: CodeDisplaySettings,
+        isLightInterface: Bool,
+        width: CGFloat,
+        measure: () -> CGFloat
+    ) -> CGFloat {
+        guard width > 0 else { return 1 }
+        // Exact width is part of the key. Rounding looked tempting but a
+        // sub-point change can move a line break, and a stale height would
+        // clip the message; a repeated identical proposal still hits.
+        let heightKey = HeightKey(
+            render: key(
+                text: text,
+                fontSize: fontSize,
+                textColor: textColor,
+                projectRoot: projectRoot,
+                codeSettings: codeSettings,
+                isLightInterface: isLightInterface
+            ),
+            width: width
+        )
+
+        cacheLock.lock()
+        if let cached = heightCache[heightKey] {
+            stats.heightHits += 1
+            cacheLock.unlock()
+            return cached
+        }
+        stats.heightMisses += 1
+        cacheLock.unlock()
+
+        let started = DispatchTime.now().uptimeNanoseconds
+        let height = measure()
+        let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+
+        cacheLock.lock()
+        stats.heightTotalMilliseconds += elapsedMs
+        stats.heightMaxMilliseconds = max(stats.heightMaxMilliseconds, elapsedMs)
+        if heightCache[heightKey] == nil {
+            heightCache[heightKey] = height
+            heightOrder.append(heightKey)
+            while heightCache.count > maxHeightEntries, heightOrder.count > 1 {
+                let victim = heightOrder.removeFirst()
+                heightCache.removeValue(forKey: victim)
+            }
+        }
+        cacheLock.unlock()
+        return height
+    }
+
+    /// Snapshot of the live counters (thread-safe).
+    static func statsSnapshot() -> MarkdownRenderStats {
+        cacheLock.lock()
+        var copy = stats
+        copy.cacheEntries = cache.count
+        copy.cacheCharacters = cacheCharacters
+        copy.heightEntries = heightCache.count
+        cacheLock.unlock()
+        return copy
+    }
+
+    /// Whether an attributed string for this exact render profile is already
+    /// cached. Used by tests to prove that prewarming seeded the same entries
+    /// the renderer asks for.
+    static func cachedAttributedString(
+        text: String,
+        fontSize: CGFloat,
+        textColor: Color,
+        projectRoot: String?,
+        codeSettings: CodeDisplaySettings,
+        isLightInterface: Bool
+    ) -> NSAttributedString? {
+        let renderKey = key(
+            text: text,
+            fontSize: fontSize,
+            textColor: textColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: isLightInterface
+        )
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return cache[renderKey]
+    }
+
+    static func resetStats() {
+        cacheLock.lock()
+        stats = MarkdownRenderStats()
+        cacheLock.unlock()
+    }
+
+    static func noteNSViewUpdate() {
+        cacheLock.lock()
+        stats.nsViewUpdates += 1
+        cacheLock.unlock()
+    }
+
+    static func noteSizeThatFitsCall() {
+        cacheLock.lock()
+        stats.sizeThatFitsCalls += 1
+        cacheLock.unlock()
+    }
+
+    /// Drop every cached render and height. Used by tests; also safe to call
+    /// on memory pressure.
+    static func clearCaches() {
+        cacheLock.lock()
+        cache.removeAll()
+        cacheOrder.removeAll()
+        cacheCharacters = 0
+        heightCache.removeAll()
+        heightOrder.removeAll()
+        cacheLock.unlock()
+    }
+
     static func build(
         text: String,
         fontSize: CGFloat,

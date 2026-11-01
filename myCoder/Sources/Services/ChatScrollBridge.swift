@@ -275,12 +275,22 @@ final class ChatScrollBridge {
     }
 
     private func resolvedScrollView() -> NSScrollView? {
-        if let scrollView { return scrollView }
         let candidates = windowScrollViews()
-        // The chat scroll view spans the middle of the window and is wide;
-        // sidebar lists are narrow (≈300 pt). Prefer a wide candidate when
-        // one exists, otherwise fall back to the largest area.
-        if let wide = candidates.first(where: { $0.frame.width >= 400 }) {
+        let wide = candidates.first(where: { $0.frame.width >= 400 })
+        if let current = scrollView, current.window != nil {
+            // If a wider chat scroll view exists and we are bound to a narrow
+            // sidebar (or any smaller candidate), rebind to the chat view.
+            if let wide, current !== wide.view {
+                bind(wide.view)
+                monitoringSource = "window-scan"
+                return wide.view
+            }
+            let stillValid = candidates.contains { $0.view === current }
+            if stillValid {
+                return current
+            }
+        }
+        if let wide {
             return wide.view
         }
         return candidates.first?.view
@@ -476,7 +486,18 @@ final class ChatScrollBridge {
         let step = max(1, intervalMilliseconds)
         let count = times
 
+        // Bring the app to the front so the posted events land in our window
+        // (the harness/terminal may own the foreground), then place the cursor
+        // at the wheel point so the events hit-test against the chat scroll
+        // view. A short settle after the warp is required: events posted
+        // immediately can still be routed to the previous cursor region.
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.mycoder.app").first {
+            app.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
+        }
+        CGWarpMouseCursorPosition(point)
+
         Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
             for _ in 0..<count {
                 if let event = CGEvent(
                     scrollWheelEvent2Source: nil,
