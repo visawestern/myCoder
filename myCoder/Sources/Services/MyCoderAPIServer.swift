@@ -113,8 +113,14 @@ final class MyCoderAPIServer {
             let requestLine = lines.first ?? ""
             let parts = requestLine.components(separatedBy: " ")
             let method = parts.count > 0 ? parts[0] : "GET"
-            let path = parts.count > 1 ? parts[1] : "/"
-            let response = self.routeRequest(method: method, path: path, body: body)
+            let rawPath = parts.count > 1 ? parts[1] : "/"
+            var path = rawPath
+            var query: String = ""
+            if let queryStart = rawPath.firstIndex(of: "?") {
+                path = String(rawPath[..<queryStart])
+                query = String(rawPath[rawPath.index(after: queryStart)...])
+            }
+            let response = self.routeRequest(method: method, path: path, body: body, query: query)
             self.sendResponse(response, on: connection)
         }
     }
@@ -141,7 +147,7 @@ final class MyCoderAPIServer {
         return "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\n\r\n{\"error\":\"request body exceeds 4 MB\"}"
     }
 
-    private func routeRequest(method: String, path: String, body: String) -> String {
+    private func routeRequest(method: String, path: String, body: String, query: String = "") -> String {
         switch (method, path) {
         case ("GET", "/api/actions"):
             return handleActions()
@@ -191,6 +197,12 @@ final class MyCoderAPIServer {
             return handleUpdateProviderURL(body: body)
         case ("POST", "/api/set-web-model"):
             return handleSetWebModel(body: body)
+        case ("GET", "/api/scroll"):
+            return handleScroll(query: query)
+        case ("POST", "/api/scroll"):
+            return handleScroll(body: body, query: query)
+        case ("GET", "/api/screenshot"):
+            return handleScreenshot(query: query)
         default:
             return notFound()
         }
@@ -493,6 +505,135 @@ final class MyCoderAPIServer {
     
     private func notFound() -> String {
         return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n{\"error\":\"not found\"}"
+    }
+
+    // MARK: - Scroll API
+
+    /// GET /api/scroll — report the live chat scroll state: offset, content
+    /// range, whether the bottom is visible, the last command, and (with
+    /// `?samples=1`) recent offset samples. This is the read side of the
+    /// scroll diagnostics.
+    private func handleScroll(query: String = "") -> String {
+        let sampleLimit = query.components(separatedBy: "&")
+            .first(where: { $0.hasPrefix("samples=") })
+            .flatMap { Int($0.dropFirst("samples=".count)) } ?? 0
+        let semaphore = DispatchSemaphore(value: 0)
+        var state: [String: Any] = ["error": "scroll state timed out"]
+        Task { @MainActor in
+            state = ChatScrollBridge.shared.state(
+                includeSamples: sampleLimit > 0,
+                sampleLimit: sampleLimit > 0 ? min(sampleLimit, 200) : 0
+            )
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 10)
+        return jsonResponse(state)
+    }
+
+    /// POST /api/scroll — drive the chat scroll. Body:
+    ///   { "action": "scrollBy" | "toTop" | "toBottom" | "toAnchor" | "wheel",
+    ///     "pixels": 240,            // scrollBy: px (positive down)
+    ///     "direction": "up"|"down", // wheel only
+    ///     "times": 40,              // wheel only
+    ///     "intervalMs": 16,         // wheel only
+    ///     "anchor": "<messageId>" } // toAnchor only
+    private func handleScroll(body: String, query: String = "") -> String {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: [String: Any] = ["error": "scroll command timed out"]
+        let data = body.data(using: .utf8)
+        let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let action = json?["action"] as? String ?? ""
+        Task { @MainActor in
+            defer { semaphore.signal() }
+            guard !action.isEmpty else {
+                result = ["ok": false, "error": "action is required (scrollBy|toTop|toBottom|toAnchor|wheel)"]
+                return
+            }
+            switch action {
+            case "scrollBy":
+                guard let pixels = json?["pixels"] as? Double else {
+                    result = ["ok": false, "error": "pixels required (Double)"]
+                    return
+                }
+                result = ChatScrollBridge.shared.scrollBy(
+                    pixels: CGFloat(pixels),
+                    source: "api"
+                )
+            case "toTop":
+                result = ChatScrollBridge.shared.scrollToTop(source: "api")
+            case "toBottom":
+                result = ChatScrollBridge.shared.scrollToBottom(source: "api")
+            case "toAnchor":
+                guard let anchor = json?["anchor"] as? String, !anchor.isEmpty else {
+                    result = ["ok": false, "error": "anchor required (messageId)"]
+                    return
+                }
+                result = ChatScrollBridge.shared.scroll(toAnchor: anchor)
+            case "wheel":
+                guard let pixels = json?["pixels"] as? NSNumber else {
+                    result = ["ok": false, "error": "pixels required (Int)"]
+                    return
+                }
+                let direction = json?["direction"] as? String ?? "down"
+                let times = (json?["times"] as? Int) ?? 20
+                let intervalMs = (json?["intervalMs"] as? Int) ?? 16
+                result = ChatScrollBridge.shared.postWheel(
+                    pixels: pixels.int32Value,
+                    times: times,
+                    intervalMilliseconds: intervalMs,
+                    direction: direction
+                )
+            case "debugHit":
+                result = ChatScrollBridge.shared.hitChain()
+            default:
+                result = ["ok": false, "error": "unknown action \(action)"]
+            }
+        }
+        _ = semaphore.wait(timeout: .now() + 15)
+        return jsonResponse(result)
+    }
+
+    // MARK: - Screenshot API
+
+    /// GET /api/screenshot — capture the app's own window (no Screen Recording
+    /// permission needed) and return it as PNG. Supports `?path=/abs/out.png`
+    /// to write to a file instead of returning base64.
+    private func handleScreenshot(query: String = "") -> String {
+        let requestedPath = query.components(separatedBy: "&")
+            .first(where: { $0.hasPrefix("path=") })
+            .flatMap { String($0.dropFirst("path=".count)) }
+            .map { ($0 as NSString).expandingTildeInPath }
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: [String: Any] = ["error": "screenshot timed out"]
+        Task { @MainActor in
+            defer { semaphore.signal() }
+            guard let shot = AppWindowCapture.capture() else {
+                result = ["ok": false, "error": "no visible window content to capture"]
+                return
+            }
+            let target: URL
+            if let requestedPath {
+                target = URL(fileURLWithPath: requestedPath)
+            } else {
+                target = AppWindowCapture.defaultURL()
+            }
+            do {
+                try AppWindowCapture.write(shot, to: target)
+                result = [
+                    "ok": true,
+                    "method": shot.method,
+                    "width": shot.width,
+                    "height": shot.height,
+                    "windowTitle": shot.windowTitle,
+                    "path": target.path,
+                    "base64": shot.pngData.base64EncodedString()
+                ]
+            } catch {
+                result = ["ok": false, "error": "capture failed: \(error.localizedDescription)"]
+            }
+        }
+        _ = semaphore.wait(timeout: .now() + 15)
+        return jsonResponse(result)
     }
 
     private func handleRefreshModels(body: String) -> String {

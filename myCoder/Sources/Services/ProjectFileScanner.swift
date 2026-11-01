@@ -49,9 +49,12 @@ enum ProjectFileScanner {
             let ext = (rel as NSString).pathExtension
             let searchableText: String? = {
                 let prefix = Data(data.prefix(ProjectFileIndexLogic.defaultIndexSearchableTextMaxBytes))
-                guard !prefix.contains(0),
-                      let text = String(data: prefix, encoding: .utf8) else { return nil }
-                return text
+                guard !prefix.contains(0) else { return nil }
+                // Truncation can split a multi-byte UTF-8 character at the
+                // cap. A strict decode returns nil and silently drops ALL
+                // searchable text for the file; replacement decoding keeps
+                // the readable prefix.
+                return String(decoding: prefix, as: UTF8.self)
             }()
             records.append(FileIndexRecord(
                 path: rel,

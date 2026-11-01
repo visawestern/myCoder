@@ -92,5 +92,34 @@ struct ChatScrollLogicTests {
         #expect(ChatScrollLogic.userScrollSuppression >= 0.4)
         #expect(ChatScrollLogic.minScrollInterval >= 0.03)
         #expect(ChatScrollLogic.coalesceNanoseconds >= 8_000_000)
+        #expect(ChatScrollLogic.upwardReadingProtection >= 2.0)
+    }
+
+    @Test("Чтение вверх подавляет автопрокрутку вниз")
+    func upwardReadingSuppressesAutoScroll() {
+        let now = Date()
+        #expect(ChatScrollLogic.shouldSuppressAutoScroll(
+            lastWheelAt: now.addingTimeInterval(-1),
+            lastWheelDirection: .up,
+            now: now
+        ))
+        // Недавно, но листали вниз — подавления нет.
+        #expect(!ChatScrollLogic.shouldSuppressAutoScroll(
+            lastWheelAt: now.addingTimeInterval(-1),
+            lastWheelDirection: .down,
+            now: now
+        ))
+        // Листали вверх, но давно — защита истекла.
+        #expect(!ChatScrollLogic.shouldSuppressAutoScroll(
+            lastWheelAt: now.addingTimeInterval(-10),
+            lastWheelDirection: .up,
+            now: now
+        ))
+        // Никогда не листали — подавления нет.
+        #expect(!ChatScrollLogic.shouldSuppressAutoScroll(
+            lastWheelAt: .distantPast,
+            lastWheelDirection: nil,
+            now: now
+        ))
     }
 }

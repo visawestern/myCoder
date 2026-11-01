@@ -40,11 +40,15 @@ enum ProjectFileIndexEventUpdater {
             guard std == root || std.hasPrefix(root + "/") else { continue }
             let rel = relative(std, root: root)
             // Never touch our own data dir (would loop on index saves).
-            if rel.split(separator: "/").contains(where: { MyCoderPaths.isAppDataPathComponent(String($0)) }) {
+            if !rel.isEmpty,
+               rel.split(separator: "/").contains(where: { MyCoderPaths.isAppDataPathComponent(String($0)) }) {
                 continue
             }
 
-            if ProjectFileIndexLogic.shouldExclude(
+            // Exclusion is a project-relative decision. The root itself is
+            // always inside its own project even when an ancestor directory
+            // happens to be named "build"/"dist".
+            if !rel.isEmpty, ProjectFileIndexLogic.shouldExclude(
                 relativePath: rel,
                 gitignorePatterns: options.gitignorePatterns
             ) {
@@ -81,21 +85,34 @@ enum ProjectFileIndexEventUpdater {
             }
         }
 
-        return byPath.values.sorted { $0.path < $1.path }
+        var result = byPath.values.sorted { $0.path < $1.path }
+        // A hard cap on growth: event batches may not push the index past the
+        // same limit the baseline scan honors. Existing records stay; only
+        // newly added paths beyond the cap are dropped.
+        if result.count > options.maxRecords {
+            let originalPaths = Set(stored.map(\.path))
+            var newlyAdded = result.map(\.path).filter { !originalPaths.contains($0) }
+            while result.count > options.maxRecords, let candidate = newlyAdded.popLast() {
+                result.removeAll { $0.path == candidate }
+            }
+        }
+        return result
     }
 
     // MARK: - Internals
 
     private static func relative(_ absolute: String, root: String) -> String {
+        if absolute == root { return "" }
         let base = root.hasSuffix("/") ? root : root + "/"
         return absolute.hasPrefix(base) ? String(absolute.dropFirst(base.count)) : absolute
     }
 
     /// Removes an exact record and, when the path was a directory, its whole
-    /// subtree.
+    /// subtree. An empty path matches the project root's whole subtree.
     private static func removeFrom(_ byPath: inout [String: FileIndexRecord], path: String) {
         byPath.removeValue(forKey: path)
-        for key in byPath.keys where key.hasPrefix(path + "/") {
+        let prefix = path.isEmpty ? "" : path + "/"
+        for key in byPath.keys.filter({ $0.hasPrefix(prefix) }) {
             byPath.removeValue(forKey: key)
         }
     }
@@ -119,9 +136,10 @@ enum ProjectFileIndexEventUpdater {
         let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         let searchableText: String? = {
             let prefix = data.prefix(options.searchableTextMaxBytes)
-            guard !prefix.contains(0),
-                  let text = String(data: prefix, encoding: .utf8) else { return nil }
-            return text
+            guard !prefix.contains(0) else { return nil }
+            // See ProjectFileScanner: a split multi-byte character at the cap
+            // must not discard the whole text.
+            return String(decoding: prefix, as: UTF8.self)
         }()
         let ext = (rel as NSString).pathExtension
         return FileIndexRecord(
@@ -149,16 +167,26 @@ enum ProjectFileIndexEventUpdater {
             options: []
         ) else { return }
 
-        var visitedRel = Set<String>([rel])
+        var visitedRel = Set<String>()
+        if !rel.isEmpty { visitedRel.insert(rel) }
+        // A capped batch is a partial view of the directory. Treating every
+        // unvisited stored entry as deleted would wipe valid records (and was
+        // observed as data loss in a directory event); only a full pass may
+        // remove what it did not see.
+        var truncated = false
         for case let fileURL as URL in enumerator {
-            guard processed < options.maxFilesPerBatch else { break }
+            if processed >= options.maxFilesPerBatch {
+                truncated = true
+                break
+            }
             let childRel = relative(fileURL.standardizedFileURL.path, root: root)
-            visitedRel.insert(childRel)
 
             if ProjectFileIndexLogic.shouldExclude(
                 relativePath: childRel,
                 gitignorePatterns: options.gitignorePatterns
             ) {
+                // Excluded trees must not keep records from an older scan.
+                removeFrom(&byPath, path: childRel)
                 if (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
                     enumerator.skipDescendants()
                 }
@@ -167,6 +195,7 @@ enum ProjectFileIndexEventUpdater {
             guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
                 continue
             }
+            visitedRel.insert(childRel)
             if let record = record(for: fileURL.path, rel: childRel, options: options, fileManager: fileManager) {
                 byPath[childRel] = record
             } else {
@@ -175,8 +204,11 @@ enum ProjectFileIndexEventUpdater {
             processed += 1
         }
 
-        // Stored entries inside this directory that no longer exist are gone.
-        for key in byPath.keys where key.hasPrefix(rel + "/") && !visitedRel.contains(key) {
+        guard !truncated else { return }
+        // Full pass: stored entries inside this directory that no longer
+        // exist are gone. An empty `rel` is the project root.
+        let prefix = rel.isEmpty ? "" : rel + "/"
+        for key in byPath.keys where key.hasPrefix(prefix) && !visitedRel.contains(key) {
             byPath.removeValue(forKey: key)
         }
     }

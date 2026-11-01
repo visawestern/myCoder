@@ -195,6 +195,128 @@ struct ProjectFileIndexEventUpdaterTests {
         #expect(updated == stored)
     }
 
+    @Test("Обрезанный батч не удаляет необработанные записи директории")
+    func truncatedDirectoryBatchKeepsUnvisitedRecords() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let src = root.appendingPathComponent("Sources", isDirectory: true)
+        for i in 0..<6 {
+            try "let v\(i) = \(i)\n".write(
+                to: src.appendingPathComponent("Extra\(i).swift"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+        let stored = baseline(root)
+        #expect(stored.count == 8)
+
+        var options = ProjectFileIndexEventUpdater.Options()
+        options.maxFilesPerBatch = 2
+
+        let updated = ProjectFileIndexEventUpdater.apply(
+            changedPaths: [src.path],
+            stored: stored,
+            projectPath: root.path,
+            options: options
+        )
+        // Батч обработал только часть папки — остальные записи живые и
+        // обязаны остаться в индексе.
+        #expect(updated.count == stored.count)
+        for record in stored {
+            #expect(updated.contains { $0.path == record.path })
+        }
+    }
+
+    @Test("Событие по корню проекта обновляет файл, даже если путь содержит build")
+    func projectRootEventWorksUnderExcludedComponent() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("build-\(UUID().uuidString)", isDirectory: true)
+        let root = base.appendingPathComponent("build", isDirectory: true)
+            .appendingPathComponent("project-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let file = root.appendingPathComponent("A.swift")
+        try "let a = 1\n".write(to: file, atomically: true, encoding: .utf8)
+        let stored = baseline(root)
+        let before = try #require(record(byPath: "A.swift", in: stored))
+
+        try "let a = 2\n".write(to: file, atomically: true, encoding: .utf8)
+        let updated = ProjectFileIndexEventUpdater.apply(
+            changedPaths: [root.path],
+            stored: stored,
+            projectPath: root.path
+        )
+        let after = try #require(record(byPath: "A.swift", in: updated))
+        #expect(after.hash != before.hash)
+    }
+
+    @Test("Событие по корню убирает устаревшую запись из исключённой папки")
+    func rootEventRemovesStaleExcludedRecord() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let nm = root.appendingPathComponent("node_modules", isDirectory: true)
+        try FileManager.default.createDirectory(at: nm, withIntermediateDirectories: true)
+        try "{}".write(to: nm.appendingPathComponent("pkg.json"), atomically: true, encoding: .utf8)
+
+        let stale = FileIndexRecord(
+            path: "node_modules/pkg.json",
+            hash: "stale",
+            size: 2,
+            lastModified: 1_700_000_000,
+            language: "json",
+            searchableText: "{}"
+        )
+        let updated = ProjectFileIndexEventUpdater.apply(
+            changedPaths: [root.path],
+            stored: [stale],
+            projectPath: root.path
+        )
+        #expect(record(byPath: "node_modules/pkg.json", in: updated) == nil)
+    }
+
+    @Test("Событие по корню убирает удалённый файл")
+    func rootEventRemovesDeletedFile() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stored = baseline(root)
+        let deleted = root.appendingPathComponent("A.swift")
+        try FileManager.default.removeItem(at: deleted)
+
+        let updated = ProjectFileIndexEventUpdater.apply(
+            changedPaths: [root.path],
+            stored: stored,
+            projectPath: root.path
+        )
+        #expect(record(byPath: "A.swift", in: updated) == nil)
+        #expect(record(byPath: "Sources/B.swift", in: updated) != nil)
+    }
+
+    @Test("События не растят индекс выше maxRecords")
+    func eventBatchRespectsRecordCap() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stored = baseline(root)
+        var options = ProjectFileIndexEventUpdater.Options()
+        options.maxRecords = stored.count
+
+        let added = root.appendingPathComponent("New.swift")
+        try "let n = 1\n".write(to: added, atomically: true, encoding: .utf8)
+
+        let updated = ProjectFileIndexEventUpdater.apply(
+            changedPaths: [added.path],
+            stored: stored,
+            projectPath: root.path,
+            options: options
+        )
+        #expect(updated.count == stored.count)
+        #expect(record(byPath: "New.swift", in: updated) == nil)
+    }
+
     @Test("Файл больше лимита не индексируется и убирается")
     func oversizedFileIsNotIndexed() throws {
         let root = try makeProject()

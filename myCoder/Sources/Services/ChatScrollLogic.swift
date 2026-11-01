@@ -38,6 +38,32 @@ enum ChatScrollLogic {
     /// catching up.
     static let userScrollSuppression: TimeInterval = 0.5
 
+    /// While the user is actively scrolling UP (reading older content), the
+    /// auto-scroll must not fight them at all — even after the short
+    /// suppression window, because a streaming answer grows below and a
+    /// forced bottom-jump would yank the reader out of the text they are
+    /// reading. This is the time window during which an upward-reading user
+    /// is protected from auto-scroll.
+    static let upwardReadingProtection: TimeInterval = 4.0
+
+    /// Direction of the user's last wheel gesture.
+    enum WheelDirection: String, Equatable {
+        case up
+        case down
+    }
+
+    /// True when the user has recently scrolled UP (protecting their reading
+    /// position) and the auto-scroll should therefore not jump to the bottom.
+    static func shouldSuppressAutoScroll(
+        lastWheelAt: Date,
+        lastWheelDirection: WheelDirection?,
+        now: Date = Date(),
+        protection: TimeInterval = upwardReadingProtection
+    ) -> Bool {
+        guard lastWheelDirection == .up else { return false }
+        return now.timeIntervalSince(lastWheelAt) < protection
+    }
+
     /// Minimum gap between two auto-scrolls. Streaming updates the revision
     /// on every token; throttling coalesces a burst into one scroll per chunk
     /// instead of one scroll per token (which makes the chat dart around).
@@ -78,11 +104,22 @@ enum ChatScrollLogic {
         wasAtBottom
     }
 
-    /// A freshly appended message (the chat grew) is a hard reason to follow:
-    /// the user asked for the latest state. The glued-anchor check can lag a
-    /// layout pass, so counting messages is more reliable for this case.
-    static func shouldScrollAfterNewMessage(oldCount: Int, newCount: Int) -> Bool {
-        newCount > oldCount
+    /// A freshly appended message is a hard reason to follow: the user asked
+    /// for the latest state. The glued-anchor check can lag a layout pass, so
+    /// the newest message id is more reliable than the anchor frame.
+    ///
+    /// Growth alone is not enough: loading older messages prepends to the
+    /// feed, so the count grows while the newest message stays the same. That
+    /// is a history read, not a new answer — scrolling to the bottom would
+    /// yank the user away from what they just opened (user directive).
+    static func shouldScrollAfterNewMessage(
+        oldCount: Int,
+        newCount: Int,
+        oldLastMessageID: String?,
+        newLastMessageID: String?
+    ) -> Bool {
+        guard newCount > oldCount else { return false }
+        return newLastMessageID != oldLastMessageID
     }
 
     static func shouldScrollOnSessionChange(oldSessionID: String?, newSessionID: String?) -> Bool {

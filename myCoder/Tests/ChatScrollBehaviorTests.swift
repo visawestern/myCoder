@@ -30,14 +30,31 @@ struct ChatScrollBehaviorTests {
 
     @Test("Новое сообщение — принудительная прокрутка")
     func newMessageForcesScroll() {
-        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 1, newCount: 2))
-        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 0, newCount: 1))
+        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: 1, newCount: 2, oldLastMessageID: "m1", newLastMessageID: "m2"
+        ))
+        #expect(ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: 0, newCount: 1, oldLastMessageID: nil, newLastMessageID: "m1"
+        ))
     }
 
     @Test("Без роста числа сообщений — прокрутка не принудительная")
     func noGrowthNoForcedScroll() {
-        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 2, newCount: 2))
-        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(oldCount: 3, newCount: 2))
+        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: 2, newCount: 2, oldLastMessageID: "m2", newLastMessageID: "m2"
+        ))
+        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: 3, newCount: 2, oldLastMessageID: "m3", newLastMessageID: "m2"
+        ))
+    }
+
+    @Test("Подгрузка старых сообщений вверх не утягивает вниз")
+    func prependingOlderMessagesDoesNotForceScroll() {
+        // Количество выросло (2 → 5), но последнее сообщение то же: это
+        // пагинация истории, а не новое сообщение.
+        #expect(!ChatScrollLogic.shouldScrollAfterNewMessage(
+            oldCount: 2, newCount: 5, oldLastMessageID: "m2", newLastMessageID: "m2"
+        ))
     }
 
     @Test("Chat panel renders the floating scroll button and forces scroll on load")

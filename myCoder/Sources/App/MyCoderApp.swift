@@ -2321,8 +2321,13 @@ class AppState: ObservableObject {
     }
 
     /// Build the data context for the in-input command dropdown (plan Раздел 6).
-    /// Cached project file list for `@` mentions (audit P12).
-    private var projectFilesCache: ProjectFilesCacheState?
+    /// Serializes baseline builds and event-driven updates: two batches must
+    /// never load the same snapshot, apply different changes and overwrite
+    /// each other (last-writer-wins would silently lose an edit).
+    private let projectIndexUpdateQueue = DispatchQueue(
+        label: "com.mycoder.project-index-update",
+        qos: .utility
+    )
     private var projectFileIndexWatcher: ProjectFileIndexWatcher?
     private var projectFileIndexGeneration: UInt64 = 0
 
@@ -2330,7 +2335,6 @@ class AppState: ObservableObject {
         projectFileIndexGeneration &+= 1
         projectFileIndexWatcher?.stop()
         projectFileIndexWatcher = nil
-        projectFilesCache = nil
         guard let workspace, !workspace.path.isEmpty else { return }
 
         let path = workspace.path
@@ -2347,7 +2351,6 @@ class AppState: ObservableObject {
                           eventGeneration: eventGeneration,
                           activeGeneration: self.projectFileIndexGeneration
                       ) else { return }
-                self.projectFilesCache = nil
                 self.reindexProjectFileChanges(paths: changedPaths, generation: eventGeneration)
             }
         }
@@ -2357,9 +2360,11 @@ class AppState: ObservableObject {
         // Baseline: build the project file index once (and only when it is
         // missing) in the background. Every later change is handled
         // event-by-event by `reindexProjectFileChanges` — no repeated full
-        // scans. The scan is bounded (30k records, 5 MB/file) and skips the
-        // generated/media directories in `defaultExcludes`.
-        Task.detached(priority: .utility) {
+        // scans. The scan is bounded (400 MB read, 30k records, 5 MB/file)
+        // and skips the generated/media directories in `defaultExcludes`.
+        // The serial queue guarantees the baseline lands before any event
+        // batch applies on top of it.
+        projectIndexUpdateQueue.async {
             _ = PointContextIndexLogic.records(projectPath: path)
         }
     }
@@ -2376,7 +2381,7 @@ class AppState: ObservableObject {
                 file: "/tmp/mycoder_agent.log"
             )
         }
-        Task.detached(priority: .utility) {
+        projectIndexUpdateQueue.async {
             let stored = ProjectFileIndexStore.load(projectPath: path)
             let updated = ProjectFileIndexEventUpdater.apply(
                 changedPaths: paths,
@@ -2404,17 +2409,9 @@ class AppState: ObservableObject {
     func searchProjectFiles(query: String) -> [FileIndexRecord] {
         let path = selectedWorkspace?.path ?? ""
         guard !path.isEmpty else { return [] }
-        if ProjectFilesCacheLogic.needsRescan(cache: projectFilesCache, currentPath: path) {
-            let currentRecords = ProjectFileIndexStore.load(projectPath: path)
-            let scannedRecords = ProjectFileScanner.scan(root: path)
-            let records = ProjectFileIndexPersistenceLogic.applyDelta(current: currentRecords, scanned: scannedRecords)
-            ProjectFileIndexStore.save(projectPath: path, records: records)
-            projectFilesCache = ProjectFilesCacheState(
-                projectPath: path,
-                fileNames: records.map(\.path),
-                scannedAt: Date()
-            )
-        }
+        // Read the maintained index. Scanning here ran synchronously on the
+        // main thread on every search-palette redraw (and rewrote the whole
+        // index), freezing the UI on large repos.
         return ProjectFileSearchLogic.search(
             query: query,
             records: ProjectFileIndexStore.load(projectPath: path)
@@ -2426,19 +2423,11 @@ class AppState: ObservableObject {
         let mcpServers = AgentResourcesLoader.loadMCPServers().map { $0.name }
         let sessionTitles = sessions.map { $0.title }
         let path = selectedWorkspace?.path ?? ""
-        // Real project files for `@` — scan (cached, TTL) instead of empty list.
-        if ProjectFilesCacheLogic.needsRescan(cache: projectFilesCache, currentPath: path) {
-            let currentRecords = ProjectFileIndexStore.load(projectPath: path)
-            let scannedRecords = ProjectFileScanner.scan(root: path)
-            let records = ProjectFileIndexPersistenceLogic.applyDelta(current: currentRecords, scanned: scannedRecords)
-            ProjectFileIndexStore.save(projectPath: path, records: records)
-            projectFilesCache = ProjectFilesCacheState(
-                projectPath: path,
-                fileNames: records.map(\.path),
-                scannedAt: Date()
-            )
-        }
-        let fileNames = ProjectFilesCacheLogic.fileNames(cache: projectFilesCache, currentPath: path)
+        // Real project files for `@` from the maintained index. The old
+        // main-thread scan blocked the dropdown for seconds on a large repo.
+        let fileNames = path.isEmpty
+            ? []
+            : ProjectFileIndexStore.load(projectPath: path).map(\.path)
         return InputDropdownDataSource.Context(
             commands: SlashCommandRegistry.allCommands(),
             installedSkills: skills,

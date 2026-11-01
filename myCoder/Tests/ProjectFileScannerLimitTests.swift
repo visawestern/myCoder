@@ -63,6 +63,30 @@ struct ProjectFileScannerLimitTests {
         #expect(ProjectFileIndexLogic.defaultMaxScanBytes < 10 * 1024 * 1024 * 1024)
     }
 
+    @Test("Усечение текста не теряет файл, если разрезало многобайтовый символ")
+    func truncationSplitsMultibyteCharacter() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan-utf8-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // Ровно на границе кэпа (96 КБ) начинается двухбайтовая «я»:
+        // префикс обрезает её посередине. Строгий UTF-8 decode вернул бы nil,
+        // и файл потерял бы весь поисковый текст.
+        let prefix = String(repeating: "a", count: ProjectFileIndexLogic.defaultIndexSearchableTextMaxBytes - 1)
+        try (prefix + "я хвост").write(
+            to: root.appendingPathComponent("Cyrillic.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let rec = try #require(
+            ProjectFileScanner.scan(root: root.path).first { $0.path == "Cyrillic.swift" }
+        )
+        #expect(rec.searchableText != nil)
+        #expect(rec.searchableText?.hasPrefix("aaa") == true)
+    }
+
     @Test("Сканер хранит урезанный текст (не полный файл)")
     func scanStoresTruncatedSearchableText() throws {
         let root = FileManager.default.temporaryDirectory

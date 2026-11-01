@@ -65,12 +65,20 @@ struct ChatPanelView: View {
     /// Timestamp of the user's last wheel scroll: auto-scroll is suppressed
     /// right after, so reading older messages is never yanked back.
     @State private var lastUserScrollAt = Date.distantPast
+    /// Direction of the user's last wheel gesture. While it is `.up`, the
+    /// auto-scroll is suppressed for `upwardReadingProtection` so a growing
+    /// answer below never yanks the reader out of older content (user report
+    /// 2026-11-01: «прокрутка стопорится / прокручивает сразу куском»).
+    @State private var lastUserWheelDirection: ChatScrollLogic.WheelDirection?
     /// Timestamp of the last auto-scroll (throttle).
     @State private var lastAutoScrollAt = Date.distantPast
     /// One scheduled auto-scroll at a time (coalescing).
     @State private var pendingAutoScrollTask: Task<Void, Never>?
-    /// Message count of the last revision: growth means a new message arrived.
+    /// Message count / newest id of the last revision: growth of the count
+    /// AND a new newest id means a new message was appended (not older
+    /// messages prepended by history pagination).
     @State private var lastKnownMessageCount = 0
+    @State private var lastKnownLastMessageID: String?
     @State private var scrollEventMonitor: Any?
     @State private var currentUserMessageID: String?
     @State private var canLoadOlderMessages = false
@@ -195,11 +203,30 @@ struct ChatPanelView: View {
                                             )
                                         }
                                     )
+
+                                // Second attachment point for the scroll bridge:
+                                // this one lives INSIDE the lazy content near
+                                // the bottom sentinel, so it is materialized
+                                // whenever the chat is pinned to the bottom
+                                // (where the auto-scroll and wheel behavior are
+                                // reproduced). The outer .background probe is
+                                // the always-present fallback.
+                                ChatScrollProbe()
+                                    .frame(width: 0, height: 0)
                             }
                             .padding(.top, 16)
                             .padding(.bottom, 16 + ChatScrollLogic.bottomContentInset)
                         }
                         .chatScrollSpaceReporter()
+                        .background(
+                            // Live scroll diagnostics: the probe climbs to the
+                            // enclosing NSScrollView and registers it with the
+                            // bridge for /api/scroll. It lives OUTSIDE the
+                            // LazyVStack so it exists even when the lazy stack
+                            // has no visible rows.
+                            ChatScrollProbe()
+                                .frame(width: 0, height: 0)
+                        )
                         .onPreferenceChange(ChatRowFrameKey.self) { value in
                             userRowFrames = value
                         }
@@ -233,10 +260,17 @@ struct ChatPanelView: View {
                             installScrollWheelMonitor()
                             scrollToBottomOnAppear(proxy: proxy)
                             applyPendingMessageFocus(proxy: proxy)
+                            ChatScrollBridge.shared.registerAnchorJumper { id, anchor in
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    proxy.scrollTo(id, anchor: anchor)
+                                }
+                            }
                         }
                         .onDisappear {
                             pendingAutoScrollTask?.cancel()
                             removeScrollWheelMonitor()
+                            ChatScrollBridge.shared.clearAnchorJumper()
+                            ChatScrollBridge.shared.detach()
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if ChatScrollLogic.showsScrollToBottomButton(
@@ -538,15 +572,28 @@ struct ChatPanelView: View {
     ///   viewport bottom (no drift → nothing to do).
     private func autoScrollIfPinned(proxy: ScrollViewProxy) {
         let messageCount = displayMessages.count
+        let lastMessageID = displayMessages.last?.id
         let hasNewMessage = ChatScrollLogic.shouldScrollAfterNewMessage(
             oldCount: lastKnownMessageCount,
-            newCount: messageCount
+            newCount: messageCount,
+            oldLastMessageID: lastKnownLastMessageID,
+            newLastMessageID: lastMessageID
         )
         if lastKnownMessageCount != messageCount {
             lastKnownMessageCount = messageCount
         }
+        if lastKnownLastMessageID != lastMessageID {
+            lastKnownLastMessageID = lastMessageID
+        }
         guard hasNewMessage || ChatScrollLogic.shouldAutoScroll(wasAtBottom: isChatBottomVisible) else { return }
         guard Date().timeIntervalSince(lastUserScrollAt) >= ChatScrollLogic.userScrollSuppression else { return }
+        // The user is reading older content (recent wheel-up): never yank
+        // them down while the answer is still growing below (user report
+        // 2026-11-01: jumpy "chunk" scrolling during streaming).
+        guard !ChatScrollLogic.shouldSuppressAutoScroll(
+            lastWheelAt: lastUserScrollAt,
+            lastWheelDirection: lastUserWheelDirection
+        ) else { return }
         guard Date().timeIntervalSince(lastAutoScrollAt) >= ChatScrollLogic.minScrollInterval else { return }
         guard pendingAutoScrollTask == nil else { return }
 
@@ -555,6 +602,10 @@ struct ChatPanelView: View {
             try? await Task.sleep(nanoseconds: ChatScrollLogic.coalesceNanoseconds)
             guard !Task.isCancelled else { return }
             guard Date().timeIntervalSince(lastUserScrollAt) >= ChatScrollLogic.userScrollSuppression else { return }
+            guard !ChatScrollLogic.shouldSuppressAutoScroll(
+                lastWheelAt: lastUserScrollAt,
+                lastWheelDirection: lastUserWheelDirection
+            ) else { return }
             if !hasNewMessage {
                 guard isChatBottomVisible else { return }
                 if ChatScrollLogic.anchorIsGlued(bottomFrame: lastBottomFrame, viewport: chatViewportFrame) {
@@ -582,11 +633,14 @@ struct ChatPanelView: View {
     private func installScrollWheelMonitor() {
         guard scrollEventMonitor == nil else { return }
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [self] event in
+            ChatScrollBridge.shared.noteWheelEvent()
             if event.window != nil, NSApp.keyWindow === event.window {
                 lastUserScrollAt = Date()
+                lastUserWheelDirection = event.scrollingDeltaY >= 0 ? .up : .down
             }
             return event
         }
+        ChatScrollBridge.shared.noteScrollMonitorInstalled()
     }
 
     private func removeScrollWheelMonitor() {
