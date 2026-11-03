@@ -97,6 +97,10 @@ struct MessageRow: View {
     @State private var showRawText = false
     @State private var showCompiledContext = false
     @State private var compiledContextText = ""
+    /// Причина, по которой пакета нет. Показывается в том же окне, что и сам
+    /// пакет: одно окно на оба случая, иначе SwiftUI берёт первый `.sheet`
+    /// и открывает пустое «Контекст не собран» даже когда пакет есть.
+    @State private var compiledContextFallback = ""
 
     private var displayTexts: [String] {
         let partTexts = message.parts.compactMap { part -> String? in
@@ -232,6 +236,12 @@ struct MessageRow: View {
                 .padding(.horizontal, 8)
         )
         .animation(.easeInOut(duration: 0.25), value: isHighlighted)
+        .sheet(isPresented: $showCompiledContext) {
+            CompiledContextSheet(
+                text: compiledContextText,
+                fallback: compiledContextFallback.isEmpty ? nil : compiledContextFallback
+            )
+        }
     }
 
     @ViewBuilder
@@ -453,6 +463,7 @@ struct MessageRow: View {
         if !text.isEmpty {
             Button {
                 compiledContextText = text
+                compiledContextFallback = ""
                 showCompiledContext = true
             } label: {
                 HStack(spacing: 4) {
@@ -467,9 +478,6 @@ struct MessageRow: View {
                 .clipShape(Capsule())
             }
             .buttonStyle(HandCursorButtonStyle())
-            .sheet(isPresented: $showCompiledContext) {
-                CompiledContextSheet(text: compiledContextText)
-            }
         }
     }
 
@@ -480,6 +488,7 @@ struct MessageRow: View {
     private func contextSummaryButton(_ summary: String) -> some View {
         Button {
             compiledContextText = ""
+            compiledContextFallback = summary
             showCompiledContext = true
         } label: {
             HStack(spacing: 4) {

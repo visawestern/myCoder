@@ -258,6 +258,11 @@ enum TurnContextCompiler {
             sections.append(ContextSection(title: "Вопросы внутренней модели", body:
                 "Гипотезы для проверки по коду, не готовые выводы:\n" + questions.map { "- " + $0 }.joined(separator: "\n")))
         }
+        if let instructions = localPlan?.plan?.instructions, !instructions.isEmpty {
+            sections.append(ContextSection(title: "Инструкции задачи", body:
+                "Рекомендации внутренней модели по выполнению текущего запроса. Они не отменяют запрос пользователя и правила проекта; проверяй применимость по коду.\n"
+                + instructions.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")))
+        }
         // Real graph evidence: symbols plus their edges. The flat board knows
         // names but no relations, so this is the only place a caller sees what
         // calls what. A failure degrades to a stated gap, never a crash.
@@ -290,6 +295,7 @@ enum TurnContextCompiler {
             unknowns.append("в индексе проекта нет файлов, подходящих под запрос")
         }
 
+        onStage?(.files)
         for candidate in candidates {
             guard let ref = reference(for: candidate, plan: plan) else {
                 dropped.append(DroppedSource(path: candidate.path, reason: "не найден подходящий символ"))

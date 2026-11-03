@@ -1,0 +1,7 @@
+Command: swift test
+Exit code: 0
+XCTest: 55 tests, 0 failures
+Swift Testing: runner reported 3369 tests in 510 suites, pass; 14 opt-in live tests in 4 live suites skipped
+Opt-in live suites (serve, local/direct providers, clipboard) and BrowserFetchLiveIntegrationTests are disabled in the default run. BrowserFetchLiveIntegrationTests requires MYCODER_LIVE_BROWSER=1.
+Browser integration is verified separately through the app's internal API.
+Full local log: /tmp/mycoder-full-gate.log

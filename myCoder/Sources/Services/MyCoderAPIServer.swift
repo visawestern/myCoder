@@ -459,9 +459,30 @@ final class MyCoderAPIServer {
         if targetSession == nil {
             // Audit 2026-09-08: API chats used to be in-memory-only (temp
             // directory, never persisted) and vanished after restart. Create
-            // a persisted standalone chat so it survives and shows in the
-            // sidebar's Chats group (user directive 2026-09-08).
-            targetSession = appState.createStandaloneSession(title: message.isEmpty ? "API Chat" : message)
+            // a persisted chat so it survives and shows in the sidebar.
+            // Live run 2026-11-03: an OPEN PROJECT must produce a project
+            // chat, otherwise the working directory falls back to home and the
+            // model is told `cwd: /Users/apple` while the context pack lists
+            // project files — it then answers "project not in current
+            // directory" and searches the whole disk.
+            let plan = SendTargetPlanLogic.plan(
+                chatId: chatId,
+                selectedWorkspace: appState.selectedWorkspace
+            )
+            if plan.createsStandalone {
+                targetSession = appState.createStandaloneSession(
+                    title: message.isEmpty ? "API Chat" : message
+                )
+            } else if let workspace = appState.selectedWorkspace {
+                targetSession = appState.createProjectSession(
+                    in: workspace,
+                    title: message.isEmpty ? "API Chat" : message
+                )
+            } else {
+                targetSession = appState.createStandaloneSession(
+                    title: message.isEmpty ? "API Chat" : message
+                )
+            }
         }
         if let session = targetSession {
             appState.selectedSession = session

@@ -134,6 +134,15 @@ final class AppActionRouter {
             param("approved", "bool", true, "true = Allow once, false = Deny")
         ]),
 
+        action("browser.fetch", "Run browser_fetch through the app-owned AntiBrowser engine", [
+            param("url", "string", true, "http/https URL"),
+            param("selector", "string", false, "CSS selector whose text is returned; mutually exclusive with script"),
+            param("script", "string", false, "JavaScript expression; mutually exclusive with selector"),
+            param("click", "string", false, "CSS selector to click before reading"),
+            param("screenshot", "bool|string", false, "Request a PNG attachment"),
+            param("limit", "int|string", false, "Maximum page/selector text characters")
+        ]),
+
         action("provider.list", "List configured providers and models", []),
         action("provider.select", "Select a provider", [param("id", "string", true, nil)]),
         action("model.select", "Select a model", [param("id", "string", true, nil)]),
@@ -428,6 +437,19 @@ final class AppActionRouter {
         case "chat.stop":
             NotificationCenter.default.post(name: .stopGeneration, object: nil)
             return ["status": "stopping"]
+
+        case "browser.fetch":
+            return try await BrowserFetchAPILogic.perform(params: params) { arguments in
+                // This closure is entered only after pure validation succeeds.
+                // Acquiring the app-owned bridge preserves the normal lazy
+                // EngineStatusCenter -> BrowserProcess lifecycle.
+                let bridge = AntiBrowserTabManager.shared.bridge(tabKey: "internal-api|global|browser-fetch")
+                var executor = ProjectWebToolExecutor(projectRoot: appState.toolWorkingDirectory,
+                                                      accessLevel: appState.accessLevel)
+                executor.bridge = bridge
+                return await executor.execute(WebToolCall(name: WebEmulatedTool.browserFetch.rawValue,
+                                                          arguments: arguments))
+            }
 
         case "provider.list":
             return ["providers": providerRows(appState: appState)]

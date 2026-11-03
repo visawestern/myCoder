@@ -129,3 +129,63 @@ Read-only `otool`/`stat` проверка:
 Тест не запускает движок (`bridge.engineBootstrap=nil`), читает/выполняет JS,
 кликает, проверяет PNG реального скриншота и закрывает только свою вкладку.
 Результат — NOT RUN до отдельного запуска root после appbuild.
+
+## Внутренний API для browser_fetch
+
+Добавлено действие `browser.fetch` в `/api/action` и каталог `/api/actions`.
+Оно использует настоящий `ProjectWebToolExecutor` и app-owned мост
+AntiBrowserTabManager; движок может лениво запуститься только из myCoder.
+Параметры `url` (обязательный http/https), `selector`, `script`, `click`,
+`screenshot`, `limit` проверяются до получения моста. Вложенные object/array
+и нецелые числовые аргументы отклоняются; нормализация и планировщик общие
+с настоящим инструментом.
+
+Запрос:
+
+```json
+{"action":"browser.fetch","params":{"url":"http://127.0.0.1:8000/fixture.html","selector":"#payload","screenshot":true,"limit":2000}}
+```
+
+`/api/action` сохраняет свой общий envelope: внешний `ok` подтверждает
+выполнение action router, `result.ok` — семантический успех browser_fetch.
+Проверять нужно оба. `result.output` хранит исходный ответ/ошибку, включая
+маркер PNG; `result.screenshot`/`screenshotBytes` описывают полученный PNG.
+
+TDD: `/tmp/mycoder-browser-api-red.log` зафиксировал отсутствие helper до
+реализации; `/tmp/mycoder-browser-api-green.log` — **14/14 PASS**, 3 сьюта
+(BrowserFetchAPILogic, ToolInstructionGuide, AppActionRouter). Среди проверок —
+неизменность состояния движка/мостов при невалидном API-запросе. Живой вызов
+через собранную `.app` на этом этапе ещё NOT RUN.
+
+## Живой API-прогон 2026-11-04: B0 PASS, B1 FAIL
+
+После нового selftest/build, выполненных root, myCoder запущен через `open`.
+Действия этой проверки выполнялись только через внутренний API8766;
+Chromium отдельно не запускался.
+
+- B0 **PASS**: порт5390 закрыт после запуска myCoder; невалидный
+  `browser.fetch` с file:// URL отклонён и порт остаётся закрыт.
+- `/api/providers` показывает только один настроенный web-провайдер Kimi.
+  Qwen/ChatGPT/Claude в этой конфигурации отсутствуют; 4/4 заявлять нельзя.
+- Первый `/api/open-login` Kimi **успешен**, движок лениво стартовал:
+  ChromiumPID39805 — дочерний процесс myCoderPID39473; единственная опция
+  командной строки — `--user-data-dir` с требуемым постоянным профилем.
+- B1 **FAIL**: в зарезервированном интервале без UI-действий root фронтмост
+  изменился с `com.workbuddy.workbuddy-ai` на `org.chromium.Chromium`.
+  Главное окно1280×800 находится в x=-1240,y=30 и onScreen=true:
+  видна полоса шириной40px. Настройки приложения/выбранный чат не изменились.
+- Проба перечисляет9 окон этого PID; остальные включают скрытые вспомогательные
+  окна. Главный дефект подтверждён одним реально видимым окном, поэтому
+  результат не зависит от трактовки границ скрытых служебных окон.
+- `vmmap` подтверждает загрузку именно новой
+  `/Users/apple/AntiBrowser/out156/libchrome_dll.dylib`.
+  LocalState содержит no_startup_window=true, Preferences содержит
+  window_placement.left=-4000. Следовательно, исправление
+  ShouldSaveWindowPlacement=false и заданная геометрия сами по себе
+  не устранили наблюдаемое поведение. Дальнейшая причина требует исправления
+  движка и повторного живого теста.
+
+Артефакты: `/tmp/mycoder-browser-api-evidence/baseline-*.json`,
+`first-login-*.json`, `runtime-library-mappings.txt`.
+После этого FAIL дальнейшие providers/fixture/search в данном этапе не
+запускались; root уведомлён, операции заморожены.

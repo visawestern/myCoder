@@ -12,6 +12,7 @@ enum TurnDelivery {
         case .openAICompatible, .web:
             base = WebToolProtocolEmulator.systemPreamble(userSystemPrompt: rules, projectRoot: projectRoot,
                 isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil)
+                + "\n\n" + ToolInstructionGuide.build()
         default:
             base = """
             You are myCoder's assistant. The runtime provides native tools and their argument schemas.

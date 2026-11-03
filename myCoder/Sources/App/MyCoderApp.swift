@@ -2887,6 +2887,46 @@ class AppState: ObservableObject {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Create a persisted chat that BELONGS to the open project.
+    ///
+    /// `/api/send` without a chatId used to always create a standalone chat,
+    /// so an open project was ignored and the model was told its working
+    /// directory was the home folder while the context pack listed project
+    /// files (live run 2026-11-03). The chat now carries the project directory,
+    /// so `toolWorkingDirectory` resolves to the project and the system prompt
+    /// reports the real `cwd`.
+    @MainActor
+    @discardableResult
+    func createProjectSession(in workspace: Workspace, title: String) -> ChatSession {
+        let sessionID = UUID().uuidString
+        let sessionTitle = ChatTitleLogic.title(for: title, existingTitles: sessions.map(\.title))
+        DatabaseBridge.shared.createSession(
+            id: sessionID,
+            projectId: workspace.id,
+            title: sessionTitle,
+            directory: workspace.path,
+            branch: nil,
+            agentMode: agentMode.rawValue,
+            modelId: selectedModel.isEmpty ? nil : selectedModel,
+            providerId: selectedProviderID.isEmpty ? nil : selectedProviderID
+        )
+        let session = ChatSession(
+            id: sessionID,
+            title: sessionTitle,
+            directory: workspace.path,
+            modelID: selectedModel.isEmpty ? nil : selectedModel,
+            providerID: selectedProviderID.isEmpty ? nil : selectedProviderID
+        )
+        if !sessions.contains(where: { $0.id == sessionID }) {
+            sessions.insert(session, at: 0)
+        }
+        registerSessionInSidebar(session)
+        MyCoderAPIServer.appendLog(
+            "📝 createProjectSession: id=\(sessionID), dir=\(workspace.path), title=\(sessionTitle)"
+        )
+        return session
+    }
+
     /// Create a persisted standalone chat: stored in the global database
     /// under the reserved `standalone` project key, inserted into the
     /// in-memory list, NOT selected (caller decides).

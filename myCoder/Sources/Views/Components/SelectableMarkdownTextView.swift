@@ -294,6 +294,31 @@ enum MarkdownAttributedStringBuilder {
     // bound, and an entry larger than the whole budget is still kept because
     // it is exactly the message the user is scrolling through.
 
+    /// Snapshot every prose color from the explicit render profile. Reading
+    /// mutable Color.mimo tokens here let an off-main prewarm mix themes and
+    /// store that result under a key which only described isLightInterface.
+    private struct InterfacePalette {
+        let muted: NSColor
+        let border: NSColor
+        let brand: NSColor
+        let thinking: NSColor
+
+        init(isLight: Bool) {
+            // Exact Sci-Fi Light/Dark values from MiMoColors. That API exposes
+            // only global theme-dependent getters, so it cannot be queried by
+            // a renderer whose explicit profile may differ from global state.
+            muted = NSColor(isLight
+                ? Color(red: 0.28, green: 0.38, blue: 0.52)
+                : Color(red: 0.431, green: 0.463, blue: 0.506))
+            border = NSColor(isLight
+                ? Color(red: 0.62, green: 0.74, blue: 0.88)
+                : Color(red: 0.188, green: 0.212, blue: 0.239))
+            // These design tokens are immutable and shared by both themes.
+            brand = NSColor(Color.mimo.brand)
+            thinking = NSColor(Color.mimo.thinking)
+        }
+    }
+
     private struct RenderKey: Hashable {
         let text: String
         let fontSize: CGFloat
@@ -607,12 +632,13 @@ enum MarkdownAttributedStringBuilder {
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let baseColor = NSColor(textColor)
-        let muted = NSColor(Color.mimo.textMuted)
-        let brand = NSColor(Color.mimo.brand)
+        let interfacePalette = InterfacePalette(isLight: isLightInterface)
+        let muted = interfacePalette.muted
+        let brand = interfacePalette.brand
         let codePalette = codeSettings.theme(isLightInterface: isLightInterface).palette
         let codeBackground = NSColor(codePalette.background)
         let codeHeaderBackground = NSColor(codePalette.headerBackground)
-        let border = NSColor(Color.mimo.border)
+        let border = interfacePalette.border
 
         let baseFont = NSFont.systemFont(ofSize: fontSize)
         let codeFont = NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 1), weight: .regular)
@@ -647,7 +673,7 @@ enum MarkdownAttributedStringBuilder {
             case .numberedItem(let number, let content):
                 result.append(NSAttributedString(string: "\(number). ", attributes: [
                     .font: NSFont.systemFont(ofSize: fontSize, weight: .medium),
-                    .foregroundColor: NSColor(Color.mimo.thinking)
+                    .foregroundColor: interfacePalette.thinking
                 ]))
                 appendInline(content, to: result, font: baseFont, color: baseColor,
                              codeFont: codeFont, brand: brand, projectRoot: projectRoot)
@@ -655,7 +681,7 @@ enum MarkdownAttributedStringBuilder {
             case .checkbox(let isChecked, let content):
                 result.append(NSAttributedString(string: isChecked ? "☑ " : "☐ ", attributes: [
                     .font: baseFont,
-                    .foregroundColor: NSColor(Color.mimo.thinking)
+                    .foregroundColor: interfacePalette.thinking
                 ]))
                 appendInline(content, to: result, font: baseFont, color: baseColor,
                              codeFont: codeFont, brand: brand, projectRoot: projectRoot)
