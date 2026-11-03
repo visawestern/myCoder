@@ -67,3 +67,34 @@ struct HarnessProfileTests {
         #expect(!out.contains("[truncated]"))
     }
 }
+
+/// Regression (2026-11-03): adding `browser_fetch` to the tool list pushed the
+/// first-turn preamble past the vendor paste budget, so the tool contract was
+/// split into continuation parts and the model never saw it as one message.
+@Suite("Преамбула влезает в бюджет вставки")
+struct PreambleBudgetTests {
+
+    @Test("Полная преамбула с префиксом пользователя не больше бюджета чанкера")
+    func preambleFitsChunkerBudget() {
+        let preamble = WebToolProtocolEmulator.systemPreamble(
+            userSystemPrompt: "",
+            projectRoot: "/Users/x/project",
+            isGitRepo: true
+        )
+        let bytes = preamble.utf8.count
+        #expect(bytes <= WebPromptChunker.defaultBudget,
+                "преамбула \(bytes) Б превышает бюджет \(WebPromptChunker.defaultBudget) Б")
+    }
+
+    @Test("Первый ход с обычным вопросом не режется на части")
+    func firstTurnIsNotChunked() {
+        let preamble = WebToolProtocolEmulator.systemPreamble(
+            userSystemPrompt: "",
+            projectRoot: "/Users/x/project",
+            isGitRepo: true
+        )
+        let message = preamble + "\n\n---\n\n" + "task"
+        let parts = WebPromptChunker.chunkedMessages(message)
+        #expect(parts.count == 1, "первый ход разрезан на \(parts.count) части")
+    }
+}

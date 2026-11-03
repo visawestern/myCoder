@@ -3,28 +3,22 @@ import Testing
 
 @Suite("WEB-05 browser transport honesty")
 struct WebTransportRuntimeLogicTests {
-    @Test("managed transport is labeled as in-app WKWebView")
+    @Test("the only transport is AntiBrowser (CDP + REST)")
     func managedTransportLabel() {
-        #expect(WebTransportRuntimeLogic.label(for: .playwrightMCP) == "In-app WKWebView")
-        #expect(WebTransportRuntimeLogic.effectiveTransport(for: .playwrightMCP) == .playwrightMCP)
+        #expect(WebTransportRuntimeLogic.label(for: .playwrightMCP) == "AntiBrowser (CDP + REST)")
+        #expect(WebTransportRuntimeLogic.effectiveTransport(for: .playwrightMCP) == .cdpCookies)
+        #expect(WebTransportRuntimeLogic.effectiveTransport(for: .cdpCookies) == .cdpCookies)
     }
 
-    @Test("legacy CDP choice cannot claim Chrome is actually attached")
-    func legacyCDPIsHonest() {
-        #expect(WebTransportRuntimeLogic.label(for: .cdpCookies).contains("WKWebView"))
-        #expect(WebTransportRuntimeLogic.label(for: .cdpCookies).contains("unavailable"))
-        #expect(WebTransportRuntimeLogic.effectiveTransport(for: .cdpCookies) == .playwrightMCP)
-    }
-
-    @Test("connection summary uses the honest runtime label")
+    @Test("connection summary names the AntiBrowser runtime")
     func connectionSummaryUsesRuntimeLabel() {
         let config = WebProviderConfig(
-            id: "legacy-cdp",
+            id: "anti",
             vendor: .kimi,
             transport: .cdpCookies,
             selectedModel: "model"
         )
         let summary = WebProviderConnectivity.connectionSummary(config, connected: true)
-        #expect(summary.hasPrefix("In-app WKWebView (Chrome CDP unavailable)"))
+        #expect(summary.hasPrefix("AntiBrowser (CDP + REST)"))
     }
 }

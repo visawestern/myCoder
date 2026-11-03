@@ -236,9 +236,8 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var messageContent: some View {
-        // Raw mode: one contiguous selectable bubble — formatted bubbles are
-        // heterogeneous views, so whole-answer selection only works here.
-        if showRawText, !messageText.isEmpty {
+        // Raw mode replaces the rendered body with the captured wire events.
+        if showRawText {
             VStack(alignment: .leading, spacing: 8) {
                 rawTextBubble
                 ForEach(message.pendingApprovals) { approval in
@@ -248,9 +247,7 @@ struct MessageRow: View {
         } else {
             formattedContent
         }
-        if let raw = message.rawResponses, !raw.isEmpty {
-            RawResponseSpoilerView(rawEvents: raw)
-        }
+
     }
 
     @ViewBuilder
@@ -338,7 +335,7 @@ struct MessageRow: View {
     /// be selected/copied as plain text in the same bubble.
     private var rawTextBubble: some View {
         ScrollView {
-            Text(messageText)
+            Text(TurnPresentation.rawText(events: message.rawResponses, fallback: messageText))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Color.mimo.textPrimary)
                 .textSelection(.enabled)
@@ -366,15 +363,23 @@ struct MessageRow: View {
                         withAnimation { copied = false }
                     }
                 }
-                // Raw/formatted toggle in the same bubble: formatted views
-                // are heterogeneous, so whole-answer selection only works
-                // on the single contiguous raw text.
+            }
+
+            // Raw/formatted toggle, next to resend/retry: swaps the rendered
+            // answer for the raw wire response and back (user directive
+            // 2026-11-03, п.3). It no longer exists to make the text
+            // selectable — that job is gone. It sits outside the copy block
+            // so a message with only raw events can still be switched.
+            if RawAnswerToggleLogic.canToggle(
+                messageText: messageText,
+                rawEvents: message.rawResponses
+            ) {
                 MessageActionButton(
-                    icon: showRawText ? "doc.richtext" : "doc.plaintext",
-                    tooltip: showRawText ? L.t(AppLocalizationKey.locFormatted) : L.t(AppLocalizationKey.locRawText),
+                    icon: RawAnswerToggleLogic.icon(isRaw: showRawText),
+                    tooltip: L.t(RawAnswerToggleLogic.tooltipKey(isRaw: showRawText)),
                     isActive: showRawText
                 ) {
-                    withAnimation { showRawText.toggle() }
+                    withAnimation { showRawText = RawAnswerToggleLogic.toggled(isRaw: showRawText) }
                 }
             }
 
@@ -490,9 +495,6 @@ struct MessageRow: View {
         }
         .buttonStyle(HandCursorButtonStyle())
         .help(summary)
-        .sheet(isPresented: $showCompiledContext) {
-            CompiledContextSheet(text: "", fallback: summary)
-        }
     }
 
     @ViewBuilder
@@ -1203,13 +1205,18 @@ struct CompiledContextSheet: View {
                 .foregroundColor(Color.mimo.textSecondary)
             }
 
-            ScrollView {
-                Text(displayText)
+            TabView {
+                ForEach(Array(TurnPresentation.inspectionTabs(displayText).enumerated()), id: \.offset) { _, section in
+                ScrollView {
+                Text(section.body)
                     .interfaceFont(size: 11, design: .monospaced)
                     .foregroundColor(Color.mimo.textSecondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+                .tabItem { Text(section.title) }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
@@ -1221,7 +1228,7 @@ struct CompiledContextSheet: View {
             )
         }
         .padding(16)
-        .frame(minWidth: 640, minHeight: 420)
+        .frame(minWidth: 920, minHeight: 540)
         .background(Color.mimo.background)
     }
 }

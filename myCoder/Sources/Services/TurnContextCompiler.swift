@@ -120,6 +120,16 @@ struct CompiledContextPack: Equatable, Sendable {
     /// How the query plan was produced, when the optional local planner ran.
     /// `.fallback` stays visible in the pack instead of being hidden.
     let planStatus: LocalQueryPlanStatus?
+    /// The system instruction sent alongside this pack. Kept so the context
+    /// viewer can show the whole payload, not only the evidence half.
+    let systemPrompt: String?
+
+    /// The complete payload in assembly order: system instruction, then point
+    /// context, then the user's request. `text` is only the wire half.
+    var auditText: String {
+        guard let systemPrompt, !systemPrompt.isEmpty else { return text }
+        return "## Системная инструкция\n\(systemPrompt)\n\n\(text)"
+    }
 }
 
 /// Assembles the context for one user message: plan → candidates → real code
@@ -139,16 +149,30 @@ enum TurnContextCompiler {
                         chatHistory: [ChatHistoryBuilder.Turn] = [],
                         budgetTokens: Int = defaultBudgetTokens,
                         maxFiles: Int = 8,
-                        localPlan: LocalQueryPlanResult? = nil) -> CompiledContextPack {
+                        localPlan: LocalQueryPlanResult? = nil,
+                        systemPrompt: String? = nil,
+                        skillsDirectory: URL? = nil,
+                        records: [FileIndexRecord]? = nil,
+                        impact: ImpactReport? = nil,
+                        onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil) -> CompiledContextPack {
         let deterministic = ContextQueryPlanner.plan(for: message)
         let plan = merged(deterministic, with: localPlan?.plan)
-        let query = (plan.terms + plan.symbols).joined(separator: " ")
+        let query = (plan.terms + plan.symbols + plan.files).joined(separator: " ")
         var candidates = CandidateRanker.rank(
             board: board,
             query: query,
             limit: max(1, maxFiles),
             budgetBytes: Int.max
         )
+        // Explicit/validated file selections must survive lexical ranking.
+        for path in plan.files.reversed() {
+            guard let entry = board.entries.first(where: { $0.path == path }) else { continue }
+            candidates.removeAll { $0.path == path }
+            candidates.insert(ContextCandidate(path: path, language: entry.language, score: 1000,
+                                               lastModified: entry.lastModified, estimatedBytes: entry.size,
+                                               matchedSymbols: entry.symbols.filter { plan.symbols.contains($0.name) }), at: 0)
+        }
+        candidates = Array(candidates.prefix(max(1, maxFiles)))
         // A path the user typed explicitly always comes first.
         let explicit = Set(plan.files)
         if !explicit.isEmpty {
@@ -217,6 +241,51 @@ enum TurnContextCompiler {
             sections.append(ContextSection(title: "Память проекта", body: lines.joined(separator: "\n")))
         }
 
+        // The project's own rules and the skill matching this request. Both
+        // are read from disk and filtered by the user's words, so an unrelated
+        // skill or a missing AGENTS.md adds nothing.
+        onStage?(.skills)
+        let evidenceQuery = ([message] + plan.symbols + plan.terms).joined(separator: " ")
+        if let rules = TurnEvidence.projectInstructions(projectPath: projectRoot) { sections.append(rules) }
+        let skillSections: [ContextSection]
+        if let selected = localPlan?.plan?.skills {
+            skillSections = TurnEvidence.selectedSkills(ids: selected, directory: skillsDirectory)
+        } else {
+            skillSections = TurnEvidence.matchingSkills(query: evidenceQuery, skillsDirectory: skillsDirectory)
+        }
+        sections.append(contentsOf: skillSections)
+        if let questions = localPlan?.plan?.questions, !questions.isEmpty {
+            sections.append(ContextSection(title: "Вопросы внутренней модели", body:
+                "Гипотезы для проверки по коду, не готовые выводы:\n" + questions.map { "- " + $0 }.joined(separator: "\n")))
+        }
+        // Real graph evidence: symbols plus their edges. The flat board knows
+        // names but no relations, so this is the only place a caller sees what
+        // calls what. A failure degrades to a stated gap, never a crash.
+        if let records, !records.isEmpty {
+            onStage?(.graph)
+            do {
+                let graph = try TurnEvidence.graph(
+                    projectPath: projectRoot,
+                    query: query,
+                    records: records
+                )
+                if !graph.body.isEmpty {
+                    sections.append(graph)
+                }
+            } catch {
+                unknowns.append("граф кода недоступен: \(error.localizedDescription)")
+            }
+        }
+
+        // Harness questions about dependencies (user directive 2026-11-03):
+        // a structural change is not one function — the model must walk every
+        // reverse edge and decide its fate. The section is only present when
+        // the analyzer really found edges; an empty report never renders.
+        if let impact {
+            onStage?(.impact)
+            if !impact.isEmpty { sections.append(impact.section()) }
+        }
+
         if candidates.isEmpty {
             unknowns.append("в индексе проекта нет файлов, подходящих под запрос")
         }
@@ -239,7 +308,7 @@ enum TurnContextCompiler {
                 continue
             }
 
-            let section = ContextSection(title: candidate.path, body: block)
+            let section = ContextSection(title: candidate.path, body: "````\n" + block + "\n````")
             let proposed = sections + [section]
             if render(sections: proposed, unknowns: unknowns, dropped: dropped).utf8.count > budgetBytes {
                 dropped.append(DroppedSource(
@@ -253,6 +322,41 @@ enum TurnContextCompiler {
                 citations.append(citation)
             }
             included.append(candidate.path)
+        }
+
+        // Dependents' code is evidence too: the model must see the caller it
+        // is deciding about with real lines, not only its name in the graph.
+        // Same budget and same honesty rules as the primary candidates.
+        if let impact, !impact.isEmpty {
+            for ref in impact.refs {
+                guard !citations.contains(where: { citation in
+                    citation.path == ref.path && ((ref.symbol != nil && citation.symbol == ref.symbol)
+                        || (ref.startLine.map { citation.startLine <= $0 } == true
+                            && ref.endLine.map { citation.endLine >= $0 } == true))
+                }) else { continue }
+                let block: String
+                do {
+                    block = try ContextMaterializer.block(for: ref, projectRoot: projectRoot)
+                } catch {
+                    unknowns.append("\(ref.path): зависимость не прочитана")
+                    dropped.append(DroppedSource(path: ref.path, reason: "зависимость не прочитана"))
+                    continue
+                }
+                let section = ContextSection(title: "\(ref.path) — зависимость", body: "````\n" + block + "\n````")
+                let proposed = sections + [section]
+                if render(sections: proposed, unknowns: unknowns, dropped: dropped).utf8.count > budgetBytes {
+                    dropped.append(DroppedSource(
+                        path: ref.path,
+                        reason: "зависимость не влезает в бюджет \(budgetTokens) токенов"
+                    ))
+                    continue
+                }
+                sections.append(section)
+                if !included.contains(ref.path) { included.append(ref.path) }
+                if let citation = citation(for: ref, block: block) {
+                    citations.append(citation)
+                }
+            }
         }
 
         // Never trim the request to fit the evidence budget: losing the user's
@@ -273,7 +377,8 @@ enum TurnContextCompiler {
             text: text,
             memoryIDs: memoryIDs,
             ledgerSummary: ledgerSummary,
-            planStatus: localPlan?.status
+            planStatus: localPlan?.status,
+            systemPrompt: systemPrompt
         )
     }
 
@@ -345,7 +450,8 @@ enum TurnContextCompiler {
     static func compileChatHistory(message: String,
                                    turns: [ChatHistoryBuilder.Turn],
                                    budgetTokens: Int = defaultBudgetTokens,
-                                   maxTurns: Int = 12) -> CompiledContextPack? {
+                                   maxTurns: Int = 12,
+                                   systemPrompt: String? = nil) -> CompiledContextPack? {
         let request = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let history = historySection(turns, maxTurns: maxTurns)
         guard !request.isEmpty || !history.body.isEmpty else { return nil }
@@ -363,7 +469,8 @@ enum TurnContextCompiler {
             text: text,
             memoryIDs: [],
             ledgerSummary: nil,
-            planStatus: nil
+            planStatus: nil,
+            systemPrompt: systemPrompt
         )
     }
 
@@ -404,7 +511,7 @@ enum TurnContextCompiler {
                                dropped: [DroppedSource],
                                detailedDrop: Bool = true) -> String {
         var parts: [String] = []
-        for section in sections {
+        for section in sections where section.title != "Запрос" {
             parts.append("## \(section.title)\n\(section.body)")
         }
         if !unknowns.isEmpty {
@@ -417,6 +524,9 @@ enum TurnContextCompiler {
             } else {
                 parts.append("## Не вошло\n- \(dropped.count) источников (полный список в манифесте)")
             }
+        }
+        for section in sections where section.title == "Запрос" {
+            parts.append("## \(section.title)\n\(section.body)")
         }
         return parts.joined(separator: "\n\n")
     }

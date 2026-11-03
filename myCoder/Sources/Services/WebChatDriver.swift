@@ -34,6 +34,7 @@ struct WebChatDriver {
     /// How long the driver waits for the user to answer an approval card.
     /// Injectable so unit tests stay instant.
     var approvalWaitSeconds: Int = WebChatDriver.defaultApprovalWaitSeconds
+    var preparedSystemPrompt: String? = nil
     /// Production default: five minutes for the user to answer.
     static let defaultApprovalWaitSeconds = 300
     /// Wait between retries after a TRANSIENT Kimi overload notice.
@@ -131,17 +132,14 @@ struct WebChatDriver {
                 }
             }
 
-            // On the first message of a session, prepend the tool-protocol preamble.
-            var message = userMessage
-            if isFirstMessage {
-                let preamble = WebToolProtocolEmulator.systemPreamble(
-                    userSystemPrompt: config.systemPrompt,
-                    projectRoot: projectRoot,
-                    directory: projectRoot,
-                    isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil
-                )
-                message = preamble + "\n\n---\n\n" + userMessage
-            }
+            // Every user turn carries the complete instruction. SmartSend uses
+            // the identical text and skipSend prevents duplicate submission.
+            let preamble = preparedSystemPrompt ?? WebToolProtocolEmulator.systemPreamble(
+                userSystemPrompt: config.systemPrompt, projectRoot: projectRoot,
+                directory: projectRoot,
+                isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil
+            )
+            let message = TurnDelivery.withSystem(preamble, modelText: userMessage)
 
             // If skipSend is true, SmartSend already typed and clicked.
             // Just get the baseline response and wait for the answer.
@@ -617,8 +615,8 @@ struct WebChatDriver {
         let probe = String(text.prefix(120))
         let js = """
         (function(){
-          var els = document.querySelectorAll(\(WKWebViewBrowserBridge.jsString(selectors.input)));
-          var want = \(WKWebViewBrowserBridge.jsString(probe));
+          var els = document.querySelectorAll(\(WebJSString.encode(selectors.input)));
+          var want = \(WebJSString.encode(probe));
           for (var i = 0; i < els.length; i++) {
             var c = els[i];
             var r = c.getBoundingClientRect();

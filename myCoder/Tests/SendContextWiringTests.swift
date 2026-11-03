@@ -57,3 +57,31 @@ struct SendContextWiringTests {
         }
     }
 }
+
+/// The user's design (2026-11-03): the system instruction is built BEFORE the
+/// context is compiled, so the pack can carry it and the context viewer shows
+/// the whole payload (system + context + request) instead of only evidence.
+@Suite("Системная инструкция собирается до контекста")
+struct SendSystemPromptWiringTests {
+
+    @Test("Системная инструкция передаётся в сборку контекста")
+    func systemPromptReachesPreparation() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        #expect(source.contains("systemPrompt: sysPrompt"))
+        #expect(source.contains("skillsDirectory:"))
+    }
+
+    @Test("Пакет строится после системной инструкции, а не до неё")
+    func systemPromptIsBuiltBeforePreparation() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let sysIndex = try #require(source.range(of: "let sysPrompt = TurnDelivery.systemInstruction("))
+        let prepIndex = try #require(source.range(of: "SendContextPreparationLogic.prepareAsync("))
+        #expect(sysIndex.lowerBound < prepIndex.lowerBound)
+    }
+
+    @Test("Вкладки контекста показывают системную инструкцию")
+    func contextSheetShowsSystemInstruction() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/MessageRowView.swift")
+        #expect(source.contains("TurnPresentation.inspectionTabs("))
+    }
+}

@@ -208,11 +208,64 @@ final class MyCoderAPIServer {
         case ("POST", "/api/markdown-perf/reset"):
             MarkdownAttributedStringBuilder.resetStats()
             return jsonResponse(["ok": true])
+        case ("POST", "/api/context-preview"):
+            return handleContextPreview(body: body)
         default:
             return notFound()
         }
     }
     
+    /// POST /api/context-preview {"message": "..."} — runs the REAL context
+    /// pipeline for a message without sending it, and returns exactly what the
+    /// model would receive, split into the viewer's tabs. This is the live
+    /// verification surface for the context directives (2026-11-03): one curl
+    /// proves the stages, the tabs, the system instruction and the harness
+    /// questions are actually assembled — no GUI automation needed.
+    private func handleContextPreview(body: String) -> String {
+        guard let appState = __myCoderAppState else {
+            return jsonResponse(["error": "app not ready"])
+        }
+        guard let data = body.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let message = object["message"] as? String,
+              !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return jsonResponse(["error": "message is required"])
+        }
+        let semaphore = DispatchSemaphore(value: 0)
+        var payload: [String: Any] = ["error": "preview timed out"]
+        Task { @MainActor in
+            let projectPath = appState.selectedWorkspace?.path ?? ""
+            let params = ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel())
+            let toolRoot = appState.toolWorkingDirectory
+            let route = SendRouteResolver.route(
+                selectedProviderID: appState.selectedProviderID, selectedModel: appState.effectiveSelectedModel(),
+                serverConnected: appState.serverConnected, isACP: appState.isSelectedACPProvider,
+                customProviders: appState.customProviders, localProviders: LocalProviderLogic.load(),
+                webProviderIDs: appState.webProviderIDs)
+            let webRules: String
+            if case .web(let id) = route { webRules = WebProviderStore.load().first(where: { $0.id == id })?.systemPrompt ?? "" }
+            else { webRules = "" }
+            let systemPrompt = TurnDelivery.systemInstruction(route: route,
+                userRules: [webRules, params.systemPrompt ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                projectRoot: toolRoot, isProject: !projectPath.isEmpty, agentMode: appState.agentMode)
+            let request = ContextPreviewService.Request(
+                message: message,
+                projectPath: projectPath,
+                isEnabled: appState.isPointContextEnabled,
+                isPlannerEnabled: appState.isLocalQueryPlannerEnabled,
+                systemPrompt: systemPrompt,
+                skillsDirectory: MyCoderPaths.skillsDir(
+                    homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+                ),
+                isPlanMode: appState.agentMode == .plan
+            )
+            payload = await ContextPreviewService.run(request)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 60)
+        return jsonResponse(payload)
+    }
+
     private func handleActions() -> String {
         let semaphore = DispatchSemaphore(value: 0)
         var actions: [[String: Any]] = []
@@ -430,13 +483,7 @@ final class MyCoderAPIServer {
 
         let messages = DatabaseBridge.shared.loadMessages(sessionId: sessionID)
         let result = messages.map { msg -> [String: Any] in
-            var row: [String: Any] = [
-                "id": msg.id,
-                "role": msg.role == .user ? "user" : "assistant",
-                "content": msg.content,
-                "isFinished": msg.isFinished,
-                "isStreaming": msg.isStreaming
-            ]
+            var row = MessageAPIRowLogic.row(for: msg)
             // Route metadata chips (web-provider turns): header info the UI
             // renders above the answer; the content text stays clean
             // (user directive 2026-09-08).
@@ -668,12 +715,18 @@ final class MyCoderAPIServer {
         let semaphore = DispatchSemaphore(value: 0)
         var result: String = "timeout"
         Task { @MainActor in
-            // When the live page sits in the login webview (fresh manual
-            // login), refresh THERE so discovery probes the hydrated page
-            // instead of an about:blank default slot.
-            let chatID = appState.debugWebviewURLs().contains(where: { $0.key.contains("provider-login::\(config.id)") && !$0.value.isEmpty && $0.value != "about:blank" })
-                ? "provider-login"
-                : nil
+            // Когда живая страница сидит во вкладке логина (свежий ручной
+            // вход), обновляем модели там — чтобы discovery зондировал
+            // гидратированную страницу, а не about:blank.
+            var chatID: String?
+            for (key, bridge) in AntiBrowserTabManager.shared.allBridges()
+            where key.contains("provider-login::\(config.id)") {
+                if let url = try? await bridge.currentURL(),
+                   !url.isEmpty, url != "about:blank" {
+                    chatID = "provider-login"
+                    break
+                }
+            }
             result = await appState.refreshWebModels(for: config, chatID: chatID)
             semaphore.signal()
         }
@@ -683,25 +736,37 @@ final class MyCoderAPIServer {
         return jsonResponse(["message": result, "models": updatedConfig?.allModels ?? []])
     }
 
+    /// Возвращает мост вкладки провайдера (provider-default) или nil,
+    /// если движок не готов.
+    @MainActor
+    private func engineBridge(forProviderID id: String?, fallbackVendor: String? = nil) -> AntiBrowserAutomationBridge? {
+        guard (try? EngineStatusCenter.shared.requireEngine()) != nil else { return nil }
+        var providerID = id ?? ""
+        if providerID.hasPrefix("web:") {
+            providerID = String(providerID.dropFirst(4))
+        }
+        if providerID.isEmpty, let fallbackVendor {
+            providerID = WebProviderStore.load().first(where: { $0.vendor.id == fallbackVendor })?.id ?? ""
+        }
+        guard !providerID.isEmpty else { return nil }
+        let key = AntiBrowserTabManager.makeKey(providerID: providerID,
+                                               projectID: "global",
+                                               chatID: "provider-default")
+        return AntiBrowserTabManager.shared.bridge(tabKey: key)
+    }
+
     private func handleEvaluate(body: String) -> String {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let script = json["script"] as? String else {
             return jsonResponse(["error": "script is required"])
         }
-        guard let appState = __myCoderAppState else {
-            return jsonResponse(["error": "app not ready"])
-        }
-        // Optional target: run the script on a SPECIFIC webview key
-        // (from GET /api/webviews) instead of the last-used one.
         let targetKey = json["webview"] as? String
         let semaphore = DispatchSemaphore(value: 0)
         var result: Any?
         Task { @MainActor in
-            if let targetKey {
-                result = await appState.debugEvaluateJS(script, webviewKey: targetKey)
-            } else {
-                result = await appState.debugEvaluateJS(script)
+            if let bridge = engineBridge(forProviderID: targetKey) {
+                result = try? await bridge.evaluateJS(script)
             }
             semaphore.signal()
         }
@@ -727,7 +792,11 @@ final class MyCoderAPIServer {
         let semaphore = DispatchSemaphore(value: 0)
         var result: [String: String] = [:]
         Task { @MainActor in
-            result = appState.debugWebviewURLs()
+            var out: [String: String] = [:]
+            for (key, bridge) in AntiBrowserTabManager.shared.allBridges() {
+                out[key] = (try? await bridge.currentURL()) ?? ""
+            }
+            result = out
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 10)
@@ -751,15 +820,10 @@ final class MyCoderAPIServer {
         var cookies: [BrowserCookie] = []
         var errorRef: Error? = nil
         Task { @MainActor in
-            let webView = appState.webView(for: config, projectID: "global", chatID: "provider-default")
-            let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
-            let selectors = WebVendorSelectors(
-                input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
-                sendButton: catalogEntry?.sendButton ?? "button[type='submit'], button[aria-label*='send']",
-                responseContainer: catalogEntry?.responseContainer ?? "div[class*='markdown']",
-                stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
-            )
-            let bridge = WKWebViewBrowserBridge(webView: webView, selectors: selectors)
+            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                      projectID: "global",
+                                                      chatID: "provider-default")
+            let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
             do {
                 cookies = try await bridge.cookies()
             } catch {
@@ -818,7 +882,10 @@ final class MyCoderAPIServer {
         var finalResult: [String: Any] = ["error": "timeout"]
         Task { @MainActor in
             do {
-                let webView = appState.webView(for: config, projectID: "global", chatID: "provider-default")
+                let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                          projectID: "global",
+                                                          chatID: "provider-default")
+                let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
                 let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
                 let selectors = WebVendorSelectors(
                     input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
@@ -826,7 +893,6 @@ final class MyCoderAPIServer {
                     responseContainer: catalogEntry?.responseContainer ?? "div[class*='markdown']",
                     stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
                 )
-                let bridge = WKWebViewBrowserBridge(webView: webView, selectors: selectors)
                 
                 // Restore cookies and navigate
                 let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
@@ -875,7 +941,7 @@ final class MyCoderAPIServer {
                     return JSON.stringify({url: url, title: title, modelDropdownText: modelDropdownText, popoverOpen: popoverOpen, modelItems: modelItems, effort: {value: effortValue ? effortValue.textContent.trim() : '', title: effortTitle ? effortTitle.textContent.trim() : ''}, input: input ? {tag: input.tagName, cls: input.className.substring(0, 80)} : null, sendButton: sendBtn ? {tag: sendBtn.tagName, cls: sendBtn.className.substring(0, 80)} : null, newChatButton: newChatBtn ? {tag: newChatBtn.tagName, cls: newChatBtn.className.substring(0, 80), text: newChatBtn.innerText.trim().substring(0, 50)} : null});
                 })();
                 """
-                let inspectResult = await appState.debugEvaluateJS(js)
+                let inspectResult = try await bridge.evaluateJS(js)
                 if let jsonStr = inspectResult as? String,
                    let data = jsonStr.data(using: .utf8),
                    let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -900,7 +966,9 @@ final class MyCoderAPIServer {
         let clickScript = "document.querySelector('.current-model')?.click(); 'clicked'"
         let semaphore1 = DispatchSemaphore(value: 0)
         Task { @MainActor in
-            _ = await appState.debugEvaluateJS(clickScript)
+            if let bridge = engineBridge(forProviderID: nil, fallbackVendor: "kimi") {
+                _ = try? await bridge.evaluateJS(clickScript)
+            }
             semaphore1.signal()
         }
         _ = semaphore1.wait(timeout: .now() + 5)
@@ -929,7 +997,9 @@ final class MyCoderAPIServer {
         let semaphore2 = DispatchSemaphore(value: 0)
         var readResult: Any?
         Task { @MainActor in
-            readResult = await appState.debugEvaluateJS(readScript)
+            if let bridge = engineBridge(forProviderID: nil, fallbackVendor: "kimi") {
+                readResult = try? await bridge.evaluateJS(readScript)
+            }
             semaphore2.signal()
         }
         _ = semaphore2.wait(timeout: .now() + 5)
@@ -1103,15 +1173,10 @@ final class MyCoderAPIServer {
         var opened = false
         var url = ""
         Task { @MainActor in
-            let webView = appState.webView(for: config, projectID: "global", chatID: "provider-login")
-            let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
-            let selectors = WebVendorSelectors(
-                input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
-                sendButton: catalogEntry?.sendButton ?? "button[type='submit']",
-                responseContainer: catalogEntry?.responseContainer ?? "div[class*='markdown']",
-                stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
-            )
-            let bridge = WKWebViewBrowserBridge(webView: webView, selectors: selectors)
+            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                      projectID: "global",
+                                                      chatID: "provider-login")
+            let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
             do {
                 // Restore saved cookies first, then land on the login page.
                 let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID

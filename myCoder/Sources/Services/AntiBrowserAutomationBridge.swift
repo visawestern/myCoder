@@ -1,39 +1,55 @@
 import Foundation
 
-/// `BrowserAutomationBridge` implementation driving the AntiBrowser fork over
-/// its loopback API: CDP (port 9222) for reads (DOM, screenshots, cookies,
-/// navigation) and the local REST API (port 5390) for human-shaped actions.
+/// Ленивый старт движка: мосты запрашивают его через этот протокол, чтобы
+/// юнит-тесты могли подменить реальный EngineStatusCenter фейком.
+protocol EngineBootstrapping {
+    var isReady: Bool { get }
+    func start() async
+}
+
+extension EngineStatusCenter: EngineBootstrapping {}
+
+/// `BrowserAutomationBridge` implementation driving the AntiBrowser fork
+/// **исключительно через его REST API** (порт 5390): действия — `/act/*`
+/// (человеко-подобный ввод), страничные операции — `/tabs`, `/page/*`,
+/// `/cookies/*`. Никакого CDP/WebSocket на клиенте нет.
 ///
-/// Design (plan v1.2):
-/// - REST is action-only. Mouse/keyboard go through `/act/*` which synthesizes
-///   human input inside the browser process, so a site sees the same event
-///   stream as from a person.
-/// - Every read (DOM text, fingerprint, cookie, screenshot, navigation state)
-///   goes over CDP, so there is a single source of truth.
-/// - The token is read from the AntiBrowser profile Local State
-///   (`antibrowser.agent_api.token`).
+/// Модель вкладок: каждый чат имеет свой ключ (`tab_key`); браузер создаёт
+/// вкладку на ключ при первом обращении и переиспользует её при повторном.
 final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
-    private let cdpBase: String
-    private let apiBase: String
-    private let apiToken: String
+    private let tabKey: String
+    private var apiPort: Int
+    private var profileDir: URL?
+    private var apiToken: String
+    /// Источник запуска движка (инъекция для тестов).
+    var engineBootstrap: EngineBootstrapping? = EngineStatusCenter.shared
 
-    // CDP connection bookkeeping.
-    private var ws: URLSessionWebSocketTask?
-    private var nextId = 1
-    private var pending: [Int: CheckedContinuation<[String: Any], Error>] = [:]
-    private var targetID: String?
-
-    init(cdpPort: Int = 9222,
+    init(tabKey: String,
          apiPort: Int = 5390,
-         profileDir: URL? = nil,
-         cdpBase: String = "http://127.0.0.1:9222",
-         apiBase: String = "http://127.0.0.1:5390") {
-        self.cdpBase = profileDir == nil ? cdpBase : "http://127.0.0.1:\(cdpPort)"
-        self.apiBase = profileDir == nil ? apiBase : "http://127.0.0.1:\(apiPort)"
+         profileDir: URL? = nil) {
+        self.tabKey = tabKey
+        self.apiPort = apiPort
+        self.profileDir = profileDir
         self.apiToken = Self.readToken(profileDir: profileDir)
     }
 
-    // MARK: - Token / profile
+    /// Обновляет адрес/профиль после старта движка: мост мог быть создан
+    /// раньше готовности (например, экран входа открыли при запуске), и
+    /// тогда токен был пустым — все запросы получали 401.
+    func configure(apiPort: Int, profileDir: URL) {
+        self.apiPort = apiPort
+        self.profileDir = profileDir
+        self.apiToken = Self.readToken(profileDir: profileDir)
+    }
+
+    // MARK: - Ошибки
+
+    private func error(_ code: Int, _ message: String) -> NSError {
+        NSError(domain: "AntiBrowserBridge", code: code,
+                userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    // MARK: - Токен
 
     private static func readToken(profileDir: URL?) -> String {
         guard let profileDir else { return "" }
@@ -48,245 +64,292 @@ final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
         return token
     }
 
-    // MARK: - CDP plumbing
+    // MARK: - REST
 
-    /// Resolves the page target id (reusing the cached one if it still exists).
-    private func ensureTarget() async throws -> String {
-        if let targetID, try await targetStillAlive(targetID) {
-            return targetID
-        }
-        let url = URL(string: "\(cdpBase)/json/list")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            throw NSError(domain: "AntiBrowserBridge", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "CDP /json/list недоступен"])
-        }
-        guard let page = array.first(where: { ($0["type"] as? String) == "page" }),
-              let wsURL = page["webSocketDebuggerUrl"] as? String,
-              let id = page["id"] as? String else {
-            throw NSError(domain: "AntiBrowserBridge", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "Нет вкладки страницы"])
-        }
-        targetID = id
-        try await connectWebSocket(wsURL)
-        return id
+    private var apiBase: String {
+        "http://127.0.0.1:\(apiPort)"
     }
 
-    private func targetStillAlive(_ id: String) async throws -> Bool {
-        let url = URL(string: "\(cdpBase)/json/list")!
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return false
-        }
-        return array.contains { ($0["id"] as? String) == id }
-    }
-
-    private func connectWebSocket(_ urlString: String) async throws {
-        if ws != nil {
-            ws?.cancel()
-            ws = nil
-        }
-        guard let url = URL(string: urlString) else {
-            throw NSError(domain: "AntiBrowserBridge", code: 3,
-                          userInfo: [NSLocalizedDescriptionKey: "Неверный ws URL"])
-        }
-        let session = URLSession(configuration: .default)
-        let task = session.webSocketTask(with: url)
-        task.resume()
-        ws = task
-        // Start the receiver loop.
-        Task { [weak self] in
-            await self?.receiveLoop()
-        }
-    }
-
-    private func receiveLoop() async {
-        while let ws {
-            do {
-                let message = try await ws.receive()
-                guard case .string(let text) = message,
-                      let data = text.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let id = json["id"] as? Int else {
-                    continue
-                }
-                if let cont = pending.removeValue(forKey: id) {
-                    cont.resume(returning: json)
-                }
-            } catch {
-                pending.values.forEach { $0.resume(throwing: error) }
-                pending.removeAll()
-                return
-            }
-        }
-    }
-
-    /// Sends a CDP command and awaits its result.
-    private func send(_ method: String, _ params: [String: Any] = [:]) async throws -> [String: Any] {
-        let target = try await ensureTarget()
-        _ = target
-        guard let ws else {
-            throw NSError(domain: "AntiBrowserBridge", code: 4,
-                          userInfo: [NSLocalizedDescriptionKey: "CDP не подключён"])
-        }
-        let id = nextId
-        nextId += 1
-        let payload: [String: Any] = ["id": id, "method": method, "params": params]
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        try await ws.send(.string(String(data: data, encoding: .utf8)!))
-        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[String: Any], Error>) in
-            pending[id] = cont
-        }
-    }
-
-    /// Evaluates JS in the page and returns the `result.value` (or nil).
-    private func evalPage(_ script: String) async throws -> Any? {
-        let result = try await send("Runtime.evaluate", [
-            "expression": script,
-            "returnByValue": true,
-            "awaitPromise": true,
-        ])
-        if let exception = result["exceptionDetails"] {
-            let text = (exception as? [String: Any])?["text"] as? String ?? "исключение"
-            throw NSError(domain: "AntiBrowserBridge", code: 5,
-                          userInfo: [NSLocalizedDescriptionKey: text])
-        }
-        if let r = result["result"] as? [String: Any] {
-            return r["value"]
-        }
-        return nil
-    }
-
-    // MARK: - REST actions
-
-    /// POST body to the local agent API endpoint with the token.
-    private func api(_ path: String, body: [String: Any]) async throws -> [String: Any] {
+    private func request(_ path: String,
+                         body: [String: Any]?,
+                         method: String = "POST") async throws -> [String: Any] {
         var request = URLRequest(url: URL(string: "\(apiBase)\(path)")!)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !apiToken.isEmpty {
             request.setValue(apiToken, forHTTPHeaderField: "X-AntiBrowser-Token")
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if let body {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "AntiBrowserBridge", code: 10,
-                          userInfo: [NSLocalizedDescriptionKey: "API без ответа"])
+            throw error(10, "API без ответа: \(apiBase)\(path)")
         }
-        guard http.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            let text = String(data: data, encoding: .utf8) ?? ""
-            throw NSError(domain: "AntiBrowserBridge", code: 11,
-                          userInfo: [NSLocalizedDescriptionKey: "API \(http.statusCode): \(text)"])
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        guard http.statusCode == 200, let json else {
+            let detail = json?["error"] as? [String: Any]
+            let message = detail?["message"] as? String
+                ?? String(data: data, encoding: .utf8)
+                ?? ""
+            throw error(11, "API \(http.statusCode): \(message)")
         }
         return json
     }
 
-    /// Returns the viewport rect of the first element matching the selector.
+    /// POST с телом JSON → словарь.
+    private func post(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
+        await ensureEngineStartedIfNeeded()
+        return try await request(path, body: body)
+    }
+
+    /// Ленивый старт движка: первый реальный REST-запрос через мост сам
+    /// поднимает браузер (веб-чат, вход в провайдер, спецпоиск). В
+    /// юнит-тестах без профиля (profileDir == nil) ничего не запускаем.
+    func ensureEngineStartedIfNeeded() async {
+        guard profileDir != nil else { return }
+        guard let engineBootstrap else { return }
+        if apiToken.isEmpty || !engineBootstrap.isReady {
+            await engineBootstrap.start()
+            if let profileDir {
+                apiToken = Self.readToken(profileDir: profileDir)
+            }
+        }
+    }
+
+    /// Убеждается, что вкладка чата существует (создаёт при необходимости).
+    private func ensureTab(url: String? = nil) async throws {
+        var body: [String: Any] = ["tab_key": tabKey]
+        if let url {
+            body["url"] = url
+        }
+        let result = try await post("/tabs", body)
+        guard (result["ok"] as? Bool) == true else {
+            throw error(2, "Не удалось подготовить вкладку браузера")
+        }
+    }
+
+    /// POST /page/<ручка> с tab_key.
+    private func page(_ name: String, _ extra: [String: Any] = [:]) async throws -> [String: Any] {
+        var body: [String: Any] = ["tab_key": tabKey]
+        for (k, v) in extra { body[k] = v }
+        return try await post("/page/\(name)", body)
+    }
+
+    /// Значение `result` из /page/evaluate.
+    private func evaluate(_ script: String) async throws -> Any? {
+        let result = try await page("evaluate", ["script": script])
+        if let errorValue = result["error"] {
+            let text = (errorValue as? [String: Any])?["message"] as? String
+                ?? "исключение"
+            throw error(5, "JS: \(text)")
+        }
+        return result["result"]
+    }
+
+    /// Центр видимого элемента по селектору (viewport-координаты).
     private func rect(of selector: String) async throws -> (x: Double, y: Double) {
         let script = """
         (() => {
-          const el = document.querySelector(\(jsonString(selector)));
+          const el = document.querySelector(\(WebJSString.encode(selector)));
           if (!el) return null;
           const r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return null;
           return {x: r.left + r.width / 2, y: r.top + r.height / 2};
         })()
         """
-        guard let value = try await evalPage(script) as? [String: Any],
+        guard let value = try await evaluate(script) as? [String: Any],
               let x = value["x"] as? Double,
               let y = value["y"] as? Double else {
-            throw NSError(domain: "AntiBrowserBridge", code: 12,
-                          userInfo: [NSLocalizedDescriptionKey: "Элемент не найден: \(selector)"])
+            throw error(12, "Элемент не найден: \(selector)")
         }
         return (x, y)
-    }
-
-    private func jsonString(_ s: String) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: s)
-        return String(data: data, encoding: .utf8)!
     }
 
     // MARK: - BrowserAutomationBridge
 
     func navigate(to url: String) async throws {
-        _ = try await send("Page.navigate", ["url": url])
+        try await ensureTab(url: url)
+        let result = try await page("navigate", ["url": url])
+        guard (result["ok"] as? Bool) == true else {
+            throw error(13, "Навигация не удалась на \(url)")
+        }
+        // Ждём готовности документа (до 15 с).
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            if let state = try? await page("state"),
+               (state["ready"] as? String) == "complete" {
+                return
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        throw error(13, "Таймаут навигации на \(url)")
+    }
+
+    /// Ввод текста в СФОКУСИРОВАННЫЙ элемент страницы (каст: клавиатура).
+    func typeTextGlobal(_ text: String) async throws {
+        _ = try await post("/act/type", ["text": text])
+    }
+
+    /// Одно нажатие клавиши (каст: спецклавиши и Enter).
+    func pressKey(_ key: String) async throws {
+        _ = try await post("/act/key", ["key": key])
     }
 
     func typeText(_ text: String, into selector: String, humanized: Bool, pressEnter: Bool) async throws {
         let point = try await rect(of: selector)
-        _ = try await api("/act/click", body: ["x": point.x, "y": point.y])
+        _ = try await post("/act/click", ["x": point.x, "y": point.y])
         try await Task.sleep(nanoseconds: 200_000_000)
-        _ = try await api("/act/type", body: ["text": text])
+
+        var succeeded = false
+        for attempt in 0..<3 {
+            _ = try await post("/act/type", ["text": text])
+            if (try? await verifyText(text, in: selector)) == true {
+                succeeded = true
+                break
+            }
+            if attempt < 2 {
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+        guard succeeded else {
+            throw error(14, "Текст не дошёл до поля \(selector)")
+        }
+
         if pressEnter {
-            _ = try await api("/act/key", body: ["key": "Enter"])
+            _ = try await post("/act/key", ["key": "Enter"])
         }
     }
 
+    private func verifyText(_ text: String, in selector: String) async throws -> Bool {
+        let script = """
+        (() => {
+          const el = document.querySelector(\(WebJSString.encode(selector)));
+          if (!el) return false;
+          const value = el.tagName === 'TEXTAREA' ? el.value : el.innerText;
+          return (value || '').includes(\(WebJSString.encode(text)));
+        })()
+        """
+        return (try await evaluate(script) as? Bool) ?? false
+    }
+
     func click(selector: String) async throws {
-        let point = try await rect(of: selector)
-        _ = try await api("/act/click", body: ["x": point.x, "y": point.y])
+        let script = """
+        (() => {
+          const el = document.querySelector(\(WebJSString.encode(selector)));
+          if (!el) return {kind: 'missing'};
+          const r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return {kind: 'missing'};
+          const disabled = el.disabled || el.getAttribute('aria-disabled') === 'true';
+          if (disabled) return {kind: 'disabled'};
+          return {kind: 'ok', x: r.left + r.width / 2, y: r.top + r.height / 2};
+        })()
+        """
+        guard let value = try await evaluate(script) as? [String: Any] else {
+            throw error(12, "Элемент не найден: \(selector)")
+        }
+        switch value["kind"] as? String {
+        case "ok":
+            guard let x = value["x"] as? Double, let y = value["y"] as? Double else {
+                throw error(12, "Элемент не найден: \(selector)")
+            }
+            _ = try await post("/act/click", ["x": x, "y": y])
+        case "disabled":
+            throw error(16, "Кнопка присутствует, но отключена: \(selector)")
+        default:
+            throw error(12, "Элемент не найден: \(selector)")
+        }
     }
 
     @discardableResult
     func clickByText(selector: String, text: String) async throws -> Bool {
         let script = """
         (() => {
-          const els = [...document.querySelectorAll(\(jsonString(selector)))];
-          const target = els.find(e => (e.innerText || '').trim() === \(jsonString(text)))
-                       || els.find(e => (e.innerText || '').includes(\(jsonString(text))));
+          const els = [...document.querySelectorAll(\(WebJSString.encode(selector)))];
+          const target = els.find(e => (e.innerText || '').trim() === \(WebJSString.encode(text)))
+                       || els.find(e => (e.innerText || '').includes(\(WebJSString.encode(text))));
           if (!target) return null;
           const r = target.getBoundingClientRect();
           return {x: r.left + r.width / 2, y: r.top + r.height / 2};
         })()
         """
-        guard let value = try await evalPage(script) as? [String: Any],
+        guard let value = try await evaluate(script) as? [String: Any],
               let x = value["x"] as? Double,
               let y = value["y"] as? Double else {
             return false
         }
-        _ = try await api("/act/click", body: ["x": x, "y": y])
+        _ = try await post("/act/click", ["x": x, "y": y])
+        return true
+    }
+
+    @discardableResult
+    func clickVisibleTextExact(selector: String, text: String) async throws -> Bool {
+        let script = """
+        (() => {
+          const norm = s => (s || '').replace(/\\s+/g, ' ').trim();
+          const want = norm(\(WebJSString.encode(text)));
+          if (!want) return null;
+          const els = [...document.querySelectorAll(\(WebJSString.encode(selector)))]
+            .filter(e => e.getClientRects().length > 0);
+          let best = null, bestLen = Infinity;
+          for (const e of els) {
+            const t = norm(e.innerText);
+            if (!t) continue;
+            if (t === want) { best = e; break; }
+            if (t.startsWith(want) && t.length < bestLen) { best = e; bestLen = t.length; }
+          }
+          if (!best) return null;
+          const r = best.getBoundingClientRect();
+          return {x: r.left + r.width / 2, y: r.top + r.height / 2};
+        })()
+        """
+        guard let value = try await evaluate(script) as? [String: Any],
+              let x = value["x"] as? Double,
+              let y = value["y"] as? Double else {
+            return false
+        }
+        _ = try await post("/act/click", ["x": x, "y": y])
         return true
     }
 
     func readText(selector: String) async throws -> String {
         let script = """
-        (() => { const el = document.querySelector(\(jsonString(selector))); return el ? el.innerText : ''; })()
+        (() => { const el = document.querySelector(\(WebJSString.encode(selector))); return el ? el.innerText : ''; })()
         """
-        return (try await evalPage(script) as? String) ?? ""
+        return (try await evaluate(script) as? String) ?? ""
     }
 
     func responseFingerprint(selector: String) async throws -> String {
         let script = """
         (() => {
-          const el = document.querySelector(\(jsonString(selector)));
+          const el = document.querySelector(\(WebJSString.encode(selector)));
           if (!el) return '';
           const nodes = [...el.querySelectorAll('*')].length;
           return (el.innerHTML || '').length + ':' + nodes;
         })()
         """
-        return (try await evalPage(script) as? String) ?? ""
+        return (try await evaluate(script) as? String) ?? ""
     }
 
     func exists(selector: String) async throws -> Bool {
         let script = """
-        (() => { const el = document.querySelector(\(jsonString(selector))); return !!el && el.getClientRects().length > 0; })()
+        (() => { const el = document.querySelector(\(WebJSString.encode(selector))); return !!el && el.getClientRects().length > 0; })()
         """
-        return (try await evalPage(script) as? Bool) ?? false
+        return (try await evaluate(script) as? Bool) ?? false
     }
 
     func pageText() async throws -> String {
-        let script = "document.body ? document.body.innerText : ''"
-        return (try await evalPage(script) as? String) ?? ""
+        let result = try await page("text")
+        return (result["text"] as? String) ?? ""
     }
 
     func currentURL() async throws -> String {
-        let script = "location.href"
-        return (try await evalPage(script) as? String) ?? ""
+        let result = try await page("state")
+        return (result["url"] as? String) ?? ""
     }
 
     func cookies() async throws -> [BrowserCookie] {
-        let result = try await send("Network.getCookies")
+        let result = try await post("/cookies/get", ["tab_key": tabKey])
         guard let cookies = result["cookies"] as? [[String: Any]] else { return [] }
         return cookies.compactMap { c in
             guard let name = c["name"] as? String,
@@ -315,27 +378,74 @@ final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
             if let expires = c.expiresEpoch { d["expires"] = expires }
             return d
         }
-        _ = try await send("Network.setCookies", ["cookies": list])
+        _ = try await post("/cookies/set", ["tab_key": tabKey, "cookies": list])
     }
 
     func setLocalStorage(_ values: [String: String]) async throws {
-        let script = values.map { "localStorage.setItem(\(jsonString($0.key)), \(jsonString($0.value)))" }.joined(separator: "; ")
-        _ = try await evalPage(script)
+        _ = try await page("local-storage", ["values": values])
     }
 
     func screenshot(selector: String?) async throws -> Data {
-        // Full-page screenshot; region clipping is left to the caller.
-        let result = try await send("Page.captureScreenshot", ["format": "png"])
+        if let selector {
+            let script = """
+            (() => {
+              const el = document.querySelector(\(WebJSString.encode(selector)));
+              if (!el) return null;
+              const r = el.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) return null;
+              return {x: r.left, y: r.top, width: r.width, height: r.height};
+            })()
+            """
+            _ = try await evaluate(script)
+            // Полноэкранный снимок; обрезка по селектору выполняется дальше
+            // в SceencastController при необходимости. (Скриншоты по клипу
+            // в браузере: см. /page/screenshot.)
+        }
+        return try await screenshotFrame().data
+    }
+
+    /// Скриншот + CSS-размер viewport. Картинка приходит в физических
+    /// пикселях (Retina 2×), а /act/click принимает CSS-пиксели — касту нужен
+    /// этот размер, иначе клики уходят мимо элементов.
+    func screenshotFrame() async throws -> (data: Data, cssSize: CGSize?) {
+        let result = try await page("screenshot")
         guard let base64 = result["data"] as? String,
               let data = Data(base64Encoded: base64) else {
-            throw NSError(domain: "AntiBrowserBridge", code: 20,
-                          userInfo: [NSLocalizedDescriptionKey: "Скриншот не удался"])
+            throw error(20, "Скриншот не удался")
         }
-        return data
+        var cssSize: CGSize?
+        if let width = result["css_width"] as? Double,
+           let height = result["css_height"] as? Double,
+           width > 0, height > 0 {
+            cssSize = CGSize(width: width, height: height)
+        }
+        return (data, cssSize)
     }
 
     func stopGeneration() async throws {
-        _ = try await api("/act/key", body: ["key": "Escape"])
+        let script = """
+        (() => {
+          const sels = ['[data-testid="stop-button"]',
+                        'button[aria-label*="stop" i]',
+                        'button[aria-label*="остановить" i]',
+                        'button[class*="stop"]'];
+          for (const s of sels) {
+            const b = [...document.querySelectorAll(s)].find(el => el.getClientRects().length > 0);
+            if (b) {
+              const r = b.getBoundingClientRect();
+              return {x: r.left + r.width / 2, y: r.top + r.height / 2};
+            }
+          }
+          return null;
+        })()
+        """
+        if let point = try await evaluate(script) as? [String: Any],
+           let x = point["x"] as? Double,
+           let y = point["y"] as? Double {
+            _ = try await post("/act/click", ["x": x, "y": y])
+            try await Task.sleep(nanoseconds: 150_000_000)
+        }
+        _ = try await post("/act/key", ["key": "Escape"])
     }
 
     func wait(ms: Int) async {
@@ -344,15 +454,15 @@ final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
 
     func readModelItems(modelItemSelector: String) async throws -> [String] {
         let script = """
-        (() => [...document.querySelectorAll(\(jsonString(modelItemSelector)))]
+        (() => [...document.querySelectorAll(\(WebJSString.encode(modelItemSelector)))]
           .map(e => (e.innerText || '').trim()).filter(t => t.length > 0))()
         """
-        return (try await evalPage(script) as? [String]) ?? []
+        return (try await evaluate(script) as? [String]) ?? []
     }
 
     func readModelCandidates(modelItemSelector: String) async throws -> [WebModelDOMItem] {
         let script = """
-        (() => [...document.querySelectorAll(\(jsonString(modelItemSelector)))].map(e => {
+        (() => [...document.querySelectorAll(\(WebJSString.encode(modelItemSelector)))].map(e => {
           const r = e.getBoundingClientRect();
           return {
             label: (e.innerText || '').trim().split('\\n')[0],
@@ -362,11 +472,11 @@ final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
             isSelectable: !e.disabled,
             isDisabled: !!e.disabled,
             isLeaf: e.children.length === 0,
-            sourceSelector: \(jsonString(modelItemSelector)),
+            sourceSelector: \(WebJSString.encode(modelItemSelector)),
           };
         }))()
         """
-        guard let items = try await evalPage(script) as? [[String: Any]] else { return [] }
+        guard let items = try await evaluate(script) as? [[String: Any]] else { return [] }
         return items.compactMap { d in
             guard let label = d["label"] as? String else { return nil }
             return WebModelDOMItem(
@@ -382,14 +492,86 @@ final class AntiBrowserAutomationBridge: BrowserAutomationBridge {
     }
 
     func readVisibleModelCandidates() async throws -> [WebModelDOMItem] {
-        var result: [WebModelDOMItem] = []
-        for selector in ["[role='option']", "[role='menuitem']", "[class*='model-item']", "[class*='model-option']"] {
-            result.append(contentsOf: try await readModelCandidates(modelItemSelector: selector))
+        let script = """
+        (() => {
+          const sels = ["[role='option']", "[role='menuitem']",
+                        "[class*='model-item']", "[class*='model-option']"];
+          const out = [];
+          for (const s of sels) {
+            for (const e of document.querySelectorAll(s)) {
+              const r = e.getBoundingClientRect();
+              if (r.width <= 0 || r.height <= 0) continue;
+              const inSurface = !!e.closest('[data-state="open"],[role="dialog"],'
+                + '[class*="popover"],[class*="picker"],[class*="menu"]');
+              const inSidebar = !!e.closest('[class*="sidebar"],[id*="sidebar"]');
+              if (inSidebar && !inSurface) continue;
+              out.push({
+                label: (e.innerText || '').trim().split('\\n')[0],
+                fullText: (e.innerText || '').trim(),
+                identity: e.id || e.className || e.tagName,
+                isVisible: true,
+                isSelectable: !e.disabled,
+                isDisabled: !!e.disabled,
+                isLeaf: e.children.length === 0,
+                sourceSelector: s,
+              });
+            }
+          }
+          return out;
+        })()
+        """
+        guard let items = try await evaluate(script) as? [[String: Any]] else { return [] }
+        return items.compactMap { d in
+            guard let label = d["label"] as? String else { return nil }
+            return WebModelDOMItem(
+                label: label,
+                identity: d["identity"] as? String ?? "",
+                isVisible: true,
+                isSelectable: d["isSelectable"] as? Bool ?? true,
+                isDisabled: d["isDisabled"] as? Bool ?? false,
+                isLeaf: d["isLeaf"] as? Bool ?? true,
+                sourceSelector: d["sourceSelector"] as? String ?? "",
+                fullText: d["fullText"] as? String)
         }
-        return result
     }
 
     func evaluateJS(_ script: String) async throws -> Any? {
-        try await evalPage(script)
+        try await evaluate(script)
+    }
+
+    func attachImageToComposer(data: Data, mime: String) async throws -> Bool {
+        let b64 = data.base64EncodedString()
+        let script = """
+        (async () => {
+          const bytes = Uint8Array.from(atob(\(WebJSString.encode(b64))), c => c.charCodeAt(0));
+          const file = new File([bytes], 'attachment.png', {type: \(WebJSString.encode(mime))});
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          const targets = [...document.querySelectorAll('div[contenteditable="true"], textarea')]
+            .filter(el => el.getClientRects().length > 0);
+          if (!targets.length) return false;
+          const target = targets[0];
+          target.focus();
+          target.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
+          return true;
+        })()
+        """
+        return (try await evaluate(script) as? Bool) ?? false
+    }
+
+    // MARK: - Управление кастом (дополнительно к протоколу)
+
+    func clickAt(x: Double, y: Double) async throws {
+        _ = try await post("/act/click", ["x": x, "y": y])
+    }
+
+    func scrollBy(dx: Double, dy: Double) async throws {
+        _ = try await post("/act/scroll", ["dx": dx, "dy": dy])
+    }
+
+    func typeTextAt(_ text: String, x: Double, y: Double) async throws {
+        _ = try await post("/act/click", ["x": x, "y": y])
+        try await Task.sleep(nanoseconds: 200_000_000)
+        _ = try await post("/act/type", ["text": text])
     }
 }

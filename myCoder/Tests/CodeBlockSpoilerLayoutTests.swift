@@ -36,6 +36,13 @@ final class CodeBlockSpoilerLayoutTests: XCTestCase {
     private var windows: [NSWindow] = []
 
     override func tearDown() {
+        // Detach SwiftUI while every window is still strongly retained. Do
+        // not leave delayed window work for a later async XCTest's run loop.
+        for window in windows {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
         windows.removeAll()
         super.tearDown()
     }
@@ -51,6 +58,8 @@ final class CodeBlockSpoilerLayoutTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
+        window.animationBehavior = .none
         window.contentView = host
         window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
@@ -72,6 +81,16 @@ final class CodeBlockSpoilerLayoutTests: XCTestCase {
 
     private func tallestDocument(in host: NSView) -> CGFloat {
         horizontalScrollDocumentHeights(in: host).max() ?? 0
+    }
+
+    func testWindowFixtureUsesExplicitLifetimeWithoutAnimations() {
+        _ = host(Text("fixture"), width: 200, height: 100)
+        guard let window = windows.last else {
+            XCTFail("Window fixture was not retained")
+            return
+        }
+        XCTAssertFalse(window.isReleasedWhenClosed, "ARC owns the fixture; close must not release it a second time")
+        XCTAssertEqual(window.animationBehavior, .none, "Window fixture must not schedule transform animations")
     }
 
     func testExpandedSpoilerRendersEveryLine() {

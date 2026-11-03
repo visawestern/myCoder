@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сравнение 8 сборок — полный пересчёт</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #171a22;
+    --card2: #1c2030;
+    --border: #2a2f3f;
+    --text: #e6e9f2;
+    --muted: #9aa3b8;
+    --accent: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: .9rem; margin-bottom: 20px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; font-size: .78rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  .viewbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .viewbar .label { color: var(--muted); font-size: .85rem; }
+  .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card2); font-size: .85rem; }
+  .toggle button { border: none; background: transparent; color: var(--muted); padding: 8px 14px; cursor: pointer; font-family: inherit; font-size: inherit; }
+  .toggle button.active { background: var(--accent); color: #fff; font-weight: 600; }
+  .status { font-size: .8rem; color: var(--accent); font-weight: 600; }
+
+  .table-scroll { border: 1px solid var(--border); border-radius: 12px; background: var(--card); overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; min-width: 1080px; }
+  th, td { padding: 9px 8px; text-align: left; font-size: .8rem; overflow: hidden; }
+  thead th { background: var(--card2); color: var(--muted); font-weight: 600; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.02); }
+
+  .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .bar { height: 7px; border-radius: 4px; background: #2a2f3f; margin-top: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; }
+  .best { outline: 2px solid rgba(139,92,246,.55); outline-offset: -2px; border-radius: 6px; }
+
+  .cards { display: none; flex-direction: column; gap: 12px; }
+  .card-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .card-row .row-name { font-weight: 600; font-size: .9rem; margin-bottom: 10px; }
+  .row-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .mini { display: grid; grid-template-columns: 90px 1fr 40px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--card2); }
+  .mini .tag { font-size: .72rem; font-weight: 600; }
+  .mini .mval { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mini .bar { margin-top: 0; }
+  .mini.best { box-shadow: 0 0 0 1px var(--accent); }
+
+  body.mobile .table-scroll { display: none; }
+  body.mobile .cards { display: flex; }
+  body:not(.mobile) .cards { display: none; }
+
+  .totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
+  .total { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 8px; text-align: center; }
+  .total .name { font-size: .68rem; color: var(--muted); margin-bottom: 5px; }
+  .total .num { font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .total .num small { font-size: .8rem; }
+  .total.win { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+  .note { margin-top: 18px; color: var(--muted); font-size: .82rem; }
+
+  @media (max-width: 560px) {
+    body { padding: 14px 8px 40px; }
+    h1 { font-size: 1.1rem; }
+    .totals { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Сравнение восьми сборок — полный пересчёт</h1>
+  <div class="sub">б/у рынок ноября 2026, баты · все параметры пересчитаны по единой методологии</div>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="viewbar">
+    <span class="label">Вид:</span>
+    <div class="toggle">
+      <button id="viewAuto" class="active">Авто</button>
+      <button id="viewTable">Таблица</button>
+      <button id="viewCards">Карточки</button>
+    </div>
+    <span class="status" id="viewStatus"></span>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <colgroup id="colgroup"></colgroup>
+      <thead><tr id="theadrow"></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="note" id="note"></div>
+
+</div>
+
+<script>
+const COLS = [
+  { key: "x99",    label: "X99 + 2×5060 Ti",    color: "#f59e0b", price: 46 },
+  { key: "x994090", label: "X99 + 2×4090 24",  color: "#a855f7", price: 116 },
+  { key: "pc4090", label: "ПК совр. + 1×4090", color: "#6366f1", price: 80 },
+  { key: "pc2",    label: "2×ПК + 2×5060 Ti",  color: "#06b6d4", price: 59 },
+  { key: "m4",     label: "2×Mac mini M4 16",  color: "#ec4899", price: 46 },
+  { key: "m5",     label: "M5 Pro 24",         color: "#22c55e", price: 57 },
+  { key: "m564",   label: "M5 Pro 64",         color: "#14b8a6", price: 80 },
+  { key: "m2",     label: "M2 Max 32",         color: "#3b82f6", price: 53 },
+];
+
+// Методология:
+// 1-2. Скорость = суммарная (число карт/узлов × скорость одной), нормализация к максимуму = 100.
+//        База: одна 5060 Ti = 100. Отн. скорости одной карты: M4=30, M5 Pro=70, M2 Max=80, 4090=230.
+//        Видео: 2×4090=460→100, 1×4090=230→50, 2×5060=200→44, M2 Max=80→17, M5 Pro=70→15, 2×M4=60→13.
+//        LLM: одна 5060 Ti=100, M4=35, M5 Pro=105, M2 Max=80, 4090=260.
+//        2×4090=520→100, 1×4090=260→50, 2×5060=200→38, M5 Pro=105→20, M2 Max=80→15, 2×M4=70→13.
+const DATA = [
+  { name: "Суммарная скорость генерации (видео/картинки)", x99: 44, pc2: 44, m4: 13, m2: 17, m5: 15, x994090: 100, pc4090: 50, m564: 15, w: 1 },
+  { name: "Суммарная скорость LLM", x99: 38, pc2: 38, m4: 13, m2: 15, m5: 20, x994090: 100, pc4090: 50, m564: 20, w: 1 },
+  { name: "Большие модели (≥24 ГБ) одновременно", x99: 0, pc2: 0, m4: 0, m2: 50, m5: 0, x994090: 100, pc4090: 50, m564: 100, w: 1 },
+  { name: "Мультиядерный CPU", x99: 80, pc2: 65, m4: 75, m2: 70, m5: 85, x994090: 80, pc4090: 85, m564: 85, w: 1 },
+  { name: "Память для ИИ (макс. одна модель)", x99: 28, pc2: 28, m4: 19, m2: 47, m5: 33, x994090: 41, pc4090: 41, m564: 100, w: 1 },
+  { name: "Энергия / шум / тепло", x99: 20, pc2: 35, m4: 95, m2: 88, m5: 95, x994090: 8, pc4090: 40, m564: 95, w: 1 },
+  { name: "Ликвидность (перепродажа)", x99: 30, pc2: 60, m4: 90, m2: 85, m5: 95, x994090: 40, pc4090: 75, m564: 95, w: 1 },
+  { name: "Апгрейд-путь", x99: 70, pc2: 75, m4: 10, m2: 10, m5: 10, x994090: 60, pc4090: 80, m564: 10, w: 1 },
+  { name: "Цена / покупка", x99: 95, pc2: 82, m4: 95, m2: 88, m5: 85, x994090: 35, pc4090: 65, m564: 65, w: 1 },
+];
+
+function styleFor(col) {
+  return `.c-${col.key}{color:${col.color}} .c-${col.key} .bar>div{background:${col.color}}`;
+}
+
+function buildHeader() {
+  document.getElementById("colgroup").innerHTML =
+    `<col class="c-name">` + COLS.map(() => `<col class="c-val">`).join("");
+  document.getElementById("theadrow").innerHTML =
+    `<th>Параметр</th>` + COLS.map(c => `<th class="c-${c.key}">${c.label}</th>`).join("");
+  document.getElementById("legend").innerHTML = COLS.map(c =>
+    `<span><i class="dot" style="background:${c.color}"></i> ${c.label} (~${c.price}k)</span>`
+  ).join("");
+  const st = document.createElement("style");
+  st.id = "colstyles";
+  st.textContent = COLS.map(styleFor).join(" ");
+  document.head.appendChild(st);
+}
+
+function cell(col, val, best) {
+  const b = best ? "best " : "";
+  return `<td class="score ${b}c-${col.key}">${val}<div class="bar"><div style="width:${val}%"></div></div></td>`;
+}
+
+function renderRows() {
+  const rows = document.getElementById("rows");
+  rows.innerHTML = DATA.map(r => {
+    const vals = COLS.map(c => r[c.key]);
+    const best = Math.max(...vals);
+    return `<tr>
+      <td>${r.name}</td>
+      ${COLS.map(c => cell(c, r[c.key], r[c.key] === best)).join("")}
+    </tr>`;
+  }).join("");
+}
+
+function renderCards() {
+  const cards = document.getElementById("cards");
+  cards.innerHTML = DATA.map(r => {
+    const vals = COLS.map(c => r[c.key]);
+    const best = Math.max(...vals);
+    const mk = (col, val) => `
+      <div class="mini ${val === best ? "best" : ""}">
+        <span class="tag c-${col.key}">${col.label}</span>
+        <div class="bar"><div style="width:${val}%"></div></div>
+        <span class="mval c-${col.key}">${val}</span>
+      </div>`;
+    return `
+      <div class="card-row">
+        <div class="row-name">${r.name}</div>
+        <div class="row-grid">${COLS.map(c => mk(c, r[c.key])).join("")}</div>
+      </div>`;
+  }).join("");
+}
+
+let mode = "auto";
+
+function applyView() {
+  const w = window.innerWidth;
+  const body = document.body;
+  const status = document.getElementById("viewStatus");
+  let effective;
+  if (mode === "table") effective = "table";
+  else if (mode === "cards") effective = "cards";
+  else effective = w < 560 ? "cards" : "table";
+  body.classList.toggle("mobile", effective === "cards");
+  document.getElementById("viewAuto").classList.toggle("active", mode === "auto");
+  document.getElementById("viewTable").classList.toggle("active", mode === "table");
+  document.getElementById("viewCards").classList.toggle("active", mode === "cards");
+  const label = effective === "cards" ? "Карточки" : "Таблица";
+  status.textContent = mode === "auto" ? `авто: ${label}` : label;
+}
+
+function renderTotals() {
+  const sumW = DATA.reduce((s, r) => s + r.w, 0) || 1;
+  document.getElementById("totals").innerHTML = COLS.map(c => {
+    let sum = 0;
+    DATA.forEach(r => sum += r[c.key] * r.w);
+    const v = sum / sumW;
+    return `<div class="total" id="t-${c.key}">
+      <div class="name">${c.label}</div>
+      <div class="num c-${c.key}">${v.toFixed(1)}<small> / 100</small></div>
+    </div>`;
+  }).join("");
+  const best = Math.max(...COLS.map(c => {
+    let sum = 0;
+    DATA.forEach(r => sum += r[c.key] * r.w);
+    return sum / sumW;
+  }));
+  COLS.forEach(c => {
+    let sum = 0;
+    DATA.forEach(r => sum += r[c.key] * r.w);
+    document.getElementById(`t-${c.key}`).classList.toggle("win", sum / sumW === best);
+  });
+}
+
+document.getElementById("viewAuto").addEventListener("click", () => { mode = "auto"; applyView(); });
+document.getElementById("viewTable").addEventListener("click", () => { mode = "table"; applyView(); });
+document.getElementById("viewCards").addEventListener("click", () => { mode = "cards"; applyView(); });
+window.addEventListener("resize", () => { if (mode === "auto") applyView(); });
+
+document.getElementById("note").innerHTML = `
+  * Полный пересчёт по единой методологии. Оценки для б/у рынка ноября 2026 (бат).<br>
+  * Скорость — суммарная (число карт/узлов × скорость одной), нормализация: максимум = 100. Видео/картинки: 2×4090=100, 1×4090=50, 2×5060 Ti=44, M2 Max=17, M5 Pro=15, 2×M4=13. LLM: 2×4090=100, 1×4090=50, 2×5060 Ti=38, M5 Pro=20, M2 Max=15, 2×M4=13.<br>
+  * ВАЖНО: 2×16 ГБ ≠ 32 ГБ для одной модели — генерация не шардируется между картами. Каждая задача идёт целиком на одной карте, поэтому для моделей ≥24 ГБ нужна одна карта (4090 24) или unified-память Mac (M5 Pro 64, M2 Max). Параллельные карты дают только несколько потоков задач меньшего размера.<br>
+  * Память Mac — unified: часть отжирает система (16 ГБ → ~11, 24 → ~19, 32 → ~27, 64 → ~58). У видеокарт VRAM отдельная — почти целиком доступна.<br>
+  * Апгрейд: X99 — добавить карту/RAM/CPU; ПК — замена/добавление узлов и карт; Mac — только замена устройства.<br>
+  * Считаем выбранным лучшее б/у без скрытых дефектов.<br>
+  * Авто: &lt;560px — карточки · иначе — таблица (с прокруткой).
+`;
+
+buildHeader();
+renderRows();
+renderCards();
+renderTotals();
+applyView();
+</script>
+</body>
+</html>

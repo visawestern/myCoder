@@ -71,6 +71,9 @@ struct WebProvidersSection: View {
     }
 
     private func beginLogin(for cfg: WebProviderConfig, newSession: Bool) {
+        // Вход в веб-провайдер — реальное использование браузерного движка:
+        // поднимаем его здесь (лениво), а не при старте приложения.
+        Task { await EngineStatusCenter.shared.start() }
         loginSessionID = newSession ? UUID().uuidString : (cfg.activeSessionID ?? WebSessionManager.defaultSessionID)
         loginSessionName = newSession
             ? "Login \(Date().formatted(date: .abbreviated, time: .shortened))"
@@ -590,8 +593,8 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                 }
             }
 
-            // The current production transport is the embedded WKWebView. Do
-            // not expose a Chrome/CDP option that the send path cannot honor.
+            // Единственный производственный транспорт — AntiBrowser (CDP+REST).
+            // Показываем статус движка прямо в карточке провайдера.
             HStack(spacing: 6) {
                 Image(systemName: "globe")
                     .foregroundColor(Color.mimo.brand)
@@ -601,10 +604,22 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                     .interfaceFont(size: 10)
                     .foregroundColor(Color.mimo.textMuted)
                 Spacer()
-            }
-            .onAppear {
-                if config.transport != .playwrightMCP {
-                    config.transport = .playwrightMCP
+                switch EngineStatusCenter.shared.phase {
+                case .ready(let info):
+                    Label("AntiBrowser · \(info.version)", systemImage: "checkmark.circle.fill")
+                        .interfaceFont(size: 10)
+                        .foregroundColor(Color.mimo.success)
+                case .launching, .locating:
+                    ProgressView().controlSize(.mini)
+                case .error(let message):
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .interfaceFont(size: 10)
+                        .foregroundColor(Color.mimo.warning)
+                case .idle:
+                    Button("Запустить AntiBrowser") {
+                        Task { await EngineStatusCenter.shared.start() }
+                    }
+                    .buttonStyle(HandCursorButtonStyle())
                 }
             }
 
@@ -695,20 +710,23 @@ struct WebProviderLoginView: View {
     @State var config: WebProviderConfig
     let onSession: (WebSessionStore) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var webView = WKWebView()
-
     @State private var detectResult: DetectResult?
     @State private var capturedCookies: [BrowserCookie] = []
 
-    // Capturing a valid logged-in session is independent from model discovery.
-    // DOM discovery and AI-assisted discovery are optional helpers, not a gate.
-    private var canCapture: Bool {
-        // Capturing a valid logged-in session must not depend on model discovery.
-        // Discovery can fail because a vendor changed its DOM while cookies are
-        // still perfectly usable for chat.
-        !capturedCookies.isEmpty || webView.url != nil ||
-            !config.discoveredModels.isEmpty || config.customModelSelector != nil
+    /// Мост вкладки логина провайдера (единый для всех login-поверхностей).
+    private var loginBridge: AntiBrowserAutomationBridge {
+        let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                  projectID: "global",
+                                                  chatID: "provider-login")
+        return AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
     }
+
+    // Capturing a valid logged-in session is independent from model discovery.
+    // Раньше кнопка блокировалась без сохранённых cookie/найденных моделей —
+    // и после ПЕРВОГО входа сессию нельзя было сохранить: на странице логина
+    // моделей ещё нет. Проверку cookie делает сам capture(): при их отсутствии
+    // он показывает «No authenticated cookies...».
+    private var canCapture: Bool { true }
 
     enum DetectResult: Identifiable {
         case detecting, found([WebProviderModel]), failed(String)
@@ -799,7 +817,7 @@ struct WebProviderLoginView: View {
 
             Divider()
             ZStack {
-                WebViewRepresentable(webView: webView, url: config.chatURL)
+                CastPanelHost(bridge: loginBridge)
             }
         }
         .frame(width: 900, height: 640)
@@ -810,6 +828,31 @@ struct WebProviderLoginView: View {
                                                       homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
                                                       sessionID: sessionID) {
                 capturedCookies = store.cookies
+            }
+            // Экран входа обязан ОТКРЫТЬ страницу провайдера: раньше вкладка
+            // создавалась пустой (about:blank) и пользователь видел белый каст.
+            // Уже открытую страницу не перезагружаем — сессия могла быть
+            // начата в прошлый раз.
+            let bridge = loginBridge
+            let loginURL = (try? WebProviderCatalog.loadBundled().loginURL(for: config.vendor.id))
+                ?? config.vendor.defaultChatURL
+            if !loginURL.isEmpty {
+                // Движок мог ещё запускаться (или мост создан до готовности,
+                // тогда токен пуст и запросы получают 401). Ждём готовность
+                // и повторяем навигацию, иначе экран остаётся пустым без
+                // объяснения.
+                for _ in 0..<60 {
+                    if Task.isCancelled { return }
+                    if EngineStatusCenter.shared.isReady { break }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+                for _ in 0..<20 {
+                    if Task.isCancelled { return }
+                    let current = (try? await bridge.currentURL()) ?? ""
+                    if !current.isEmpty && current != "about:blank" { break }
+                    if (try? await bridge.navigate(to: loginURL)) != nil { break }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
             }
             // Round 30b: model/effort detection must happen AUTOMATICALLY and
             // immediately — the login page is already loading here, BEFORE the
@@ -856,7 +899,7 @@ struct WebProviderLoginView: View {
     private func findModelsBuiltIn() {
         Task {
             await MainActor.run { detectResult = .detecting }
-            let bridge = WKWebViewBrowserBridge(webView: webView, selectors: WebVendorSelectors(input: "", sendButton: "", responseContainer: "", stopButton: ""))
+            let bridge = loginBridge
             let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
             let catalogModelSelector = catalogEntry?.modelDropdown ?? ""
             let customSelector = config.customModelSelector?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -973,77 +1016,36 @@ struct WebProviderLoginView: View {
     }
 
     private func capture() {
-        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-            let mapped = cookies.map {
-                BrowserCookie(name: $0.name, value: $0.value, domain: $0.domain, path: $0.path,
-                              expiresEpoch: $0.expiresDate?.timeIntervalSince1970,
-                              httpOnly: $0.isHTTPOnly, secure: $0.isSecure)
-            }
-            guard WebLoginCaptureLogic.canPersist(cookieCount: mapped.count) else {
-                detectResult = .failed(WebLoginCaptureLogic.captureMessage(cookieCount: mapped.count))
-                return
-            }
-            let localStorageScript = """
-            (function(){
-              const values = {};
-              try {
-                for (let i = 0; i < localStorage.length; i++) {
-                  const key = localStorage.key(i);
-                  if (key !== null) values[key] = localStorage.getItem(key) || "";
+        Task {
+            let bridge = loginBridge
+            do {
+                let cookieList = try await bridge.cookies()
+                guard WebLoginCaptureLogic.canPersist(cookieCount: cookieList.count) else {
+                    detectResult = .failed(WebLoginCaptureLogic.captureMessage(cookieCount: cookieList.count))
+                    return
                 }
-              } catch (_) {}
-              return JSON.stringify(values);
-            })();
-            """
-            webView.evaluateJavaScript(localStorageScript) { result, _ in
-                let localStorage: [String: String]
-                if let json = result as? String,
-                   let data = json.data(using: .utf8),
-                   let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
-                    localStorage = decoded
-                } else {
-                    localStorage = [:]
+                let localStorageScript = """
+                (function(){
+                  const values = {};
+                  try {
+                    for (let i = 0; i < localStorage.length; i++) {
+                      const key = localStorage.key(i);
+                      if (key !== null) values[key] = localStorage.getItem(key) || "";
+                    }
+                  } catch (_) {}
+                  return values;
+                })();
+                """
+                let localStorageValues = (try? await bridge.evaluateJS(localStorageScript)) as? [String: String] ?? [:]
+                let session = WebSessionStore(cookies: cookieList, localStorage: localStorageValues, savedAt: Date())
+                await MainActor.run {
+                    capturedCookies = cookieList
+                    onSession(session)
+                    dismiss()
                 }
-                let session = WebSessionStore(cookies: mapped, localStorage: localStorage, savedAt: Date())
-                capturedCookies = mapped  // Update UI immediately
-                onSession(session)
-                dismiss()
+            } catch {
+                detectResult = .failed(error.localizedDescription)
             }
         }
     }
-}
-
-struct WebViewRepresentable: NSViewRepresentable {
-    let webView: WKWebView
-    let url: String
-
-    func makeNSView(context: Context) -> WKWebView {
-        // Round 30: maximally permissive navigation for the login surface too —
-        // region redirects (kimi.com → kimi.ai), window.open hops and JS
-        // dialogs must all work while the user logs in.
-        let policy = PermissiveWebNavigationPolicy(ownerWebView: webView)
-        webView.navigationDelegate = policy
-        webView.uiDelegate = policy
-        context.coordinator.retainedPolicy = policy
-        if let u = URL(string: url) { webView.load(URLRequest(url: u)) }
-        return webView
-    }
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        var retainedPolicy: PermissiveWebNavigationPolicy?
-    }
-}
-
-/// Keeps the persistent chat WebView attached to the AppKit hierarchy so
-/// WebKit loads pages and executes JavaScript. A cached but unattached WKWebView
-/// can be created successfully while never becoming a usable browser surface.
-struct WebChatWebViewHost: NSViewRepresentable {
-    let webView: WKWebView
-
-    func makeNSView(context: Context) -> WKWebView { webView }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
 }

@@ -50,6 +50,9 @@ enum WebEmulatedTool: String, CaseIterable {
     case task = "task"
     // Web fetch (Claude Code WebFetch parity)
     case webFetch = "web_fetch"
+    // Advanced browser fetch: full DOM access (script), selector reads, link
+    // clicks and screenshots through the AntiBrowser REST engine.
+    case browserFetch = "browser_fetch"
     // Installed skill lookup (Claude Code Skill parity)
     case skill = "skill"
     // Granular task tools (Claude Code TaskCreate/List/Update parity),
@@ -81,6 +84,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .todoWrite: return #"{"todos": [{"id": "<id>", "content": "<text>", "status": "<pending|in_progress|completed>"}]}"#
         case .task: return #"{"description": "<task description>", "prompt": "<detailed prompt>", "subagentType": "<general|code|debug|review>"}"#
         case .webFetch: return #"{"url": "<http(s) URL>", "limit": "<optional max chars>"}"#
+        case .browserFetch: return #"{"url": "<http(s) URL>", "selector": "<CSS>", "script": "<JS>", "click": "<CSS>", "screenshot": "<1/true>", "limit": "<max chars>"}"#
         case .skill: return #"{"name": "<installed skill id> (omit to list installed skills)"}"#
         case .taskCreate: return #"{"content": "<task text>", "status": "<optional pending|in_progress|completed>"}"#
         case .taskList: return #"{}"#
@@ -111,6 +115,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .todoWrite: return "Write/update the todo checklist (replaces the whole list)."
         case .task: return "Launch a sub-agent for a complex task (runs in background, returns result)."
         case .webFetch: return "Fetch a web page as text (http/https only, bounded)."
+        case .browserFetch: return "Fetch a web page through the browser engine: navigate, optionally click a selector, then return page text (or a CSS selector's text, or a JS expression result) and optionally a screenshot. Full DOM access via 'script'."
         case .skill: return "Show an installed skill's instructions (omit name to list skills)."
         case .taskCreate: return "Add one task to the checklist."
         case .taskList: return "List checklist tasks."
@@ -702,6 +707,10 @@ enum WebToolProtocolEmulator {
         // Web fetch (Claude Code WebFetch parity)
         case "web_fetch", "webfetch", "fetch", "web_fetch_url", "fetch_url":
             return WebEmulatedTool.webFetch.rawValue
+        // Advanced browser fetch (AntiBrowser REST engine)
+        case "browser_fetch", "browserfetch", "browse", "browser", "open_url",
+             "browser_open", "web_browse", "dom_fetch", "visit", "open_web_page":
+            return WebEmulatedTool.browserFetch.rawValue
         // Installed skills (Claude Code Skill parity)
         case "skill", "use_skill", "load_skill", "skills":
             return WebEmulatedTool.skill.rawValue
@@ -776,6 +785,13 @@ enum WebToolProtocolEmulator {
         case .webFetch:
             table = ["url": ["url", "link", "uri", "href", "address", "website", "page"],
                      "limit": ["limit", "max_chars", "maxchars", "max_length", "chars"]]
+        case .browserFetch:
+            table = ["url": ["url", "target_url", "page_url", "address", "link", "uri", "href"],
+                     "selector": ["selector", "css_selector", "query", "q", "element", "read_selector", "dom_selector"],
+                     "script": ["script", "js", "javascript", "expression", "code", "evaluate"],
+                     "click": ["click", "click_selector", "target", "button", "link_selector", "href"],
+                     "screenshot": ["screenshot", "shot", "capture", "snapshot", "image"],
+                     "limit": ["limit", "max_chars", "maxchars", "max_length", "chars", "max"]]
         case .skill:
             table = ["name": ["name", "skill", "skill_name", "skill_id", "id"]]
         case .todoRead, .taskList, .task:

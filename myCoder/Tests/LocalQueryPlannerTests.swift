@@ -296,16 +296,16 @@ struct LocalQueryPlannerTests {
         #expect(lineRef.firstMatch(in: prompt.user, options: [], range: range) == nil)
     }
 
-    // MARK: - T6: switch is off by default
+    // MARK: - T6: switch is ON by default (user directive 2026-11-03)
 
-    @Test("T6: переключатель выключен по умолчанию и сохраняется")
+    @Test("T6: переключатель включён по умолчанию и сохраняет явный выбор")
     func settingsDefaultOff() throws {
         let suiteName = "mimo-planner-settings-\\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        #expect(LocalPlannerSettings.defaultEnabled == false)
-        #expect(LocalPlannerSettings.isEnabled(in: defaults) == false)
+        #expect(LocalPlannerSettings.defaultEnabled == true)
+        #expect(LocalPlannerSettings.isEnabled(in: defaults) == true)
 
         defaults.set(true, forKey: LocalPlannerSettings.storageKey)
         #expect(LocalPlannerSettings.isEnabled(in: defaults) == true)
@@ -346,7 +346,10 @@ struct LocalQueryPlannerTests {
             encoding: .utf8
         )
         #expect(chatSource.contains("isLocalQueryPlannerEnabled"))
-        #expect(chatSource.contains("planLocally"))
+        #expect(chatSource.contains("TurnContextPlanningService.plan("))
+        let planningSource = try RepoRoot.sourceText("myCoder/Sources/Services/TurnContextPlanningService.swift")
+        #expect(planningSource.contains("InternalContextPlanner.plan("))
+        #expect(planningSource.contains("LocalPlannerContextBuilder.build("))
         #expect(chatSource.contains("localPlan: localPlan"))
 
         // Every language the table supports has a non-empty translation.

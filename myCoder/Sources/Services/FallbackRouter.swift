@@ -466,7 +466,8 @@ enum FallbackRouter {
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
             guard inputReady else {
-                throw WKWebViewBridgeError.elementNotFound("\(inputSelector) (chat input never appeared)")
+                throw NSError(domain: "FallbackRouter", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "\(inputSelector) (chat input never appeared)"])
             }
 
             // Audit 2026-09-08: vendors convert oversized pastes into .txt
@@ -499,7 +500,8 @@ enum FallbackRouter {
                     let contBeforeURL = (try? await bridge.currentURL()) ?? ""
                     guard await SendSubmissionPolicy.waitForSendEnabled(
                         bridge: bridge, sendSelector: sendSelector) else {
-                        throw WKWebViewBridgeError.elementNotFound("\(sendSelector) (send button never enabled for continuation part \(idx + 1))")
+                        throw NSError(domain: "FallbackRouter", code: 1,
+                                      userInfo: [NSLocalizedDescriptionKey: "\(sendSelector) (send button never enabled for continuation part \(idx + 1))"])
                     }
                     var contSubmitted = false
                     for _ in 0..<SendSubmissionPolicy.maxClickAttempts {
@@ -519,7 +521,8 @@ enum FallbackRouter {
                         }
                     }
                     guard contSubmitted else {
-                        throw WKWebViewBridgeError.elementNotFound("\(sendSelector) (continuation part \(idx + 1) was not submitted)")
+                        throw NSError(domain: "FallbackRouter", code: 1,
+                                      userInfo: [NSLocalizedDescriptionKey: "\(sendSelector) (continuation part \(idx + 1) was not submitted)"])
                     }
                     try? await Task.sleep(nanoseconds: 1_200_000_000)
                     continue
@@ -540,7 +543,8 @@ enum FallbackRouter {
             }
             guard sendReady else {
                 logger.log("BrowserAutomation: send button never appeared for '\(sendSelector)'")
-                throw WKWebViewBridgeError.elementNotFound(sendSelector)
+                throw NSError(domain: "FallbackRouter", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: sendSelector])
             }
 
             // Round 30: a click is an attempt, not proof. Verify the vendor
@@ -557,7 +561,8 @@ enum FallbackRouter {
             let submittedText = parts.last ?? message
             guard await SendSubmissionPolicy.waitForSendEnabled(
                 bridge: bridge, sendSelector: sendSelector) else {
-                throw WKWebViewBridgeError.elementNotFound("\(sendSelector) (send button never enabled after typing)")
+                throw NSError(domain: "FallbackRouter", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "\(sendSelector) (send button never enabled after typing)"])
             }
             var verified = false
             for attempt in 1...SendSubmissionPolicy.maxClickAttempts {
@@ -630,8 +635,8 @@ enum FallbackRouter {
         let probe = String(submittedText.prefix(120))
         let js = """
         (function(){
-          var els = document.querySelectorAll(\(WKWebViewBrowserBridge.jsString(inputSelector)));
-          var want = \(WKWebViewBrowserBridge.jsString(probe));
+          var els = document.querySelectorAll(\(WebJSString.encode(inputSelector)));
+          var want = \(WebJSString.encode(probe));
           for (var i = 0; i < els.length; i++) {
             var c = els[i];
             var r = c.getBoundingClientRect();

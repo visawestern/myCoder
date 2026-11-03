@@ -16,9 +16,9 @@ enum SendContextStatus: Equatable, Sendable {
     case compiled
     /// The project has an index but it could not be read, or it is empty.
     case failed
-    /// The FIRST prompt in a chat: there is nothing to collect context from
-    /// yet (user directive 2026-10-30). Normal state, no warning.
-    case firstTurn
+    /// The first prompt of a chat WITHOUT a project: there is genuinely
+    /// nothing to collect yet. Normal state, no warning.
+    case projectlessFirstTurn
     /// A project-less chat with history: the previous chat messages ARE the
     /// context (user directive 2026-10-30). Normal state, no warning.
     case chatContext
@@ -52,27 +52,27 @@ enum SendContextPreparationLogic {
                         board preparedBoard: ContextBoard? = nil,
                         priorTurns: [ChatHistoryBuilder.Turn] = [],
                         isPlanMode: Bool = false,
+                        systemPrompt: String? = nil,
+                        skillsDirectory: URL? = nil,
+                        impact: ImpactReport? = nil,
+                        onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil,
                         budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
             return SendContextPreparation(modelText: message, pack: nil,
                                           warning: extraWarning, status: .disabled)
         }
-        // The first prompt in a chat has nothing to collect context from —
-        // not even an open project (user directive 2026-10-30). No pack, no
-        // warning, the raw message goes out. Exception: PLAN mode always
-        // compiles context — planning needs the codebase from the very first
-        // prompt (user directive 2026-10-30).
-        guard !priorTurns.isEmpty || isPlanMode else {
+        // An open project supplies evidence even before the first chat turn.
+        guard !projectPath.isEmpty || !priorTurns.isEmpty || isPlanMode else {
             return SendContextPreparation(modelText: message, pack: nil,
-                                          warning: extraWarning, status: .firstTurn)
+                                          warning: extraWarning, status: .projectlessFirstTurn)
         }
         // A chat without a project: the previous chat messages are the only
         // context that exists. They are compiled into a chat-history pack.
         // Warning here fired on every message in "Без проекта" even though
         // nothing was wrong — the send is complete without project evidence.
         guard !projectPath.isEmpty else {
-            if let pack = TurnContextCompiler.compileChatHistory(message: message, turns: priorTurns) {
+            if let pack = TurnContextCompiler.compileChatHistory(message: message, turns: priorTurns, systemPrompt: systemPrompt) {
                 return SendContextPreparation(modelText: pack.text, pack: pack,
                                               warning: extraWarning, status: .chatContext)
             }
@@ -80,19 +80,6 @@ enum SendContextPreparationLogic {
                                           warning: combinedWarning(nil, extraWarning),
                                           status: .projectless)
         }
-        guard !records.isEmpty || !memories.isEmpty || ledger != nil else {
-            // No index yet (baseline still building), an empty project, or no
-            // memories/ledger. This is a normal state, not a failure: the raw
-            // message goes out and no error banner is shown (a project without
-            // an index is not a broken one — it is just not indexed yet).
-            return SendContextPreparation(
-                modelText: message,
-                pack: nil,
-                warning: combinedWarning(nil, extraWarning),
-                status: .noEvidence
-            )
-        }
-
         let board = preparedBoard ?? ContextBoardBuilder.build(projectPath: projectPath, records: records)
         let pack = TurnContextCompiler.compile(
             message: trimmed,
@@ -102,24 +89,21 @@ enum SendContextPreparationLogic {
             ledger: ledger,
             chatHistory: priorTurns,
             budgetTokens: budgetTokens,
-            localPlan: localPlan
+            localPlan: localPlan,
+            systemPrompt: systemPrompt,
+            skillsDirectory: skillsDirectory,
+            records: records,
+            impact: impact,
+            onStage: onStage
         )
-        guard !pack.citations.isEmpty || !pack.memoryIDs.isEmpty || pack.ledgerSummary != nil else {
-            // The compiler ran and honestly found no matching evidence. The
-            // raw message goes out; this is not a compilation failure, so no
-            // error banner is shown.
-            return SendContextPreparation(
-                modelText: message,
-                pack: nil,
-                warning: combinedWarning(nil, extraWarning),
-                status: .noEvidence
-            )
-        }
+        // Keep the task history, project rules, model fallback and known gaps
+        // even when no source file matched. Absence of code is visible in the pack.
+        let hasEvidence = !pack.citations.isEmpty || !pack.memoryIDs.isEmpty || pack.ledgerSummary != nil
         return SendContextPreparation(
             modelText: pack.text,
             pack: pack,
             warning: combinedWarning(nil, extraWarning),
-            status: .compiled
+            status: hasEvidence ? .compiled : .noEvidence
         )
     }
 
@@ -143,9 +127,11 @@ enum SendContextPreparationLogic {
 
     /// The chat part that carries the pack behind the "Контекст" button.
     /// Empty when no pack was built, so a plain message stays a plain message.
+    /// The audit text (system instruction + context + request) is stored, not
+    /// the wire text, so the viewer shows the whole payload the model saw.
     static func contextParts(_ preparation: SendContextPreparation) -> [MessagePartContent] {
-        guard let pack = preparation.pack, !pack.text.isEmpty else { return [] }
-        return [.compiledContext(pack.text)]
+        guard let pack = preparation.pack, !pack.auditText.isEmpty else { return [] }
+        return [.compiledContext(pack.auditText)]
     }
 
     /// Same as `prepare`, off the main thread: ranking and reading files are
@@ -162,6 +148,10 @@ enum SendContextPreparationLogic {
                             board: ContextBoard? = nil,
                             priorTurns: [ChatHistoryBuilder.Turn] = [],
                             isPlanMode: Bool = false,
+                            systemPrompt: String? = nil,
+                            skillsDirectory: URL? = nil,
+                            impact: ImpactReport? = nil,
+                            onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil,
                             budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
@@ -176,6 +166,10 @@ enum SendContextPreparationLogic {
                 board: board,
                 priorTurns: priorTurns,
                 isPlanMode: isPlanMode,
+                systemPrompt: systemPrompt,
+                skillsDirectory: skillsDirectory,
+                impact: impact,
+                onStage: onStage,
                 budgetTokens: budgetTokens
             )
         }.value
@@ -207,12 +201,12 @@ enum SendContextPreparationLogic {
             return "Собран точечный контекст: " + facts.joined(separator: ", ")
         case .chatContext:
             return "Проект не открыт — контекст собран из истории чата."
-        case .firstTurn:
+        case .projectlessFirstTurn:
             return "Первый промпт в чате — контекст не собирался (правило: ещё нечего собирать)."
         case .projectless:
             return "Чат без проекта — точечного проектного контекста нет."
         case .noEvidence:
-            return "Не найдено соответствий в проекте — отправлен исходный запрос."
+            return "Совпадений в коде не найдено — отправлены доступные инструкции, история и пробелы контекста."
         case .failed:
             return preparation.warning ?? "Ошибка сборки контекста."
         case .disabled:

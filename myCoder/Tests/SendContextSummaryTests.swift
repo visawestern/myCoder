@@ -7,8 +7,25 @@ import Foundation
 @Suite("Сводка контекста (SendContextPreparationLogic.summary)")
 struct SendContextSummaryTests {
 
-    @Test("Первый промпт: причина без пакета")
+    @Test("Первый промпт в чате без проекта: причина без пакета")
     func firstTurnSummary() {
+        // An OPEN project supplies evidence even before the first chat turn
+        // (user directive 2026-11-03), so "first turn" now means a chat with
+        // no project AND no history — there is genuinely nothing to collect.
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "привет",
+            records: [],
+            projectPath: "",
+            isEnabled: true,
+            priorTurns: []
+        )
+        let summary = SendContextPreparationLogic.summary(preparation)
+        #expect(summary.contains("Первый промпт"))
+        #expect(!summary.isEmpty)
+    }
+
+    @Test("Открытый проект без индекса: честная причина, а не «первый промпт»")
+    func openProjectWithoutIndexIsNoEvidence() {
         let preparation = SendContextPreparationLogic.prepare(
             message: "привет",
             records: [],
@@ -17,7 +34,7 @@ struct SendContextSummaryTests {
             priorTurns: []
         )
         let summary = SendContextPreparationLogic.summary(preparation)
-        #expect(summary.contains("Первый промпт"))
+        #expect(!summary.contains("Первый промпт"))
         #expect(!summary.isEmpty)
     }
 
@@ -81,7 +98,7 @@ struct SendContextSummaryTests {
         )
         let summary = SendContextPreparationLogic.summary(preparation)
         #expect(preparation.status == .noEvidence)
-        #expect(summary.contains("Не найдено соответствий"))
+        #expect(summary.contains("Совпадений в коде не найдено"))
     }
 
     @Test("Выключен: причина")

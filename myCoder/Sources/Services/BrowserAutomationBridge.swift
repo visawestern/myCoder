@@ -103,7 +103,8 @@ extension BrowserAutomationBridge {
     }
 
     /// Default: reuse the structured selector fallback so existing test fakes
-    /// remain source-compatible while WKWebView supplies the broad DOM scan.
+    /// remain source-compatible; the real DOM scan runs in the browser engine
+    /// via the REST bridge (/page/evaluate).
     func readVisibleModelCandidates() async throws -> [WebModelDOMItem] {
         var result: [WebModelDOMItem] = []
         for selector in ["[role='option']", "[role='menuitem']", "[class*='model-item']", "[class*='model-option']"] {

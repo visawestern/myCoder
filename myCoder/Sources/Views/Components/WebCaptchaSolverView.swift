@@ -1,15 +1,23 @@
-#if canImport(SwiftUI) && canImport(WebKit)
 import SwiftUI
-import WebKit
 
+/// Контекст решения капчи: показывает живой мини-каст вкладки браузера,
+/// в которой возникла капча. Пользователь решает её прямо в касте —
+/// клики и скролл уходят в браузер через REST `/act/*`.
 struct WebCaptchaSolverContext: Identifiable {
     let id = UUID()
-    let webView: WKWebView
+    let bridge: AntiBrowserAutomationBridge
     let note: String
 }
 
 struct WebCaptchaSolverView: View {
     let context: WebCaptchaSolverContext
+
+    @StateObject private var screencast: ScreencastController
+
+    init(context: WebCaptchaSolverContext) {
+        self.context = context
+        _screencast = StateObject(wrappedValue: ScreencastController(bridge: context.bridge))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -22,8 +30,10 @@ struct WebCaptchaSolverView: View {
             Text(L.t(AppLocalizationKey.locCaptchaInstruction))
                 .interfaceFont(size: 12)
                 .foregroundColor(Color.mimo.textMuted)
-            WebChatWebViewHost(webView: context.webView)
+
+            BrowserCastView(screencast: screencast, bridge: context.bridge)
                 .frame(minWidth: 720, minHeight: 520)
+                .background(Color.mimo.background)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.mimo.border, lineWidth: 1)
@@ -32,6 +42,7 @@ struct WebCaptchaSolverView: View {
         .padding(20)
         .background(Color.mimo.background)
         .interactiveDismissDisabled(true)
+        .onAppear { screencast.start() }
+        .onDisappear { screencast.stop() }
     }
 }
-#endif

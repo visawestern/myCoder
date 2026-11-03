@@ -156,6 +156,14 @@ struct WebChatDriverTests {
         #expect(events.contains(.final("File says hello. Done.")))
     }
 
+    @Test func followupAlsoCarriesToolInstructions() async {
+        let bridge = FakeBridge(responses: ["done"])
+        let driver = makeDriver(bridge: bridge, executor: RecordingExecutor())
+        await driver.runTurn(userMessage: "second task", isFirstMessage: false) { _ in }
+        #expect(bridge.typed.first?.contains("```tool") == true)
+        #expect(bridge.typed.first?.contains("second task") == true)
+    }
+
     @Test func firstMessagePrependsPreamble() async {
         let bridge = FakeBridge(responses: ["done"])
         let exec = RecordingExecutor()
@@ -221,7 +229,9 @@ struct WebChatDriverTests {
 
         var events: [WebChatEvent] = []
         await driver.runTurn(userMessage: "hi", isFirstMessage: false) { events.append($0) }
-        #expect(bridge.typed == ["hi"])
+        #expect(bridge.typed.count == 1)
+        #expect(bridge.typed.first?.hasSuffix("hi") == true)
+        #expect(bridge.typed.first?.contains("```tool") == true)
         #expect(events.contains { event in
             if case .error(let message) = event {
                 return message.contains("button.send")

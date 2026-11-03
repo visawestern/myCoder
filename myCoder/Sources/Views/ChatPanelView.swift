@@ -126,10 +126,11 @@ struct ChatPanelView: View {
                     onCollapseToMini: { webBrowserPanelExpanded = false },
                     onHide: { appState.hideWebBrowserPanel() }
                 ) { size in
-                    let webView = appState.webView(for: webConfig,
-                                                    projectID: panelConfig.projectID,
-                                                    chatID: panelConfig.chatID)
-                    WebProviderBrowserPanelRepresentable(webView: webView, config: panelConfig)
+                    let tabKey = AntiBrowserTabManager.makeKey(providerID: webConfig.id,
+                                                              projectID: panelConfig.projectID,
+                                                              chatID: panelConfig.chatID)
+                    let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+                    CastPanelHost(bridge: bridge)
                         .frame(width: size.width, height: size.height)
                 }
             }
@@ -323,6 +324,7 @@ struct ChatPanelView: View {
                         messageQueue: messageQueue,
                         contextUsage: currentContextUsage,
                         isCompilingContext: appState.isCompilingContext,
+                        contextPreparationStage: appState.contextPreparationStage,
                         isLoadingMessages: messageStore.isLoadingMessages,
                         onForceSendQueued: forceSendQueued,
                         onEditQueued: editQueuedMessage
@@ -347,10 +349,11 @@ struct ChatPanelView: View {
                     onCollapseToMini: { webBrowserPanelExpanded = false },
                     onHide: { appState.hideWebBrowserPanel() }
                 ) { size in
-                    let webView = appState.webView(for: webConfig,
-                                                    projectID: panelConfig.projectID,
-                                                    chatID: panelConfig.chatID)
-                    WebProviderBrowserPanelRepresentable(webView: webView, config: panelConfig)
+                    let tabKey = AntiBrowserTabManager.makeKey(providerID: webConfig.id,
+                                                              projectID: panelConfig.projectID,
+                                                              chatID: panelConfig.chatID)
+                    let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+                    CastPanelHost(bridge: bridge)
                         .frame(width: size.width, height: size.height)
                 }
                 .padding(.trailing, 16)
@@ -479,32 +482,6 @@ struct ChatPanelView: View {
     /// entities and answers with a JSON plan; a missing local model, an empty
     /// candidate set, a timeout or a rejected answer all become a visible
     /// fallback that the deterministic plan then replaces.
-    private static func planLocally(message: String,
-                                    board: ContextBoard,
-                                    memories: [ProjectMemoryChunk],
-                                    localProviders: [LocalProviderConfig]) async -> LocalQueryPlanResult {
-        let directory = LocalModelDirectoryBuilder.build(localProviders: localProviders)
-        guard !directory.isEmpty else {
-            return LocalQueryPlanResult(
-                plan: nil,
-                status: .fallback(reason: LocalQueryPlannerError.noLocalModel.localizedDescription),
-                dropped: []
-            )
-        }
-        let context = LocalPlannerContextBuilder.build(
-            message: message,
-            board: board,
-            memories: memories
-        )
-        let planner = LocalQueryPlanner(
-            runner: LocalModelRunner(
-                directory: directory,
-                transport: LiveLocalCompilerTransport(timeout: LocalQueryPlanner.defaultTimeout)
-            ),
-            timeout: LocalQueryPlanner.defaultTimeout
-        )
-        return await planner.plan(message: message, context: context)
-    }
 
     /// `/remember <text>`: store the fact in the project database and confirm
     /// it in chat. A write failure is reported, never swallowed.
@@ -1661,6 +1638,10 @@ struct ChatPanelView: View {
             ?? retryPlan?.sessionID
             ?? messageStore.currentSessionID
             ?? appState.selectedSession?.id
+        let capturedProjectRoot = appState.selectedWorkspace?.path ?? ""
+        let capturedToolRoot = appState.toolWorkingDirectory
+        let capturedModelID = appState.effectiveSelectedModel()
+        let capturedParameters = ModelCallParametersStore.parameters(for: capturedModelID)
         // Auto-compact BEFORE any history is assembled for this turn (plan:
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.
@@ -1682,11 +1663,11 @@ struct ChatPanelView: View {
                 ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
             }
         }
-        // First prompt of a chat (outside plan mode) never collects context —
-        // do not even scan the project for it (a full index scan on a huge
-        // repo took ~an hour on a loaded machine and the UI showed
-        // "собирает контекст" forever). No scan, no spinner.
-        let needsContextPrep = !priorTurnsForContext.isEmpty || agentMode == .plan
+        // Every message collects context, including the first one in a chat
+        // with an open project (user directive 2026-11-03). The send path
+        // never scans the project here: it reads the already-built index, so
+        // the "hour-long scan" that forced the old first-turn skip is gone.
+        let needsContextPrep = true
         // Пользователь должен немедленно видеть результат отправки: сначала
         // создаём/выбираем сессию (запись в БД + сайдбар), открываем её и
         // пишем в чат отправленное сообщение. Сборка контекста и вызов
@@ -1741,7 +1722,7 @@ struct ChatPanelView: View {
         // ranks the index, cites real lines and reports what it could not get.
         // It runs before the session is prepared, so a failure can degrade to
         // the raw message instead of blocking the send.
-        let pointContextProjectRoot = appState.selectedWorkspace?.path ?? ""
+        let pointContextProjectRoot = capturedProjectRoot
         // A chat without a project has no project context to collect. Running
         // the collector with an empty root used to fire "Не удалось собрать
         // точечный контекст / Состояние задачи не сохранено" on every send in
@@ -1755,10 +1736,19 @@ struct ChatPanelView: View {
         var contextWarning: String?
         if appState.isPointContextEnabled && hasProjectForContext && needsContextPrep {
             await MainActor.run { appState.isCompilingContext = true }
+            await MainActor.run {
+                appState.contextPreparationStage = ContextStageLogLogic.line(for: .index)
+            }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
             // Memory lives in the project database. A read failure must be
             // visible: sending without the facts the user saved would answer
             // from a wrong assumption.
+            await MainActor.run {
+                appState.contextPreparationStage = ContextStageLogLogic.line(
+                    for: .memory,
+                    detail: pointContextRecords.isEmpty ? "" : "файлов в индексе: \(pointContextRecords.count)"
+                )
+            }
             do {
                 projectMemories = try await Task.detached(priority: .utility) {
                     try ProjectMemoryStore.loadChunks(projectPath: pointContextProjectRoot)
@@ -1813,7 +1803,8 @@ struct ChatPanelView: View {
         // any failure is reported as a fallback instead of blocking the send.
         var localPlan: LocalQueryPlanResult?
         var preparedBoard: ContextBoard?
-        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled, hasProjectForContext, needsContextPrep {
+        if appState.isPointContextEnabled, appState.isLocalQueryPlannerEnabled,
+           hasProjectForContext, needsContextPrep {
             // Board building extracts symbols/imports/tokens from every indexed
             // file — heavy CPU on the main actor froze the UI for seconds at
             // send start (user report 2026-10-30). Build it off-main.
@@ -1828,17 +1819,72 @@ struct ChatPanelView: View {
             // The local planner runs a local model and can take seconds — run
             // it off the main actor so the UI stays responsive while it works
             // (user directive 2026-10-29, §16.2).
+            await MainActor.run {
+                appState.contextPreparationStage = ContextStageLogLogic.line(for: .planning)
+            }
             localPlan = await Task.detached(priority: .utility) {
-                await Self.planLocally(
+                await TurnContextPlanningService.plan(
                     message: text,
                     board: board,
                     memories: projectMemories,
-                    localProviders: localProviders
+                    records: pointContextRecords,
+                    priorTurns: priorTurnsForContext,
+                    ledger: taskLedger
                 )
             }.value
         }
+        // Harness pass: a structural change ("хранилище переехало", "раздел
+        // больше не нужен") must arrive with its reverse edges and the
+        // questions that force a decision on each one. Deterministic host
+        // work over the code graph — the internal model only widens the plan.
+        var impactReport: ImpactReport?
+        if appState.isPointContextEnabled, hasProjectForContext, needsContextPrep {
+            await MainActor.run {
+                appState.contextPreparationStage = ContextStageLogLogic.line(for: .impact)
+            }
+            let impactQuery = {
+                let plan = ContextQueryPlanner.plan(for: text)
+                return (plan.terms + plan.symbols).joined(separator: " ")
+            }()
+            impactReport = await Task.detached(priority: .utility) { () -> ImpactReport? in
+                do {
+                    return try ImpactAnalyzer.report(
+                        projectPath: pointContextProjectRoot,
+                        message: text,
+                        query: impactQuery,
+                        records: pointContextRecords,
+                        intent: localPlan?.plan?.intent,
+                        semanticTerms: (localPlan?.plan?.terms ?? []) + (localPlan?.plan?.symbols ?? []) + (localPlan?.plan?.files ?? [])
+                    )
+                } catch {
+                    return ImpactAnalyzer.analyze(message: text, seeds: [], graph: .empty,
+                                                  intent: localPlan?.plan?.intent)
+                }
+            }.value
+        }
+        // The system instruction is built BEFORE the context is compiled: the
+        // pack carries it, so the context viewer can show the whole payload
+        // (system + point context + request) instead of only the evidence half.
+        // It is still sent as its own system message, never inside the user
+        // text, so nothing is duplicated on the wire.
+        let turnProjectRoot = capturedToolRoot
+        let turnParams = capturedParameters
+        let webUserRules: String
+        if case .web(let configID) = route {
+            webUserRules = WebProviderStore.load().first(where: { $0.id == configID })?.systemPrompt ?? ""
+        } else { webUserRules = "" }
+        let sysPrompt = TurnDelivery.systemInstruction(
+            route: route,
+            userRules: [webUserRules, turnParams.systemPrompt ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+            projectRoot: turnProjectRoot,
+            isProject: !capturedProjectRoot.isEmpty,
+            agentMode: agentMode
+        )
         // Prior turns already computed above (before any potentially heavy
         // project scan) — do not recompute.
+        await MainActor.run {
+            appState.contextPreparationStage = ContextStageLogLogic.line(for: .files)
+        }
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -1850,7 +1896,19 @@ struct ChatPanelView: View {
             localPlan: localPlan,
             board: preparedBoard,
             priorTurns: priorTurnsForContext,
-            isPlanMode: agentMode == .plan
+            isPlanMode: agentMode == .plan,
+            systemPrompt: sysPrompt,
+            skillsDirectory: MyCoderPaths.skillsDir(homeDirectory: FileManager.default.homeDirectoryForCurrentUser),
+            impact: impactReport,
+            onStage: { stage in
+                // The compiler runs off the main actor; the composer line is
+                // UI state. Hop back for each real stage instead of leaving
+                // the graph/skills steps invisible (user directive п.2).
+                let line = ContextStageLogLogic.line(for: stage)
+                DispatchQueue.main.async {
+                    appState.contextPreparationStage = line
+                }
+            }
         )
         if StreamDiagnostics.isEnabled {
             StreamDiagnostics.log(
@@ -1858,9 +1916,26 @@ struct ChatPanelView: View {
                 file: "/tmp/mycoder_agent.log"
             )
         }
-        await MainActor.run { appState.isCompilingContext = false }
-        let modelText = preparation.modelText
-        let contextParts = SendContextPreparationLogic.contextParts(preparation)
+        await MainActor.run {
+            appState.contextPreparationStage = ContextStageLogLogic.doneLine(
+                fileCount: preparation.pack?.manifest.included.count ?? 0,
+                memoryCount: preparation.pack?.memoryIDs.count ?? 0,
+                hasGraph: preparation.pack?.sections.contains { $0.title == "Граф кода" } ?? false,
+                hasImpact: preparation.pack?.sections.contains { $0.title.contains("зависимостях") } ?? false
+            )
+            appState.isCompilingContext = false
+        }
+        let modelText: String
+        switch route {
+        case .openAICompatible, .web:
+            modelText = preparation.modelText
+        default:
+            modelText = TurnDelivery.withSystem(sysPrompt, modelText: preparation.modelText)
+        }
+        let compiledParts = SendContextPreparationLogic.contextParts(preparation)
+        let contextParts: [MessagePartContent] = compiledParts.isEmpty
+            ? [.compiledContext(TurnDelivery.withSystem(sysPrompt, modelText: "## Запрос\n" + text))]
+            : compiledParts
         // Сообщение уже показано заранее; теперь прикрепляем результат
         // сборки контекста к нему.
         if let appendedUserMessageID {
@@ -2037,18 +2112,9 @@ struct ChatPanelView: View {
                 // Tool-protocol preamble with the full tool list must reach ANY
                 // delivery path as the SYSTEM message, otherwise free/API models
                 // reply "I have no file access" because they never saw a tool list.
+                // Built once, before context compilation, so the pack and the
+                // wire carry the same instruction — see `sysPrompt` above.
                 let projectRoot = appState.toolWorkingDirectory
-                let baseSysPrompt = WebToolProtocolEmulator.systemPreamble(
-                    userSystemPrompt: params.systemPrompt ?? "",
-                    projectRoot: projectRoot,
-                    isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil
-                )
-                // Plan mode gets the opencode-style plan reminder appended so
-                // the model knows it is planning, not implementing.
-                let sysPrompt = PlanModePromptBuilder.resolve(
-                    agentMode: agentMode,
-                    baseSystemPrompt: baseSysPrompt
-                )
                 let msgs = ChatHistoryBuilder.messages(
                     systemPrompt: sysPrompt, priorTurns: prior, userText: modelText,
                     parts: directParts.isEmpty ? nil : directParts
@@ -2359,7 +2425,7 @@ struct ChatPanelView: View {
                 }
                 let chatID = sendSessionID ?? assistantID
                 activeWebChatID = chatID
-                await runWebChatTurn(config: cfg, text: modelText, assistantID: assistantID, chatID: chatID)
+                await runWebChatTurn(config: cfg, text: modelText, assistantID: assistantID, chatID: chatID, preparedSystemPrompt: sysPrompt)
                 return
             }
 
@@ -3062,7 +3128,8 @@ struct ChatPanelView: View {
     private func runWebChatTurn(config: WebProviderConfig,
                                 text: String,
                                 assistantID: String,
-                                chatID: String) async {
+                                chatID: String,
+                                preparedSystemPrompt: String? = nil) async {
         #if canImport(WebKit)
         // Reconcile selections created before the unified web-selection contract
         // existed. The browser must use the same model and effort the composer
@@ -3082,15 +3149,29 @@ struct ChatPanelView: View {
         }
         activeWebProviderID = effectiveConfig.id
 
-        // Each project/chat/provider gets an isolated hidden WKWebView page;
-        // the shared cookie store keeps login state without mixing conversations.
+        // AntiBrowser: один движок, одна вкладка на чат. Повторный вход в
+        // тот же чат переиспользует запомненную вкладку браузера.
         let projectID = appState.selectedWorkspace?.id ?? appState.selectedWorkspace?.path ?? "global"
         let refreshKey = "\(effectiveConfig.id)|\(projectID)|\(chatID)"
         webCatalogRefreshKeys.remove(refreshKey)
-        let webView = appState.webView(for: effectiveConfig, projectID: projectID, chatID: chatID)
-        // User directive 2026-09-09: surface this provider's live page in the
-        // in-chat mini browser BEFORE the turn runs, so the user watches the
-        // actual load/typing/answer instead of a hidden offscreen window.
+
+        do {
+            try EngineStatusCenter.shared.requireEngine()
+        } catch {
+            appendWebStatus(to: assistantID, line: error.localizedDescription)
+            messageStore.update(id: assistantID) { m in
+                m.content = error.localizedDescription
+                m.isFinished = true
+                m.isStreaming = false
+            }
+            finishWebTurn()
+            return
+        }
+        let tabKey = AntiBrowserTabManager.makeKey(providerID: effectiveConfig.id,
+                                                  projectID: projectID,
+                                                  chatID: chatID)
+        let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+        // Показываем мини-каст вкладки этого чата внутри приложения.
         appState.showWebBrowserPanel(for: effectiveConfig, projectID: projectID, chatID: chatID)
         // Resolve vendor-specific selectors from the catalog.
         let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: effectiveConfig.vendor.id)
@@ -3100,7 +3181,6 @@ struct ChatPanelView: View {
             responseContainer: catalogEntry?.responseContainer ?? "div[data-message-author-role='assistant'], div[class*='markdown'], div[class*='message']",
             stopButton: catalogEntry?.stopButton ?? ".send-button-container.stop, button[aria-label*='top'], button[data-testid='stop-button'], button[class*='stop']"
         )
-        let bridge = WKWebViewBrowserBridge(webView: webView, selectors: selectors)
 
         // Restore cookies captured at login so the session is authenticated.
         // Use the chatID (session ID) for cookie restoration to match the webview session.
@@ -3123,7 +3203,7 @@ struct ChatPanelView: View {
             // selected model (Kimi K3/K3 Swarm live on /agent — navigating
             // "back" to the chat URL resets the choice to Fast and blocks
             // the send; plain chat models must NOT sit on /agent).
-            let currentURL = webView.url?.absoluteString ?? ""
+            let currentURL = (try? await bridge.currentURL()) ?? ""
             let onChatSurface = !currentURL.isEmpty && WebChatSurfaceLogic.isChatSurface(
                 urlString: currentURL,
                 chatURL: effectiveConfig.chatURL,
@@ -3143,7 +3223,7 @@ struct ChatPanelView: View {
             if let payload = restorationPayload, !payload.localStorage.isEmpty {
                 do {
                     try await bridge.setLocalStorage(payload.localStorage)
-                    let reloadURL = webView.url?.absoluteString ?? effectiveConfig.chatURL
+                    let reloadURL = (try? await bridge.currentURL()) ?? effectiveConfig.chatURL
                     try await bridge.navigate(to: reloadURL)
                 } catch {
                     appendWebStatus(to: assistantID, line: "Saved cookies restored, but localStorage could not be restored: \(error.localizedDescription)")
@@ -3189,19 +3269,13 @@ struct ChatPanelView: View {
         // same preamble runTurn would have used; runTurn receives skipSend and
         // will not duplicate it.
         let smartSendWorkspacePath = appState.toolWorkingDirectory
-        let smartSendIsFirstTurn = appState.webSessionIsFirstTurn(appState.webRemoteChatKey(
-            for: effectiveConfig, projectID: projectID, chatID: chatID
-        ))
-        var smartSendMessage = text
-        if smartSendIsFirstTurn {
-            let preamble = WebToolProtocolEmulator.systemPreamble(
-                userSystemPrompt: effectiveConfig.systemPrompt,
-                projectRoot: smartSendWorkspacePath,
-                directory: smartSendWorkspacePath,
-                isGitRepo: (try? GitRepository.repositoryRoot(for: smartSendWorkspacePath)) != nil
-            )
-            smartSendMessage = preamble + "\n\n---\n\n" + text
-        }
+        let webTurnSystemPrompt = preparedSystemPrompt ?? WebToolProtocolEmulator.systemPreamble(
+            userSystemPrompt: effectiveConfig.systemPrompt,
+            projectRoot: smartSendWorkspacePath,
+            directory: smartSendWorkspacePath,
+            isGitRepo: (try? GitRepository.repositoryRoot(for: smartSendWorkspacePath)) != nil
+        )
+        let smartSendMessage = TurnDelivery.withSystem(webTurnSystemPrompt, modelText: text)
         let smartSendResult = await trySmartSendFallback(
             config: effectiveConfig, bridge: bridge, message: smartSendMessage
         )
@@ -3243,7 +3317,7 @@ struct ChatPanelView: View {
         executor.selectors = selectors
         let driver = WebChatDriver(bridge: bridge, executor: executor, selectors: selectors,
                                    config: effectiveConfig, projectRoot: workspacePath, accessLevel: appState.accessLevel,
-                                   approvalBox: approvalBox)
+                                   approvalBox: approvalBox, preparedSystemPrompt: webTurnSystemPrompt)
 
         // Whether this local chat ever started a remote session — must be
         // known BEFORE binding: a first turn must open a genuinely fresh
@@ -3330,7 +3404,7 @@ struct ChatPanelView: View {
                 switch WebCaptchaPresentationLogic.action(for: event) {
                 case .showSolver:
                     if case .captcha(_, let note) = presentation {
-                        self.captchaSolverContext = WebCaptchaSolverContext(webView: webView, note: note)
+                        self.captchaSolverContext = WebCaptchaSolverContext(bridge: bridge, note: note)
                     }
                 case .dismissSolver:
                     self.captchaSolverContext = nil
@@ -3485,7 +3559,7 @@ struct ChatPanelView: View {
             if !refreshedConfig.discoveredModels.isEmpty {
                 let retryDriver = WebChatDriver(bridge: bridge, executor: executor, selectors: selectors,
                                                 config: refreshedConfig, projectRoot: workspacePath,
-                                                accessLevel: appState.accessLevel)
+                                                accessLevel: appState.accessLevel, preparedSystemPrompt: webTurnSystemPrompt)
                 await retryDriver.runTurn(
                     userMessage: text,
                     isFirstMessage: WebRetryContextLogic.isFirstMessageForRetry(originalIsFirst: isFirst),
@@ -3600,7 +3674,7 @@ struct ChatPanelView: View {
     /// to some other conversation (live: ChatGPT bound "WEB:f8f76…" and Kimi
     /// bound a previous chat while the real chat was created after the send).
     /// The id is derived from the SAME url string (no live re-read race).
-    private func currentRemoteChat(bridge: WKWebViewBrowserBridge,
+    private func currentRemoteChat(bridge: BrowserAutomationBridge,
                                    config: WebProviderConfig) async -> (id: String, url: String)? {
         guard let currentURL = try? await bridge.currentURL(),
               let host = URL(string: currentURL)?.host,
@@ -3611,7 +3685,7 @@ struct ChatPanelView: View {
     }
 
     private func bindWebRemoteChat(driver: WebChatDriver,
-                                   bridge: WKWebViewBrowserBridge,
+                                   bridge: BrowserAutomationBridge,
                                    config: WebProviderConfig,
                                    projectID: String,
                                    chatID: String,

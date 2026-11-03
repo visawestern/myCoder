@@ -19,7 +19,32 @@ final class CursorFixComposerTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        // Swift owns these fixtures. AppKit's legacy close-time release would
+        // race ARC and leave a transform animation retaining a closed window.
+        window.isReleasedWhenClosed = false
+        window.animationBehavior = .none
         return window
+    }
+
+    private func closeWindow(_ window: NSWindow) {
+        window.orderOut(nil)
+        window.contentView = nil
+        window.close()
+    }
+
+    func testWindowFixtureUsesExplicitLifetimeWithoutAnimations() {
+        let window = makeWindow()
+        defer {
+            // Keep this red-step regression test safe even before the helper
+            // adopts the explicit ownership contract.
+            window.isReleasedWhenClosed = false
+            window.animationBehavior = .none
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        XCTAssertFalse(window.isReleasedWhenClosed, "ARC owns the fixture; close must not release it a second time")
+        XCTAssertEqual(window.animationBehavior, .none, "Fixture windows must not leave transform animations on the next test's run loop")
     }
 
     private func makeComposerTextView(in window: NSWindow) -> (ZeroInsetTextView, NSPoint) {
@@ -36,7 +61,7 @@ final class CursorFixComposerTests: XCTestCase {
 
     func testComposerIsTextEditingAndPlainBackgroundIsNot() {
         let window = makeWindow()
-        defer { window.close() }
+        defer { closeWindow(window) }
 
         // 1) Поле ввода: hitTest даёт text view → текстовая поверхность.
         let textView = ZeroInsetTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
@@ -67,7 +92,7 @@ final class CursorFixComposerTests: XCTestCase {
 
     func testMonitorEnsuresIBeamOverTextSurface() {
         let window = makeWindow()
-        defer { window.close() }
+        defer { closeWindow(window) }
 
         let textView = ZeroInsetTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
         textView.isEditable = true
@@ -92,7 +117,7 @@ final class CursorFixComposerTests: XCTestCase {
 
     func testMonitorLeavesArrowOverPlainBackground() {
         let window = makeWindow()
-        defer { window.close() }
+        defer { closeWindow(window) }
 
         let background = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
         window.contentView = background

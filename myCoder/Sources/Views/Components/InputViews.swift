@@ -544,6 +544,7 @@ struct BottomInputBar: View {
     var contextUsage: ContextUsage? = nil
     /// True while the host compiles the point context for the outgoing message.
     var isCompilingContext: Bool = false
+    var contextPreparationStage: String = ""
     /// True while the chat's message history is being loaded (first open of a
     /// session or an older-page fetch). Shown as a status line like the
     /// context-compiling line, so loading is never invisible.
@@ -620,7 +621,8 @@ struct BottomInputBar: View {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.7)
-                    Text(L.t(AppLocalizationKey.locCompilingPointContext))
+                    Text(contextPreparationStage.isEmpty ? L.t(AppLocalizationKey.locCompilingPointContext) : contextPreparationStage)
+                        .lineLimit(1)
                         .interfaceFont(size: 11)
                         .foregroundColor(Color.mimo.textMuted)
                     Spacer(minLength: 0)

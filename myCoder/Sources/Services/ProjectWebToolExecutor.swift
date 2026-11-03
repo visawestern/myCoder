@@ -19,7 +19,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     /// Home directory for user-global reads (installed skills). Defaults to
     /// the real home; injectable so skill tests use a temp sandbox.
     let homeDirectory: URL
-    var bridge: WKWebViewBrowserBridge?
+    var bridge: BrowserAutomationBridge?
     var selectors: WebVendorSelectors?
 
     init(projectRoot: String,
@@ -278,6 +278,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             }
             let limit = call.arguments["limit"].flatMap { Int($0.filter(\.isNumber)) }
             return await fetchWebPage(urlString: url, limit: limit)
+        case .browserFetch:
+            return await fetchBrowserPage(arguments: call.arguments)
         case .skill:
             if let name = call.arguments["name"], !name.isEmpty {
                 return skillRead(name: name)
@@ -657,6 +659,52 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             return Self.truncateFetch(text, limit: limit)
         } catch {
             return "error: fetch failed for \(urlString): \(error.localizedDescription)"
+        }
+    }
+
+    /// Advanced browser fetch through the AntiBrowser REST engine: navigate,
+    /// optionally click a selector, then read (page text | selector text |
+    /// JS expression) and optionally return a screenshot. Pure parts
+    /// (planning/rendering) live in BrowserFetchTool.swift and are tested
+    /// by BrowserFetchToolTests.
+    func fetchBrowserPage(arguments: [String: String]) async -> String {
+        switch BrowserFetchPlanner.parse(arguments) {
+        case .failure(let err):
+            return err.message
+        case .success(let plan):
+            guard let bridge else {
+                return "error: browser_fetch requires an active browser session (bridge not available)"
+            }
+            do {
+                try await bridge.navigate(to: plan.url)
+                if let selector = plan.clickSelector {
+                    try await bridge.click(selector: selector)
+                }
+                var mainText = ""
+                var scriptResult: Any? = nil
+                var didEvaluateScript = false
+                if let script = plan.script {
+                    scriptResult = try await bridge.evaluateJS(script)
+                    didEvaluateScript = true
+                } else if let selector = plan.readSelector {
+                    mainText = try await bridge.readText(selector: selector)
+                } else {
+                    mainText = try await bridge.pageText()
+                }
+                var png: Data? = nil
+                if plan.screenshot {
+                    png = try? await bridge.screenshot(selector: nil)
+                }
+                return BrowserFetchRendering.render(
+                    text: mainText,
+                    scriptResult: scriptResult,
+                    includeScript: didEvaluateScript,
+                    screenshotPNG: png,
+                    limit: plan.limit
+                )
+            } catch {
+                return "error: browser_fetch failed for \(plan.url): \(error.localizedDescription)"
+            }
         }
     }
 

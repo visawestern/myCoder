@@ -1,19 +1,18 @@
 import Foundation
 
+/// Единственный производственный транспорт myCoder — AntiBrowser
+/// (CDP 9222 + REST 5390). Поле `WebTransport` в конфиге осталось от старой
+/// конфигурации WKWebView; фактический движок всегда один, поэтому метки
+/// честно отражают AntiBrowser.
 enum WebTransportRuntimeLogic {
     static func effectiveTransport(for requested: WebTransport) -> WebTransport {
-        // The production send path is backed by an isolated WKWebView. CDP is
-        // retained only for decoding older configurations and cannot claim that
-        // an external Chrome instance is attached.
-        .playwrightMCP
+        .cdpCookies
     }
 
     static func label(for requested: WebTransport) -> String {
         switch requested {
-        case .playwrightMCP:
-            return "In-app WKWebView"
-        case .cdpCookies:
-            return "In-app WKWebView (Chrome CDP unavailable)"
+        case .playwrightMCP, .cdpCookies:
+            return "AntiBrowser (CDP + REST)"
         }
     }
 }

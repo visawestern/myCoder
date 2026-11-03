@@ -77,7 +77,7 @@ enum SendSubmissionPolicy {
                                    timeoutMs: Int = 5000) async -> Bool {
         let js = """
         (function(){
-          var el = document.querySelector(\(WKWebViewBrowserBridge.jsString(sendSelector)));
+          var el = document.querySelector(\(WebJSString.encode(sendSelector)));
           if(!el){return false;}
           var target = el.matches('button, [role="button"], input[type="submit"]')
             ? el

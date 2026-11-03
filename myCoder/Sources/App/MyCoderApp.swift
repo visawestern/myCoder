@@ -28,6 +28,9 @@ struct MyCoderApp: App {
                     __myCoderAppState = appState
                     StuckCursorFix.install()
                     MyCoderAPIServer.shared.start()
+                    // Движок AntiBrowser НЕ стартует при запуске приложения:
+                    // он поднимается только по реальной надобности — вход в
+                    // веб-провайдер, веб-чат или спецпоиск (browser_fetch).
                 }
                 .frame(minWidth: 900, idealWidth: 1200, maxWidth: .infinity,
                        minHeight: 600, idealHeight: 750, maxHeight: .infinity)
@@ -146,6 +149,7 @@ class AppState: ObservableObject {
     /// True while the host compiles the point context for the next send
     /// (user directive D1: the loader says "собираем точечный контекст").
     @Published var isCompilingContext = false
+    @Published var contextPreparationStage = ""
     /// Whether the point context is compiled before every send. On by default:
     /// compilation is deterministic and local, and without it the send carries
     /// no evidence at all.
@@ -1684,19 +1688,6 @@ class AppState: ObservableObject {
     
     /// Current session goal, shown in the TopBar (plan Раздел 5 Блок 1 п.9).
     #if canImport(WebKit)
-    /// Lazy browser pool. Each project/chat/provider gets an isolated page;
-    /// cookies remain shared through WKWebView's default data store. We never
-    /// create 100 pages up front: the cap is a safety ceiling, not a target.
-    private var webViews: [String: WKWebView] = [:]
-    private var webViewLastUsed: [String: Date] = [:]
-    /// Structured pool keys parallel to `webViews` (storage keys join fields
-    /// with "::", which can theoretically collide with path characters).
-    private var webViewKeys: [String: WebBrowserInstanceKey] = [:]
-    private let maxWebBrowserInstances = 100
-    /// Round 30: permissive navigation/UI policies kept alive per webview so
-    /// vendor region redirects (kimi.com → kimi.ai), window.open hops and JS
-    /// dialogs all work in the embedded browser.
-    private var webNavigationPolicies: [String: PermissiveWebNavigationPolicy] = [:]
 
     @Published private(set) var webBrowserActionJournal: [WebBrowserActionRecord] = WebBrowserActionJournal.load()
 
@@ -1716,7 +1707,6 @@ class AppState: ObservableObject {
     func showWebBrowserPanel(for config: WebProviderConfig,
                              projectID: String,
                              chatID: String) {
-        _ = webView(for: config, projectID: projectID, chatID: chatID)
         webBrowserPanelConfig = WebBrowserPanelConfig(
             providerID: config.id,
             providerName: config.displayName,
@@ -1734,158 +1724,19 @@ class AppState: ObservableObject {
     }
 
     /// User directive 2026-09-09: switching to another chat/project surfaces
-    /// THAT chat's pooled webview ("another tab of the same site") when one
-    /// exists; otherwise the panel keeps showing whatever it showed (it is
-    /// never hidden or destroyed by navigation alone).
+    /// THAT chat's browser tab cast when the panel is already open; otherwise
+    /// nothing changes.
     @MainActor
     func showPanelForChatIfPooled(projectID: String, chatID: String) {
-        let candidates = webViewKeys.values.filter {
-            $0.projectID == projectID && $0.chatID == chatID
-        }
-        guard !candidates.isEmpty else { return }
-        let best = candidates.max {
-            (webViewLastUsed[$0.storageKey] ?? .distantPast)
-                < (webViewLastUsed[$1.storageKey] ?? .distantPast)
-        } ?? candidates[0]
-        let name = WebProviderStore.load(defaults: defaults)
-            .first(where: { $0.id == best.providerID })?.displayName ?? best.providerID
+        guard let existing = webBrowserPanelConfig else { return }
+        guard let provider = WebProviderStore.load(defaults: defaults)
+            .first(where: { $0.id == existing.providerID }) else { return }
         webBrowserPanelConfig = WebBrowserPanelConfig(
-            providerID: best.providerID,
-            providerName: name,
+            providerID: provider.id,
+            providerName: provider.displayName,
             projectID: projectID,
             chatID: chatID
         )
-    }
-
-    @MainActor
-    func webView(for config: WebProviderConfig,
-                 projectID: String? = nil,
-                 chatID: String? = nil) -> WKWebView {
-        let instanceKey = WebBrowserInstanceKey(
-            projectID: projectID ?? selectedWorkspace?.id ?? "global",
-            chatID: chatID ?? selectedSession?.id ?? "provider-default",
-            providerID: config.id,
-            activeSessionID: config.activeSessionID ?? WebSessionManager.defaultSessionID
-        )
-        let key = instanceKey.storageKey
-        if let existing = webViews[key] {
-            webViewLastUsed[key] = Date()
-            return existing
-        }
-        // Evict the policy together with its webview.
-        if webViews.count >= maxWebBrowserInstances,
-           let evictKey = webViewLastUsed.min(by: { $0.value < $1.value })?.key,
-           let evicted = webViews.removeValue(forKey: evictKey) {
-            evicted.stopLoading()
-            evicted.removeFromSuperview()
-            webViewLastUsed.removeValue(forKey: evictKey)
-            _ = webNavigationPolicies.removeValue(forKey: evictKey)
-            _ = webViewKeys.removeValue(forKey: evictKey)
-        }
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
-        // UX audit 2026-09-06: WebKit's default shows an I-beam text cursor
-        // over vendor links/buttons that only contain text ("Войти" etc.) —
-        // users read it as non-clickable. Force the pointing-hand cursor on
-        // every interactive element, like a real browser does.
-        config.userContentController.addUserScript(WKUserScript(
-            source: """
-            (function(){
-              var style = document.createElement('style');
-              style.textContent = [
-                'a, button, [role="button"], [role="option"], [role="menuitem"],',
-                '[onclick], input[type="button"], input[type="submit"], input[type="checkbox"],',
-                'label[for], summary, [class*="btn"], [class*="button"], [class*="clickable"]',
-                '{ cursor: pointer !important; }'
-              ].join(' ');
-              (document.head || document.documentElement).appendChild(style);
-            })();
-            """,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        ))
-        let wv = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 720), configuration: config)
-        // Round 30: maximally permissive navigation — allow every host/scheme,
-        // redirect popups into the same view, auto-answer JS dialogs.
-        let policy = PermissiveWebNavigationPolicy(ownerWebView: wv)
-        wv.navigationDelegate = policy
-        wv.uiDelegate = policy
-        webNavigationPolicies[key] = policy
-        // Add to a hidden window to ensure proper loading
-        let hiddenWindow = NSWindow(contentRect: NSRect(x: -2000, y: 0, width: 1280, height: 720),
-                                    styleMask: [.borderless],
-                                    backing: .buffered,
-                                    defer: false)
-        hiddenWindow.contentView = wv
-        hiddenWindow.orderFront(nil)
-        hiddenWindow.alphaValue = 1.0
-        webViews[key] = wv
-        webViewKeys[key] = instanceKey
-        webViewLastUsed[key] = Date()
-        return wv
-    }
-
-    /// Evaluate JavaScript on the most recently used webview (debug endpoint).
-    @MainActor
-    func debugEvaluateJS(_ script: String, webviewKey: String? = nil) async -> Any? {
-        // Explicit target key wins (debug API routing to a specific webview).
-        if let webviewKey, let wv = webViews[webviewKey] {
-            return await withCheckedContinuation { (continuation: CheckedContinuation<Any?, Never>) in
-                wv.evaluateJavaScript(script) { result, error in
-                    if let error {
-                        continuation.resume(returning: "ERROR: \(error.localizedDescription)")
-                    } else {
-                        continuation.resume(returning: result)
-                    }
-                }
-            }
-        }
-        // Try the most recent webview first
-        if let lastUsed = webViewLastUsed.max(by: { $0.value < $1.value }),
-           let wv = webViews[lastUsed.key] {
-            let result = await withCheckedContinuation { (continuation: CheckedContinuation<Any?, Never>) in
-                wv.evaluateJavaScript(script) { result, error in
-                    if let error = error {
-                        continuation.resume(returning: "ERROR: \(error.localizedDescription)")
-                    } else {
-                        continuation.resume(returning: result)
-                    }
-                }
-            }
-            if let str = result as? String, str.hasPrefix("ERROR:") {
-                // Try other webviews
-            } else if result != nil {
-                return result
-            }
-        }
-        // Fallback: try all webviews
-        for (_, wv) in webViews {
-            let result = await withCheckedContinuation { (continuation: CheckedContinuation<Any?, Never>) in
-                wv.evaluateJavaScript(script) { result, error in
-                    if let error = error {
-                        continuation.resume(returning: "ERROR: \(error.localizedDescription)")
-                    } else {
-                        continuation.resume(returning: result)
-                    }
-                }
-            }
-            if let str = result as? String, str.hasPrefix("ERROR:") {
-                continue
-            } else if result != nil {
-                return result
-            }
-        }
-        return nil
-    }
-
-    /// Get all webview URLs for debugging.
-    @MainActor
-    func debugWebviewURLs() -> [String: String] {
-        var urls: [String: String] = [:]
-        for (key, wv) in webViews {
-            urls[key] = wv.url?.absoluteString ?? "no-url"
-        }
-        return urls
     }
 
     @MainActor
@@ -1946,26 +1797,20 @@ class AppState: ObservableObject {
     func stopWebGeneration(providerID: String,
                             projectID: String,
                             chatID: String) async {
-        guard let config = WebProviderStore.load(defaults: defaults).first(where: { $0.id == providerID }) else { return }
-        let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
-        let selectors = WebVendorSelectors(
-            input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
-            sendButton: catalogEntry?.sendButton ?? "button[type='submit']",
-            responseContainer: catalogEntry?.responseContainer ?? "div[class*='message']",
-            stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop' i], button[data-testid='stop-button']"
-        )
-        let bridge = WKWebViewBrowserBridge(
-            webView: webView(for: config, projectID: projectID, chatID: chatID),
-            selectors: selectors
-        )
+        guard (try? EngineStatusCenter.shared.requireEngine()) != nil else { return }
+        let tabKey = AntiBrowserTabManager.makeKey(providerID: providerID,
+                                                  projectID: projectID,
+                                                  chatID: chatID)
+        let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
         try? await bridge.stopGeneration()
     }
 
     /// Refresh the *real* model list for an authenticated web provider. The
-    /// login sheet uses a separate WKWebView, so this method first restores the
-    /// captured cookies into the persistent chat web view, opens the vendor
-    /// page, waits for its composer, then opens and reads the model dropdown.
-    /// It returns an actionable message instead of silently leaving 0 models.
+    /// login flows through the AntiBrowser cast (REST), so this method first
+    /// restores the captured cookies into the persistent chat tab, opens the
+    /// vendor page, waits for its composer, then opens and reads the model
+    /// dropdown. It returns an actionable message instead of silently leaving
+    /// 0 models.
     @MainActor
     func refreshWebModels(for config: WebProviderConfig,
                           projectID: String? = nil,
@@ -1995,7 +1840,16 @@ class AppState: ObservableObject {
             responseContainer: "div[data-message-author-role='assistant'], div[class*='markdown'], div[class*='message']",
             stopButton: "button[aria-label*='stop'], button[data-testid='stop-button'], button[class*='stop']"
         )
-        let bridge = WKWebViewBrowserBridge(webView: webView(for: config, projectID: projectID, chatID: chatID), selectors: selectors)
+        let bridge: BrowserAutomationBridge
+        do {
+            try EngineStatusCenter.shared.requireEngine()
+            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                      projectID: projectID ?? "global",
+                                                      chatID: chatID ?? "provider-default")
+            bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+        } catch {
+            return error.localizedDescription
+        }
         var localStorageWarning: String?
         do {
             let payload = WebSessionRestorationLogic.payload(from: store)
@@ -2108,7 +1962,16 @@ class AppState: ObservableObject {
             responseContainer: "div[data-message-author-role='assistant'], div[class*='markdown'], div[class*='message']",
             stopButton: "button[aria-label*='stop'], button[data-testid='stop-button'], button[class*='stop']"
         )
-        let bridge = WKWebViewBrowserBridge(webView: webView(for: config, projectID: projectID, chatID: chatID), selectors: selectors)
+        let bridge: BrowserAutomationBridge
+        do {
+            try EngineStatusCenter.shared.requireEngine()
+            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                      projectID: projectID ?? "global",
+                                                      chatID: chatID ?? "provider-default")
+            bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+        } catch {
+            return error.localizedDescription
+        }
         var localStorageWarning: String?
         do {
             let payload = WebSessionRestorationLogic.payload(from: store)

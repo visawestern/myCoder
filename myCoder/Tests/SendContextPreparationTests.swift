@@ -96,8 +96,8 @@ struct SendContextPreparationTests {
             isEnabled: true,
             priorTurns: priorTurns()
         )
-        #expect(preparation.modelText == "UserStore load")
-        #expect(preparation.pack == nil)
+        #expect(preparation.modelText.contains("UserStore load"))
+        #expect(preparation.pack?.text.contains("предыдущий вопрос") == true)
         #expect(preparation.warning == nil)
         #expect(preparation.status == .noEvidence)
     }
@@ -117,7 +117,8 @@ struct SendContextPreparationTests {
         )
         #expect(preparation.status == .noEvidence)
         #expect(preparation.warning == nil)
-        #expect(preparation.modelText == "перечисли файлы проекта")
+        #expect(preparation.modelText.contains("перечисли файлы проекта"))
+        #expect(preparation.pack?.unknowns.isEmpty == false)
     }
 
     @Test("Пакет прикрепляется к user-сообщению как часть compiledContext")
@@ -223,7 +224,7 @@ struct SendContextPreparationTests {
         #expect(preparation.modelText == "привет")
         #expect(preparation.pack == nil)
         #expect(preparation.warning == nil)
-        #expect(preparation.status == .firstTurn)
+        #expect(preparation.status == .projectlessFirstTurn)
     }
 
     @Test("Нет совпадений в проекте: не ошибка, но и не выдуманный контекст")
@@ -238,8 +239,8 @@ struct SendContextPreparationTests {
             isEnabled: true,
             priorTurns: priorTurns()
         )
-        #expect(preparation.modelText == "совершенно посторонний текст без имён")
-        #expect(preparation.pack == nil)
+        #expect(preparation.modelText.contains("совершенно посторонний текст без имён"))
+        #expect(preparation.pack?.text.contains("История чата") == true)
         #expect(preparation.warning == nil)
         #expect(preparation.status == .noEvidence)
     }

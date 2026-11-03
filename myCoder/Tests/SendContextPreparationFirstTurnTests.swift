@@ -39,22 +39,22 @@ struct SendContextPreparationFirstTurnTests {
         ]
     }
 
-    @Test("Первый промпт в чате с проектом НЕ собирает контекст")
-    func firstTurnWithProjectDoesNotCollectContext() throws {
+    @Test("Первый промпт собирает контекст проекта")
+    func firstTurnWithProjectCollectsContext() throws {
         let root = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let preparation = SendContextPreparationLogic.prepare(
-            message: "привет",
+            message: "UserStore.load",
             records: try records(for: root),
             projectPath: root.path,
             isEnabled: true,
             priorTurns: []
         )
-        #expect(preparation.status == .firstTurn)
-        #expect(preparation.pack == nil)
+        #expect(preparation.status == .compiled)
+        #expect(preparation.pack?.text.contains("UserStore.swift:") == true)
         #expect(preparation.warning == nil)
-        #expect(preparation.modelText == "привет")
+        #expect(preparation.modelText.contains("UserStore.load"))
     }
 
     @Test("Первый промпт в чате без проекта НЕ собирает контекст")
@@ -66,7 +66,7 @@ struct SendContextPreparationFirstTurnTests {
             isEnabled: true,
             priorTurns: []
         )
-        #expect(preparation.status == .firstTurn)
+        #expect(preparation.status == .projectlessFirstTurn)
         #expect(preparation.pack == nil)
         #expect(preparation.modelText == "привет")
     }

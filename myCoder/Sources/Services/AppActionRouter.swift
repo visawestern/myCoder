@@ -517,7 +517,16 @@ final class AppActionRouter {
             "sessions": appState.sessions.map(sessionRow),
             "selectedSessionId": appState.selectedSession?.id ?? NSNull(),
             "selectedWorkspaceId": appState.selectedWorkspace?.id ?? NSNull(),
-            "providers": providerRows(appState: appState)
+            "providers": providerRows(appState: appState),
+            "context": ContextStateSnapshotLogic.block(
+                isPointContextEnabled: appState.isPointContextEnabled,
+                isLocalQueryPlannerEnabled: appState.isLocalQueryPlannerEnabled,
+                isCompiling: appState.isCompilingContext,
+                stageLine: appState.contextPreparationStage,
+                internalModels: InternalModelStore.shared.models,
+                indexedFileCount: appState.selectedWorkspace
+                    .map { ProjectFileIndexStore.load(projectPath: $0.path).count } ?? 0
+            )
         ]
         if let path = appState.activeSpecWizardProjectPath,
            let session = SpecWizardSessionStore.shared.session(projectPath: path) {
