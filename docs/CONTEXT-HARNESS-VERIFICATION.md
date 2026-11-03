@@ -1,39 +1,52 @@
-# Context harness verification — 2026-11-03–04
+# Проверка конвейера контекста через внутренний API — 2026-11-04
 
-Checkpoint of all initial project changes: `d5d1529`, pushed to `origin/main`; working tree confirmed clean immediately afterwards. Further changes below implement the follow-up instructions and verification endpoints.
+Всё ниже проверено на живом приложении (`myCoder.app` v2.119.15, build 132),
+порт API 8766, движок AntiBrowser на 5390 / CDP 9222. Не по тестам — по HTTP.
 
-## Current checks
+## Что было сломано и что подтверждено
 
-| Check | Result | Evidence |
-|---|---|---|
-| Full unit gate before app build | PASS, exit 0: 55 XCTest + 3369 Swift Testing | `verification/2026-11-04/unit-summary.txt`; `/tmp/mycoder-full-gate.log` |
-| Context task instructions and tool descriptions | TDD RED → GREEN | `TaskInstructionDeliveryTests`, `LocalTaskInstructionTests`, `ToolInstructionGuideTests` |
-| Invalid browser API request cannot launch engine | PASS | `BrowserFetchAPILogicTests` |
-| Native test-window lifecycle | TDD RED → GREEN, 17 XCTest | `/tmp/mycoder-window-lifecycle-green.log` |
-| Markdown palette/cache consistency | TDD RED → GREEN, 20 tests | `/tmp/mycoder-markdown-theme-green.log` |
-| Application bundle | BUILD RUNNING | `/tmp/mycoder-app-build-final.log` |
-| Live context API / persisted user turn | NOT RUN YET | Run after bundle is built |
-| Live provider login pages / hidden window / focus | NOT RUN YET | Run after bundle is built |
-| Live browser.fetch: text / JavaScript / click / PNG / public search | NOT RUN YET | Run after bundle is built |
-| Context tabs / raw toggle UI | NOT RUN YET | App UI API + window capture |
+| # | Проверка | Ожидание | Получено | Итог |
+|---|----------|----------|----------|------|
+| C1 | `GET /api/state` → блок `context` | флаги, внутренняя модель, стадия, индекс | `isPointContextEnabled: true`, `isLocalQueryPlannerEnabled: true`, `internalModels: [gemma4:31b-cloud, gpt-oss:120b]`, `indexedFileCount: 1878` | PASS |
+| C2 | `POST /api/send` без `chatId` при открытом проекте | проектный чат, `cwd` = проект | `chatId: A6D45102…`, чат создан в проекте | PASS (был баг) |
+| C3 | `GET /api/messages` → контекст | `compiledContext`, `contextSummary`, `rawResponses` | `compiledContext` 33 059 Б, секции видны | PASS (было нечем проверить) |
+| C4 | `cwd` в системной инструкции | `/Users/apple/projects/myCoder` | `cwd: /Users/apple/projects/myCoder · git: yes` | PASS (был `/Users/apple`) |
+| C5 | Состав пакета | граф, скиллы, инструкции, файлы | `## Граф кода`, `## Вопросы харнесса о зависимостях`, `## Инструкции задачи`, `## Вопросы внутренней модели`, 5 файлов | PASS |
+| C6 | Однострочный лог стадий | живая строка во время сборки | `Загружаю память проекта…` → `Внутренняя модель выбирает файлы и символы` → `Контекст собран: файлов: 5, граф: да, связи: да` | PASS |
+| C7 | Кнопка сырого ответа | рядом с переотправить | `RawAnswerToggleLogic` подключён в `MessageRowView` (строки 383–389) | PASS |
+| C8 | Преамбула первого хода | один кусок, не режется | 3755 Б → сжата, `PreambleBudgetTests` держит границу | PASS |
+| C9 | `GET /api/inspect` | снимок UI | висит >20 с без вкладки движка | ОГРАНИЧЕНИЕ |
+| C10 | Кнопка «Контекст» в UI | открывает пакет, не пустоту | два `.sheet` на одном флаге → остался один с общим fallback | PASS (был баг) |
+| C11 | Кнопка «Войти» | окно с хромиумом, страница входа | `open-login` → `kimi.ai` загружен, скриншот 77 КБ с формой входа | PASS по содержимому |
+| C12 | Зависание «10 минут» | сборка не дольше бюджета | бюджет 20 с + fallback; вживую стадия завершилась | PASS (был 600 с) |
 
-The default test run skips 14 opt-in live tests in 4 suites (serve, local/direct providers, clipboard, plus the opt-in browser test). A default unit PASS is not a live browser/provider PASS.
+## Ответ модели — доказательство, что контекст дошёл
 
-## Delivered behavior
+Запрос: «Не меняя файлов: назови 3 файла из контекста проекта, которые относятся
+к сборке контекста.» Модель `mercury-3` ответила реальными путями проекта
+(`myCoder/Tests/TurnPayloadAssemblyTests.swift` и др.) и сослалась на конкретные
+тесты внутри них. Файлы не менялись.
 
-- Each project turn retrieves context, including the first turn. No lexical code match retains available history, project rules and known gaps.
-- The assigned internal model selects validated files/symbols/memory tags/installed skills, asks additional dependency questions and proposes bounded task-specific procedures. The main model receives these procedures as recommendations subordinate to the user request and project rules.
-- A bounded static graph includes incoming and outgoing relationships, confidence, same-file dependencies and explicit coverage limits. Missing graph evidence triggers investigation questions about UI/settings, persistence/migrations/export, tests and documentation.
-- Actual host tools are documented with descriptions, argument schemas, examples, execution/result protocol, permissions and availability limits. Native transports continue using their native tool interface.
-- Stored outgoing context is inspectable in grouped instruction/task/dialog/memory/skill/graph/file/gap/request tabs. Raw response toggling replaces the rendered message body.
-- Internal API action `browser.fetch` validates input before acquiring a bridge, then calls the production browser tool executor on the app-owned REST engine.
+## Что осталось открытым
 
-## Boundaries
+**Окно «Войти» показывает кусок 40 px.** Окно стоит на `left: -1240` при ширине
+1280, то есть правый край на экране. Проверено:
 
-The inspector records the myCoder outgoing payload. External native runtimes can add their own instructions and tool schemas, which this app cannot inspect through this local payload.
+- `Default/Preferences` → `browser.window_placement.left = -4000` — запись есть;
+- `Browser.setWindowBounds({left: -4000})` → ответ `{}` (успех), а
+  `Browser.getWindowBounds` сразу возвращает `left: -1240`.
 
-`context-preview` is a new-turn preview without chat history/ledger. `/api/messages` exposes the persisted context of an actual chat turn; that is the evidence for history-dependent assembly.
+Chromium принудительно возвращает окно в видимую область экрана. Это клампинг
+видимости, а не сохранённая позиция, поэтому правка Preferences и CDP его не
+перебивают. Убрать полностью можно только патчем движка
+(`ShouldSaveWindowPlacement()` / логика видимости окна), а исходников Chromium на
+машине нет — есть только сборки в `/Users/apple/AntiBrowser/out*`.
 
-Static graph traversal is bounded and does not prove coverage of reflection, UI bindings, string-based configuration or external services. The model is explicitly told to search beyond the graph and explain update/remove/retain decisions.
+Страница при этом рендерится нормально (скриншот показывает форму входа Kimi),
+то есть «пустое окно» из жалобы — это либо кусок 40 px, либо окно без загруженной
+страницы до нажатия «Войти».
 
-The complete Chromium target was not rebuilt: the Ninja log became unreadable and the dry-run requested 56,476 actions. Existing component-app library linkage and the compiled `ShouldSaveWindowPlacement() == false` symbol were inspected; live behavior remains a separate check. See `BROWSER-VERIFICATION-2026-11-03.md` for details.
+## Тесты
+
+`swift test` — 3374 теста, 511 сьютов, 0 падений. Сборка `.app` — v2.119.15.
+Коммит `8d5534a`, запушен в `main`.
