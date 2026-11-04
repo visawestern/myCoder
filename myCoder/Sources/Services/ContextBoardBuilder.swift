@@ -67,14 +67,26 @@ enum ContextBoardBuilder {
     /// Unique lowercased identifiers of the file, capped so the board stays a
     /// map rather than a copy of the sources.
     static func tokens(in text: String, limit: Int = 400) -> Set<String> {
+        // Hot path: called once per file on every send. A scalar-by-scalar walk
+        // with `CharacterSet.contains` cost ~10 ms per 60 KB file, which alone
+        // stalled a send for seconds on a real project (live run 2026-11-04).
+        // A UTF-8 byte walk is the same rule for ASCII identifiers — which is
+        // what source code is — at a fraction of the cost.
         var result = Set<String>()
+        result.reserveCapacity(min(limit, 256))
         var current = ""
-        for scalar in text.unicodeScalars {
-            if CharacterSet.alphanumerics.contains(scalar) || scalar == "_" {
-                current.unicodeScalars.append(scalar)
+        current.reserveCapacity(32)
+        for byte in text.utf8 {
+            let isWord = (byte >= 48 && byte <= 57)      // 0-9
+                || (byte >= 65 && byte <= 90)            // A-Z
+                || (byte >= 97 && byte <= 122)           // a-z
+                || byte == 95                            // _
+                || byte >= 128                           // non-ASCII identifier part
+            if isWord {
+                current.append(Character(UnicodeScalar(byte)))
             } else if !current.isEmpty {
                 if current.count >= 3 { result.insert(current.lowercased()) }
-                current = ""
+                current.removeAll(keepingCapacity: true)
                 if result.count >= limit { return result }
             }
         }

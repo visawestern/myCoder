@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Процесс-менеджер браузера AntiBrowser: запуск, ожидание готовности,
 /// watchdog-перезапуск и завершение. Один процесс на всё приложение.
@@ -206,6 +207,51 @@ final class BrowserProcess {
     }
 
     // MARK: - Завершение
+
+    /// Зачищает любой процесс, слушающий порт движка (по умолчанию 5390).
+    /// Страховка для выхода из приложения: даже если движок был поднят мимо
+    /// EngineStatusCenter (например, вручную для отладки), myCoder не должен
+    /// оставлять его жить в фоне (живой прогон 2026-11-04).
+    static func terminateAnyRunningEngine(apiPort: Int = 5390) {
+        let probe = "http://127.0.0.1:\(apiPort)/version"
+        guard let url = URL(string: probe) else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 0.5
+        let sem = DispatchSemaphore(value: 0)
+        var alive = false
+        URLSession.shared.dataTask(with: req) { _, response, _ in
+            alive = (response as? HTTPURLResponse)?.statusCode != nil
+            sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + 0.6)
+        guard alive else { return }
+        // Порт отвечает — ищем PID через lsof и шлём SIGTERM.
+        let task = Process()
+        task.launchPath = "/usr/sbin/lsof"
+        task.arguments = ["-nP", "-iTCP:\(apiPort)", "-sTCP:LISTEN", "-t"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            for line in out.split(separator: "\n") {
+                if let pid = Int(line.trimmingCharacters(in: .whitespaces)) {
+                    posixKill(pid: pid_t(pid))
+                }
+            }
+        } catch {
+            // lsof недоступен — двигаемся дальше, EngineStatusCenter уже остановлен.
+        }
+    }
+
+    private static func posixKill(pid: Int32) {
+        if Darwin.kill(pid, SIGTERM) == 0 {
+            Thread.sleep(forTimeInterval: 0.5)
+            if Darwin.kill(pid, 0) == 0 { _ = Darwin.kill(pid, SIGKILL) }
+        }
+    }
 
     func terminate() {
         guard let process else { return }

@@ -1846,21 +1846,32 @@ struct ChatPanelView: View {
                 let plan = ContextQueryPlanner.plan(for: text)
                 return (plan.terms + plan.symbols).joined(separator: " ")
             }()
-            impactReport = await Task.detached(priority: .utility) { () -> ImpactReport? in
+            // Бюджет обязателен: report() переиндексирует проект синхронно и
+            // без предела. Живой прогон 2026-11-04 (чат FF5D0A17) встал на
+            // этой стадии и ход не дал ответа вообще. Проход — необязательные
+            // улики: по истечении бюджета идём дальше с тем графом, что есть.
+            let impactRoot = pointContextProjectRoot
+            let impactRecords = pointContextRecords
+            let impactIntent = localPlan?.plan?.intent
+            let impactTerms = (localPlan?.plan?.terms ?? []) + (localPlan?.plan?.symbols ?? []) + (localPlan?.plan?.files ?? [])
+            let messageText = text
+            let impactResult: ImpactReport?? = await ImpactBudget.runSync(budget: .seconds(ImpactBudget.defaultBudget)) { () -> ImpactReport? in
                 do {
                     return try ImpactAnalyzer.report(
-                        projectPath: pointContextProjectRoot,
-                        message: text,
+                        projectPath: impactRoot,
+                        message: messageText,
                         query: impactQuery,
-                        records: pointContextRecords,
-                        intent: localPlan?.plan?.intent,
-                        semanticTerms: (localPlan?.plan?.terms ?? []) + (localPlan?.plan?.symbols ?? []) + (localPlan?.plan?.files ?? [])
-                    )
+                        records: impactRecords,
+                        intent: impactIntent,
+                        semanticTerms: impactTerms
+                    ) ?? ImpactAnalyzer.analyze(message: messageText, seeds: [], graph: .empty,
+                                                 intent: impactIntent)
                 } catch {
-                    return ImpactAnalyzer.analyze(message: text, seeds: [], graph: .empty,
-                                                  intent: localPlan?.plan?.intent)
+                    return ImpactAnalyzer.analyze(message: messageText, seeds: [], graph: .empty,
+                                                  intent: impactIntent)
                 }
-            }.value
+            }
+            impactReport = impactResult ?? nil
         }
         // The system instruction is built BEFORE the context is compiled: the
         // pack carries it, so the context viewer can show the whole payload
@@ -2131,9 +2142,13 @@ struct ChatPanelView: View {
                 // server-side. Run the same text-protocol loop used by the
                 // the selected project, and its result is fed back so the
                 // model can continue instead of stopping at a raw ```tool block.
-                var executor = ProjectWebToolExecutor(
+                // Мост браузера обязателен: без него browser_fetch отвечает
+                // «bridge not available» даже при живом движке (живой прогон
+                // 2026-11-04: mercury-3 ушёл на web_fetch).
+                var executor = ProjectWebToolExecutor.bridged(
                     projectRoot: projectRoot,
-                    accessLevel: appState.accessLevel
+                    accessLevel: appState.accessLevel,
+                    sessionId: sendSessionID
                 )
                 executor.subagentLauncher = subagentLauncher(
                     projectRoot: projectRoot,

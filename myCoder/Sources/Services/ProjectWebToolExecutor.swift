@@ -36,6 +36,28 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         self.homeDirectory = homeDirectory ?? fileManager.homeDirectoryForCurrentUser
     }
 
+    /// Исполнитель с подключённым мостом браузера.
+    ///
+    /// Direct-модели (локальные и OpenAI-совместимые) исполняют инструменты
+    /// на хосте, но исполнитель создавался без моста — и `browser_fetch`
+    /// отвечал «requires an active browser session (bridge not available)»
+    /// даже при живом движке на 5390 (живой прогон 2026-11-04: mercury-3
+    /// получил эту ошибку и ушёл на web_fetch). Мост берётся из общего
+    /// менеджера, поэтому профиль и порт те же, что у движка.
+    @MainActor
+    static func bridged(projectRoot: String,
+                        accessLevel: AccessLevel = .askBeforeChanges,
+                        sessionId: String? = nil,
+                        tabKey: String = "tools") -> ProjectWebToolExecutor {
+        var executor = ProjectWebToolExecutor(
+            projectRoot: projectRoot,
+            sessionId: sessionId,
+            accessLevel: accessLevel
+        )
+        executor.bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+        return executor
+    }
+
     func execute(_ call: WebToolCall) async -> String {
         // The access gate runs before any side effect: a gated tool is never
         // executed, it is reported back to the model as needing approval.

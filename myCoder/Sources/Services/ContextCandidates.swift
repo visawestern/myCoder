@@ -45,11 +45,31 @@ enum CandidateRanker {
                 .replacingOccurrences(of: ".\(entry.language)", with: "")
                 .lowercased()
 
+            // Hot path (live run 2026-11-04, chats 77DF9308/FF5D0A17): the old
+            // loop lowercased every symbol name once per TERM — 2 000 files ×
+            // 60 symbols × 4 terms = 480 000 String allocations in one rank
+            // call, the single hottest frame of the stalled send. Now every
+            // name is lowercased once per ENTRY, and terms are prefiltred
+            // against one joined blob: a term that occurs nowhere in the blob
+            // cannot match any single name (terms never contain "\n"), so the
+            // per-symbol walk runs only for entries that mention the term.
+            let lowerNames = entry.symbols.map { lowercasedFast($0.name) }
+            let namesBlob = lowerNames.joined(separator: "\n")
+
             var best = 0.0
             var matched: [SymbolDeclaration] = []
             for term in terms {
-                for symbol in entry.symbols {
-                    let name = symbol.name.lowercased()
+                if baseName == term {
+                    best = max(best, 80)
+                } else if lowerPath.contains(term) {
+                    best = max(best, 30)
+                }
+                if entry.searchTokens.contains(term) {
+                    best = max(best, 20)
+                }
+                guard namesBlob.contains(term) else { continue }
+                for (index, name) in lowerNames.enumerated() {
+                    let symbol = entry.symbols[index]
                     if name == term {
                         best = max(best, 100)
                         matched.append(symbol)
@@ -60,14 +80,6 @@ enum CandidateRanker {
                         best = max(best, 40)
                         matched.append(symbol)
                     }
-                }
-                if baseName == term {
-                    best = max(best, 80)
-                } else if lowerPath.contains(term) {
-                    best = max(best, 30)
-                }
-                if entry.searchTokens.contains(term) {
-                    best = max(best, 20)
                 }
             }
             guard best > 0 else { continue }
@@ -101,6 +113,25 @@ enum CandidateRanker {
             ))
         }
         return result
+    }
+
+    /// ASCII fast path for the per-symbol lowercase: identical to
+    /// `lowercased()` for pure-ASCII strings (source identifiers), with a
+    /// Foundation fallback for anything else. This keeps exact ranking
+    /// semantics while removing the allocation storm from the hot loop.
+    private static func lowercasedFast(_ name: String) -> String {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(name.utf8.count)
+        var isASCII = true
+        for byte in name.utf8 {
+            if byte >= 128 {
+                isASCII = false
+                break
+            }
+            bytes.append(byte >= 65 && byte <= 90 ? byte + 32 : byte)
+        }
+        guard isASCII else { return name.lowercased() }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     /// Splits the query into lowercase terms, dropping punctuation and

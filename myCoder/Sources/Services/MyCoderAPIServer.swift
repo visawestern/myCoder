@@ -30,6 +30,15 @@ final class MyCoderAPIServer {
         }
     }
     
+    /// Останавливает listener. Вызывается при выходе из приложения, чтобы
+    /// последний запрос не ушёл в мост, который сейчас умрёт (живой прогон
+    /// 2026-11-04). Повторный вызов — no-op.
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        Self.appendLog("MyCoderAPIServer.stop() called")
+    }
+
     func start() {
         Self.appendLog("MyCoderAPIServer.start() called")
         do {
