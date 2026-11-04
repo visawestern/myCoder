@@ -66,4 +66,7 @@ FETCH_HEAD
 *.sqlite-wal
 *.sqlite-shm
 
+# Agent-local workspace memory / scratch (NOT a cache — never delete, never commit)
+.workbuddy-ai/
+
 
