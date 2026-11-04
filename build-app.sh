@@ -104,12 +104,22 @@ else
     echo "━━━ No version bump (use --bump [patch|minor|major] for a release)"
 fi
 
+# SwiftPM compiles the package manifest inside its own nested sandbox. Some
+# CI/agent shells cannot nest it (`sandbox_apply: Operation not permitted`),
+# so an opt-in flag keeps the release build reproducible there. This disables
+# only SwiftPM's manifest sandbox, never the outer environment's isolation.
+DISABLE_SPM_SANDBOX=""
+if [ "${MYCODER_DISABLE_SPM_SANDBOX:-0}" = "1" ]; then
+    DISABLE_SPM_SANDBOX="--disable-sandbox"
+    echo "    (SwiftPM manifest sandbox disabled by request)"
+fi
+
 # ── Tests (optional — never block a build check) ─────────────
 if [ "$SKIP_TESTS" -eq 1 ]; then
     echo "━━━ Skipping tests (--skip-tests)"
 else
     echo "━━━ Running tests… (failures are reported but do NOT abort the build)"
-    if swift test; then
+    if swift test $DISABLE_SPM_SANDBOX; then
         echo "━━━ Tests passed."
     else
         echo "━━━ ⚠️  Tests failed — continuing to build anyway (see output above)."
@@ -129,7 +139,7 @@ else
     echo "    (single-thread, -Onone — avoids Swift 6.3 deadlock)"
 fi
 
-if ! swift build -c release --product "$APP_NAME" $BUILD_ARGS -Xswiftc -no-whole-module-optimization -Xswiftc "$OPT_FLAG"; then
+if ! swift build -c release --product "$APP_NAME" $BUILD_ARGS $DISABLE_SPM_SANDBOX -Xswiftc -no-whole-module-optimization -Xswiftc "$OPT_FLAG"; then
     echo ""
     echo "━━━ ❌ BUILD FAILED. Full compiler output is above (not truncated)."
     echo "━━━    Fix the errors and re-run ./build-app.sh"
