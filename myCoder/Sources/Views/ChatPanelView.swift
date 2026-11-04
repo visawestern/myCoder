@@ -1554,7 +1554,7 @@ struct ChatPanelView: View {
         await compactConversation(reason: "auto at \(usage.percent)%", sessionID: sessionID)
     }
 
-    func sendDirectly(
+    func performDirectSend(
         text: String,
         files: [FileInfo],
         images: [ClipboardImage] = [],
@@ -2690,6 +2690,89 @@ struct ChatPanelView: View {
                 }
                 self.appState.scheduleGitRefresh(sessionID: sendSessionID)
             }
+        }
+    }
+
+    /// Owner design (2026-11-04): the quality-gated send. The old body is
+    /// `performDirectSend` above; this wrapper arms the standing «не
+    /// останавливайся, пока план не выполнен» order from the user's own
+    /// words and, once the turn fully finishes, runs the devil's-advocate
+    /// review (`AnswerQualityGate`): below 95/100 with an open plan and the
+    /// order in force, the analysis goes back into the model automatically.
+    func sendDirectly(
+        text: String,
+        files: [FileInfo],
+        images: [ClipboardImage] = [],
+        agentModeOverride: AgentMode? = nil,
+        retryCount: Int = 0,
+        retryPlan: SessionBusyRetryLogic.RetryPlan? = nil,
+        existingUserMessageID: String? = nil,
+        sessionID explicitSessionID: String? = nil,
+        qualityGateDepth: Int = 0
+    ) async {
+        let gateSessionID = explicitSessionID
+            ?? retryPlan?.sessionID
+            ?? appState.selectedSession?.id
+        if AnswerQualityGate.userOrderedNoStop(in: text) {
+            NoStopOrderStore.setOrdered(sessionID: gateSessionID ?? "")
+        }
+        await performDirectSend(
+            text: text,
+            files: files,
+            images: images,
+            agentModeOverride: agentModeOverride,
+            retryCount: retryCount,
+            retryPlan: retryPlan,
+            existingUserMessageID: existingUserMessageID,
+            sessionID: explicitSessionID
+        )
+        await runAnswerQualityGate(sessionID: gateSessionID, request: text, depth: qualityGateDepth)
+    }
+
+    /// The post-turn devil's-advocate review. Honest by construction: an
+    /// unfinished turn, a finished plan, a missing internal model or an
+    /// unparsable verdict all SKIP the gate instead of inventing a score.
+    private func runAnswerQualityGate(sessionID: String?, request: String, depth: Int) async {
+        guard depth < AnswerQualityGate.maxAutoContinues else { return }
+        guard let sessionID, !sessionID.isEmpty else { return }
+        // The turn must be fully finished: streaming or an unanswered plan
+        // question is an unfinished turn, the gate has nothing to review.
+        let turn = await MainActor.run { () -> (answer: String, projectRoot: String?)? in
+            guard !appState.isStreaming,
+                  appState.pendingQuestionRequest?.sessionID != sessionID else { return nil }
+            let messages = messageStore.messages(in: sessionID)
+            guard let last = messages.last(where: {
+                $0.role == .assistant && $0.isFinished && !$0.content.isEmpty
+            }), !last.content.hasPrefix("Error:") else { return nil }
+            return (last.content, appState.selectedWorkspace?.path)
+        }
+        guard let turn else { return }
+        let planItems = turn.projectRoot.map { PlanTodoBridge.planItems(projectPath: $0) } ?? []
+        guard !AnswerQualityGate.planIsComplete(items: planItems) else { return }
+
+        let outcome = await AnswerQualityGateRunner.evaluate(
+            request: request,
+            answer: turn.answer,
+            planItems: planItems,
+            noStopOrdered: NoStopOrderStore.isOrdered(sessionID: sessionID)
+        )
+        if let verdict = outcome.verdict {
+            let note = AnswerQualityGate.note(for: verdict, decision: outcome.decision)
+            await MainActor.run {
+                messageStore.append(
+                    Message(id: UUID().uuidString, role: .system, content: note, isStreaming: false),
+                    to: sessionID
+                )
+            }
+        }
+        if case .continueTurn(let feedback) = outcome.decision {
+            await sendDirectly(
+                text: feedback,
+                files: [],
+                agentModeOverride: nil,
+                sessionID: sessionID,
+                qualityGateDepth: depth + 1
+            )
         }
     }
 
