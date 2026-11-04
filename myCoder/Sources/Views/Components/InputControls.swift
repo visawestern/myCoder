@@ -385,9 +385,14 @@ struct MessageInputToolbar: View {
                 )
             }
             
-            AccessLevelMenu()
-
+            // Mode selector comes first; the access-level selector is hidden
+            // in read-only modes (plan/compose), where no approval prompts are
+            // shown at all (user directive 2026-11-05).
             AgentModeMenu()
+
+            if !PlanModeToolPolicy.isReadOnlyMode(appState.agentMode) {
+                AccessLevelMenu()
+            }
 
             Spacer(minLength: 8)
 

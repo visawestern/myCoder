@@ -32,10 +32,36 @@ final class PlanModePromptBuilderTests: XCTestCase {
     func testResolveAppendsPlanReminderOnlyInPlanMode() {
         let base = "BASE PROMPT"
         XCTAssertEqual(PlanModePromptBuilder.resolve(agentMode: .build, baseSystemPrompt: base), base)
-        XCTAssertEqual(PlanModePromptBuilder.resolve(agentMode: .compose, baseSystemPrompt: base), base)
 
         let plan = PlanModePromptBuilder.resolve(agentMode: .plan, baseSystemPrompt: base)
         XCTAssertTrue(plan.hasPrefix(base), "базовый промпт должен сохраняться")
         XCTAssertTrue(plan.contains("You are in Plan mode."), "в plan-режиме добавляется напоминание opencode")
+    }
+
+    func testResolveAppendsComposeReminderInComposeMode() {
+        let base = "BASE PROMPT"
+        let compose = PlanModePromptBuilder.resolve(agentMode: .compose, baseSystemPrompt: base)
+        XCTAssertTrue(compose.hasPrefix(base), "базовый промпт должен сохраняться")
+        XCTAssertTrue(compose.contains("You are in Compose mode."), "в compose-режиме добавляется описание режима")
+        XCTAssertFalse(compose.contains("You are in Plan mode."), "compose не должен говорить про plan")
+    }
+
+    func testPlanReminderIncludesTodoToolGuidance() {
+        let text = PlanModePromptBuilder.systemReminder()
+        XCTAssertTrue(
+            text.contains("todo") && text.contains("plan"),
+            "в plan-режиме должно быть руководство по работе с todo-тулами для обновления плана"
+        )
+        XCTAssertTrue(
+            text.contains("task_list") || text.contains("task_create") || text.contains("task_update"),
+            "todo-руководство должно называть конкретные тулы"
+        )
+    }
+
+    func testComposeReminderDescribesCompositionMode() {
+        let text = PlanModePromptBuilder.composeReminder()
+        XCTAssertTrue(text.contains("You are in Compose mode."), "должна быть строка открытия compose-режима")
+        XCTAssertTrue(text.contains("read-only") || text.contains("do not write"), "compose должен объяснять запрет записи")
+        XCTAssertTrue(text.contains("switch to build mode"), "compose должен указывать переключиться на build")
     }
 }

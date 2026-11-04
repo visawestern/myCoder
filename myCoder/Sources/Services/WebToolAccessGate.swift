@@ -109,6 +109,10 @@ enum WebToolAccessGate {
                 current.append(ch)
             } else if ch == "\"" || ch == "'" || ch == "`" {
                 inQuote = ch
+            } else if ch == ">" {
+                // Output redirection (>, >>, 2> …) writes to the filesystem —
+                // never read-only.
+                return false
             } else if ch == "&" || ch == ";" || ch == "|" || ch == "\n" {
                 flushSub()
             } else if ch == " " || ch == "\t" {

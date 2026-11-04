@@ -258,8 +258,15 @@ enum ImpactAnalyzer {
                        maxDependents: Int = 12) throws -> ImpactReport? {
         guard !projectPath.isEmpty,
               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        _ = try CodeIndexService.ensureIndexed(projectPath: projectPath, records: records)
         let store = try CodeIndexStore.open(projectPath: projectPath)
+        // Live API audit 2026-11-04: re-indexing the entire project on every
+        // turn made `context-preview` take ~20 s just here (and the planner's
+        // graph call another ~20 s). The store is maintained by the FSEvents
+        // watcher / explicit ensureIndexed; a read-only impact analysis only
+        // needs a first build when the store is completely empty.
+        if (try? store.counts().symbols == 0) == true {
+            _ = try CodeIndexService.ensureIndexed(projectPath: projectPath, records: records)
+        }
         let graph = ImpactGraph.build(extractions: try store.allActiveExtractions())
         let searchQuery = ([query] + semanticTerms).joined(separator: " ")
         let seeds = try store.search(query: searchQuery, limit: 6)

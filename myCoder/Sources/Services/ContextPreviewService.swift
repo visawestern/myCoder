@@ -69,16 +69,34 @@ enum ContextPreviewService {
                 let plan = ContextQueryPlanner.plan(for: trimmed)
                 return (plan.terms + plan.symbols).joined(separator: " ")
             }()
-            impact = await Task.detached(priority: .utility) { () -> ImpactReport? in
+            // Live API audit 2026-11-04: this pass re-indexes the project and
+            // walks the whole graph synchronously. Unbounded, it made the
+            // 60 s preview deadline flaky on a 1008-file project — the same
+            // message alternated between `compiled` and a timeout. The send
+            // path already bounds it with ImpactBudget; the preview must use
+            // the identical deadline. A timed-out pass is a gap in evidence,
+            // never a dead endpoint.
+            let impactRoot = request.projectPath
+            let impactMessage = trimmed
+            let impactQuery = query
+            let impactRecords = records
+            let impactIntent = localPlan?.plan?.intent
+            let impactSemanticTerms = (localPlan?.plan?.terms ?? [])
+                + (localPlan?.plan?.symbols ?? [])
+                + (localPlan?.plan?.files ?? [])
+            let bounded: ImpactReport?? = await ImpactBudget.runSync(
+                budget: .seconds(ImpactBudget.defaultBudget)
+            ) { () -> ImpactReport? in
                 try? ImpactAnalyzer.report(
-                    projectPath: request.projectPath,
-                    message: trimmed,
-                    query: query,
-                    records: records,
-                    intent: localPlan?.plan?.intent,
-                    semanticTerms: (localPlan?.plan?.terms ?? []) + (localPlan?.plan?.symbols ?? []) + (localPlan?.plan?.files ?? [])
+                    projectPath: impactRoot,
+                    message: impactMessage,
+                    query: impactQuery,
+                    records: impactRecords,
+                    intent: impactIntent,
+                    semanticTerms: impactSemanticTerms
                 )
-            }.value
+            }
+            impact = bounded ?? nil
         }
         let collector = StageCollector()
         let preparation = await SendContextPreparationLogic.prepareAsync(

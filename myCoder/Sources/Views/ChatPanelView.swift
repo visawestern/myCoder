@@ -2223,7 +2223,7 @@ struct ChatPanelView: View {
                             modelContext: response,
                             projectRoot: projectRoot,
                             accessLevel: appState.accessLevel,
-                            isPlanMode: agentMode == .plan
+                            agentMode: agentMode
                         )
                         for item in prepared {
                             timelineParts.append(.toolCall(
@@ -2886,7 +2886,7 @@ struct ChatPanelView: View {
         modelContext: String,
         projectRoot: String,
         accessLevel: AccessLevel,
-        isPlanMode: Bool
+        agentMode: AgentMode
     ) -> [PreparedLocalToolCall] {
         calls.map { call in
             let callID = UUID().uuidString
@@ -2896,11 +2896,12 @@ struct ChatPanelView: View {
             if call.arguments["__mycoder_truncated"] == "1", validationError == nil {
                 validationError = .incompleteJSON
             }
-            // Plan mode is read-only: mutating tools are refused right away,
-            // without a security prompt (user directive 2026-10-30).
+            // Plan/Compose modes are read-only: mutating tools are refused
+            // right away, without a security prompt (user directive
+            // 2026-10-30, extended to compose 2026-11-05).
             var denialReason: String?
             if case .deny(let reason) = PlanModeToolPolicy.decision(
-                for: call, isPlanMode: isPlanMode
+                for: call, mode: agentMode
             ) {
                 denialReason = reason
             }

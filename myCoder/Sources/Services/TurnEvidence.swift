@@ -152,6 +152,13 @@ enum TurnEvidence {
         return ContextSection(title: "Граф кода", body: lines.joined(separator: "\n"))
     }
 
+    /// Explicit gap section used when the graph build exceeded its budget. The
+    /// pack must say so honestly instead of silently dropping the section, so
+    /// the model sees why the graph is missing (bюджет стадии графа).
+    static func graphGap(reason: String) -> ContextSection {
+        ContextSection(title: "Граф кода", body: reason)
+    }
+
     // MARK: - Pieces
 
     /// Query terms for matching: lowercased words of three or more characters.

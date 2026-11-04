@@ -159,8 +159,18 @@ enum CodeIndexService {
                        limit: Int = 8,
                        records: [FileIndexRecord]? = nil) throws -> [CodeSearchHit] {
         let store = try CodeIndexStore.open(projectPath: projectPath)
-        let fileRecords = records ?? PointContextIndexLogic.records(projectPath: projectPath)
-        _ = try index(store: store, projectPath: projectPath, records: fileRecords)
+        // Live API audit 2026-11-04: a read-only search used to re-run the
+        // whole incremental index pass on EVERY call — 1009 file-state
+        // comparisons, mtime touches, reparse of changed files and an edge
+        // rebuild. The context pipeline calls search twice per turn (planner
+        // graph + compiler graph), so `context-preview` on the real project
+        // took 59-60 s and regularly hit its 60 s deadline. Indexing is
+        // event-driven (FSEvents watcher / explicit ensureIndexed); only a
+        // brand-new, completely empty store needs a first build here.
+        if (try? store.counts().symbols == 0) == true {
+            let fileRecords = records ?? PointContextIndexLogic.records(projectPath: projectPath)
+            _ = try index(store: store, projectPath: projectPath, records: fileRecords)
+        }
 
         let symbols = try store.search(query: query, limit: limit)
         guard !symbols.isEmpty else { return [] }
