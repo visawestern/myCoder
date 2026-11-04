@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 
 /// Deadline for the structural impact pass.
 ///
@@ -42,10 +43,24 @@ enum ImpactBudget {
     /// deadline task returned (measured: 5.0 s instead of 0.3 s). A one-shot
     /// continuation resolves exactly once and lets the loser run to completion
     /// in the background without blocking anyone.
+    ///
+    /// The deadline is enforced TWICE. `Task.sleep` alone is not enough:
+    /// Swift's cooperative pool has a fixed width, and when it is saturated
+    /// with blocking work (full selftest 2026-11-04: 3418 parallel tests, or a
+    /// send on a busy project) the timer never gets a thread and the hanging
+    /// work wins the race — `"late"` after 5.0 s instead of nil after 0.3 s.
+    /// GCD's overcommit queue is independent of that pool, so its one-shot
+    /// timer still fires. `ResultBox` guarantees only one resume; the losing
+    /// timer is a harmless no-op.
     private static func race<T: Sendable>(budget: Duration,
                                           work: @escaping @Sendable () async -> T) async -> T? {
         let box = ResultBox<T>()
         return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+            let components = budget.components
+            let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
+                if box.claim() { continuation.resume(returning: nil) }
+            }
             Task.detached(priority: .utility) {
                 let value = await work()
                 if box.claim() { continuation.resume(returning: value) }
