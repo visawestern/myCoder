@@ -133,3 +133,34 @@
   содержит `out156/Chromium.app` от 30.10 без этого фикса; полная пересборка
   Chromium — часы и ведётся браузерным агентом отдельно. B1 визуальная приёмка
   остаётся открытой, в myCoder-части (ленивый старт, EnsureTab) проверено тестами.
+
+## Раунд 6 — режимы Plan/Compose read-only + перестановка селекторов (✅)
+
+- [x] R6.1 `PlanModeToolPolicy` переведён на решение по `AgentMode`: в plan и
+      compose мутирующие тулы (write_file/edit_file/patch/git_commit/git_push/
+      git_pull/git_checkout/git_branch/todo_write/task_create/task_update/task)
+      и пишущие шелл-команды отклоняются без вопроса; читающие баш-команды
+      (pwd/ls/cat/grep/rg/git status/diff/log/…) выполняются; неизвестные тулы
+      в read-only режимах fail closed.
+- [x] R6.2 Дыра в `WebToolAccessGate.isReadOnlyCommand`: перенаправление вывода
+      (`>`) не считалось мутирующим. Добавлен детект «>» — redirection никогда
+      не read-only.
+- [x] R6.3 `PlanModePromptBuilder`: добавлено описание compose-режима
+      (`composeReminder`) и руководство по работе с todo-тулами для обновления
+      плана (todo_read/task_list/task_create/task_update). `resolve()` инжектит
+      описание для plan и compose, build не меняется.
+- [x] R6.4 UI: `AgentModeMenu` теперь стоит перед `AccessLevelMenu`; селектор
+      уровня доступа скрывается, когда выбран plan/compose (опросов на изменение
+      файлов нет вообще).
+- [x] R6.5 `ChatPanelView`: `prepareLocalToolCalls` и вызов политики переведены
+      на `AgentMode` вместо `isPlanMode: Bool`.
+- [x] R6.6 `TurnEvidence.graphGap` — фабрика явного пробела стадии графа
+      (контракт комплятора при истечении бюджета); GraphStageBudgetTests зелёные.
+- [x] R6.7 Тесты: PlanModeToolPolicyTests (6) + PlanModePromptBuilderTests (5) +
+      GraphStageBudgetTests (3) — зелёные. Связанные батчи: 156 + 121 тестов
+      (тулы/гейты/контекст/отправка) — зелёные.
+- [x] R6.8 Коммит `9ce7865`, пуш `11d5583..9ce7865`.
+
+| Раунд | Статус | Оценка гейта | Commit |
+|---|---|---|---|
+| 6 — режимы Plan/Compose | ✅ батчи зелёные; read-only политика + перестановка | 96 | `9ce7865` |
