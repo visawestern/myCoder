@@ -258,9 +258,25 @@ enum TurnContextCompiler {
             sections.append(ContextSection(title: "Вопросы внутренней модели", body:
                 "Гипотезы для проверки по коду, не готовые выводы:\n" + questions.map { "- " + $0 }.joined(separator: "\n")))
         }
-        if let instructions = localPlan?.plan?.instructions, !instructions.isEmpty {
+        // Owner design 2026-11-04: every task turn carries "how to work"
+        // instructions picked by the prompt. The internal model's own
+        // instructions win; when the planner fell back (no model assigned /
+        // no answer) the deterministic catalog keeps the floor — marked by
+        // source so the viewer stays honest about who picked them.
+        let modelInstructions = localPlan?.plan?.instructions ?? []
+        let instructions: [String]
+        let instructionSource: String
+        if !modelInstructions.isEmpty {
+            instructions = modelInstructions
+            instructionSource = "внутренней модели"
+        } else {
+            let catalogIntent = localPlan?.plan?.intent ?? TaskInstructionCatalog.intent(for: message)
+            instructions = TaskInstructionCatalog.instructions(for: catalogIntent, message: message)
+            instructionSource = "каталог задач"
+        }
+        if !instructions.isEmpty {
             sections.append(ContextSection(title: "Инструкции задачи", body:
-                "Рекомендации внутренней модели по выполнению текущего запроса. Они не отменяют запрос пользователя и правила проекта; проверяй применимость по коду.\n"
+                "Рекомендации (\(instructionSource)) по выполнению текущего запроса. Они не отменяют запрос пользователя и правила проекта; проверяй применимость по коду.\n"
                 + instructions.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")))
         }
         // Real graph evidence: symbols plus their edges. The flat board knows

@@ -2,7 +2,10 @@ import SwiftUI
 
 struct IndexingSettingsView: View {
     @EnvironmentObject var appState: AppState
-    
+    /// B3: the banner must disappear the moment a model is assigned, so the
+    /// store is observed, not read once.
+    @ObservedObject private var internalModelStore = InternalModelStore.shared
+
     private var indexNewFoldersBinding: Binding<Bool> {
         Binding(
             get: { appState.settings.indexNewFolders },
@@ -61,7 +64,47 @@ struct IndexingSettingsView: View {
 
                 SettingsToggleRow(title: L.t(AppLocalizationKey.locLocalQueryPlanner), description: L.t(AppLocalizationKey.locLocalQueryPlannerDescription), isOn: localPlannerBinding)
                     .disabled(!appState.isPointContextEnabled)
+
+                // B3: a planner without an assigned internal model silently
+                // degrades to the deterministic plan — the banner says it out
+                // loud and jumps to the provider list in one click.
+                if appState.isLocalQueryPlannerEnabled && internalModelStore.models.isEmpty {
+                    internalModelBanner
+                }
             }
         }
+    }
+
+    private var internalModelBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(Color.mimo.warning)
+                .font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L.t(AppLocalizationKey.locPlannerNoInternalModelTitle))
+                    .interfaceFont(size: 12, weight: .semibold)
+                    .foregroundColor(Color.mimo.textPrimary)
+                Text(L.t(AppLocalizationKey.locPlannerNoInternalModelBody))
+                    .interfaceFont(size: 10)
+                    .foregroundColor(Color.mimo.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button {
+                appState.showSettings = true
+                appState.settingsTab = .providers
+            } label: {
+                Text(L.t(AppLocalizationKey.locAddInternalModel))
+                    .interfaceFont(size: 11, weight: .medium)
+                    .foregroundColor(Color.mimo.brand)
+            }
+            .buttonStyle(HandCursorButtonStyle())
+            .help(L.t(AppLocalizationKey.locAddInternalModel))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.mimo.warning.opacity(0.08))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.mimo.warning.opacity(0.4), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
