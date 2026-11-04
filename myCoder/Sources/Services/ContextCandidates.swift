@@ -47,14 +47,22 @@ enum CandidateRanker {
 
             // Hot path (live run 2026-11-04, chats 77DF9308/FF5D0A17): the old
             // loop lowercased every symbol name once per TERM — 2 000 files ×
-            // 60 symbols × 4 terms = 480 000 String allocations in one rank
-            // call, the single hottest frame of the stalled send. Now every
-            // name is lowercased once per ENTRY, and terms are prefiltred
-            // against one joined blob: a term that occurs nowhere in the blob
-            // cannot match any single name (terms never contain "\n"), so the
-            // per-symbol walk runs only for entries that mention the term.
-            let lowerNames = entry.symbols.map { lowercasedFast($0.name) }
-            let namesBlob = lowerNames.joined(separator: "\n")
+            // 60 symbols × 4 terms of per-name work made rank() the hottest
+            // frame of a stalled send. Two findings from a -Onone profile
+            // (see CandidateRankerPerformanceTests): stdlib string primitives
+            // are @inlinable and therefore run UNOPTIMIZED inside a debug
+            // build (String.contains ≈ 133 µs per 700-byte blob → 0.93 s per
+            // rank), while Foundation's precompiled NSString literal search
+            // is 12× faster (0.08 s). So: one joined, lowercased blob per
+            // entry, terms prefiltred with NSString.range(of:.literal). A
+            // term that occurs nowhere in the blob cannot match any single
+            // name (terms never contain "\n"), so the per-symbol walk runs
+            // only for entries that actually mention the term.
+            let namesBlobLower = entry.symbols
+                .map(\.name)
+                .joined(separator: "\n")
+                .lowercased()
+            let namesBlob = namesBlobLower as NSString
 
             var best = 0.0
             var matched: [SymbolDeclaration] = []
@@ -67,9 +75,11 @@ enum CandidateRanker {
                 if entry.searchTokens.contains(term) {
                     best = max(best, 20)
                 }
-                guard namesBlob.contains(term) else { continue }
-                for (index, name) in lowerNames.enumerated() {
-                    let symbol = entry.symbols[index]
+                guard namesBlob.range(of: term, options: .literal).location != NSNotFound else {
+                    continue
+                }
+                for symbol in entry.symbols {
+                    let name = symbol.name.lowercased()
                     if name == term {
                         best = max(best, 100)
                         matched.append(symbol)
@@ -113,25 +123,6 @@ enum CandidateRanker {
             ))
         }
         return result
-    }
-
-    /// ASCII fast path for the per-symbol lowercase: identical to
-    /// `lowercased()` for pure-ASCII strings (source identifiers), with a
-    /// Foundation fallback for anything else. This keeps exact ranking
-    /// semantics while removing the allocation storm from the hot loop.
-    private static func lowercasedFast(_ name: String) -> String {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(name.utf8.count)
-        var isASCII = true
-        for byte in name.utf8 {
-            if byte >= 128 {
-                isASCII = false
-                break
-            }
-            bytes.append(byte >= 65 && byte <= 90 ? byte + 32 : byte)
-        }
-        guard isASCII else { return name.lowercased() }
-        return String(decoding: bytes, as: UTF8.self)
     }
 
     /// Splits the query into lowercase terms, dropping punctuation and
