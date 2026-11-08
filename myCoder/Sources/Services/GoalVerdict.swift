@@ -29,9 +29,17 @@ enum GoalVerdictParser {
     /// Merge the model verdict with the deterministic plan check: the plan
     /// check is ground truth for completeness, and the model's reason adds
     /// the concrete "what is not done" detail when the plan is incomplete.
+    ///
+    /// Exception (live defect 2026-11-09): when the plan is EMPTY the host has
+    /// no ground truth to judge against — the model worked directly, without
+    /// maintaining todo_ steps. In that case a valid model verdict (complete:
+    /// true) is trusted; otherwise the fallback continues the loop.
     static func merged(model: GoalVerdict?, plan: [UserGoal.PlanItem]) -> GoalVerdict {
         let deterministicComplete = GoalPlanStatusLogic.isComplete(plan)
         if let model, model.valid {
+            if plan.isEmpty {
+                return model
+            }
             // The deterministic check decides completion; the model enriches the reason.
             let notDone = deterministicComplete ? [] : (model.notDone.isEmpty ? GoalPlanStatusLogic.notDoneItems(plan) : model.notDone)
             let reason = model.reason.isEmpty ? GoalPlanStatusLogic.notDoneReason(plan) : model.reason

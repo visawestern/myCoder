@@ -89,4 +89,15 @@ enum GoalStore {
         try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
         return true
     }
+
+    /// Record why a goal stopped (lastError) and touch `updatedAt`.
+    @discardableResult
+    static func setLastError(id: UUID, error: String, homeDirectory: URL, fileManager: FileManager = .default) throws -> Bool {
+        var goals = load(homeDirectory: homeDirectory, fileManager: fileManager)
+        guard let idx = goals.firstIndex(where: { $0.id == id }) else { return false }
+        goals[idx].lastError = error.isEmpty ? nil : error
+        goals[idx].updatedAt = Date()
+        try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
+        return true
+    }
 }

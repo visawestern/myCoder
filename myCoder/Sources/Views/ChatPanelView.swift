@@ -3356,7 +3356,44 @@ struct ChatPanelView: View {
     /// ним; пока план движется (появляются done-шаги), счётчик сбрасывается
     /// и авто-цикл идёт до выполнения (директива 2026-11-09).
     private func runGoalVerification(sessionID: String?, noProgressCount: Int) async {
-        guard !GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: noProgressCount) else { return }
+        guard !GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: noProgressCount) else {
+            // Лимит безрезультатных попыток исчерпан: не оставляем цель
+            // «висеть» в active, будто она продолжается — честно ставим на
+            // паузу с причиной (директива 2026-11-09).
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let session = await MainActor.run { () -> ChatSession? in
+                guard let sessionID,
+                      let session = appState.sessions.first(where: { $0.id == sessionID }) else {
+                    return nil
+                }
+                return session
+            }
+            let context = await MainActor.run {
+                GoalContextLogic.context(
+                    chatID: sessionID,
+                    sessionDirectory: session?.directory,
+                    selectedWorkspacePath: appState.selectedWorkspace?.path
+                )
+            }
+            let goals = GoalContextLogic.visibleGoals(
+                GoalStore.load(homeDirectory: home),
+                context: context
+            )
+            if let goal = goals.first(where: { $0.state == .active }) {
+                _ = try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: home)
+                _ = try? GoalStore.setLastError(id: goal.id, error: GoalCyclePolicy.stallReason, homeDirectory: home)
+                await MainActor.run {
+                    if let sessionID {
+                        messageStore.append(
+                            Message(id: UUID().uuidString, role: .system,
+                                    content: "🎯 \(goal.title): \(GoalCyclePolicy.stallReason)",
+                                    isStreaming: false),
+                            to: sessionID)
+                    }
+                }
+            }
+            return
+        }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let session = await MainActor.run { () -> ChatSession? in
             guard let sessionID,

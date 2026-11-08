@@ -92,4 +92,43 @@ struct GoalVerificationServiceTests {
         #expect(outcome.verdict.notDone == ["Шаг 1"])
         #expect(outcome.continuation != nil)
     }
+
+    /// Живой дефект 2026-11-09: цель без плана (модель работала напрямую и
+    /// не вела todo_шаги) никогда не закрывалась — host принудительно считал
+    /// пустой план неполным, авто-цикл крутился и останавливался, а цель
+    /// оставалась active. Когда плана нет, валидному вердикту модели
+    /// доверяем: complete=true → цель выполнена.
+    @Test("Пустой план + модель подтвердила complete → цель выполнена")
+    func emptyPlanTrustsModelVerdict() async {
+        let goal = UserGoal(title: "Цель", plan: [])
+        let service = GoalVerificationService { _, _ in
+            #"{"complete": true, "notDone": [], "reason": "готово"}"#
+        }
+        let outcome = await service.verify(goal: goal, lastAssistantText: "готово", language: .russian)
+        #expect(outcome.verdict.complete == true)
+        #expect(outcome.continuation == nil)
+    }
+
+    @Test("Пустой план + модель без валидного вердикта → продолжение")
+    func emptyPlanWithoutModelVerdictContinues() async {
+        let goal = UserGoal(title: "Цель", plan: [])
+        let service = GoalVerificationService { _, _ in "не json" }
+        let outcome = await service.verify(goal: goal, lastAssistantText: "x", language: .russian)
+        #expect(outcome.verdict.complete == false)
+        #expect(outcome.continuation != nil)
+    }
+
+    @Test("План есть: модель говорит complete, но шаги не done → не верю")
+    func nonEmptyPlanStillDeterministic() async {
+        let goal = UserGoal(title: "Цель", plan: [
+            .init(title: "Шаг 1", status: .todo)
+        ])
+        let service = GoalVerificationService { _, _ in
+            #"{"complete": true, "notDone": [], "reason": "сделано"}"#
+        }
+        let outcome = await service.verify(goal: goal, lastAssistantText: "готово", language: .russian)
+        #expect(outcome.verdict.complete == false)
+        #expect(outcome.verdict.notDone == ["Шаг 1"])
+        #expect(outcome.continuation != nil)
+    }
 }

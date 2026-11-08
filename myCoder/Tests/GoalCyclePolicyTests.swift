@@ -46,6 +46,11 @@ struct GoalCyclePolicyTests {
         #expect(GoalCyclePolicy.failure(afterFailureCount: 0) == 1)
         #expect(GoalCyclePolicy.failure(afterFailureCount: 3) == 4)
     }
+
+    @Test("Причина стагнации существует и читаема")
+    func stallReasonIsPresent() {
+        #expect(!GoalCyclePolicy.stallReason.isEmpty)
+    }
 }
 
 /// «Звоночек» в списке чатов: чат ждёт решения пользователя (одобрение
