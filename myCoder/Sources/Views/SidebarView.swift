@@ -867,6 +867,7 @@ struct WorkspaceSidebarSection: View {
                             .interfaceFont(size: 12, weight: .medium)
                             .foregroundColor(Color.mimo.textPrimary)
                             .lineLimit(1)
+                            .neonGlow(active: projectNeedsAttentionNow && !isExpanded)
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .interfaceFont(size: 9)
                             .foregroundColor(Color.mimo.textMuted)
@@ -906,7 +907,6 @@ struct WorkspaceSidebarSection: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .onHover { hovering in isHovered = hovering }
-            .attentionPulse(active: projectNeedsAttentionNow && !isExpanded)
             .onAppear(perform: refreshAttention)
             .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
                 refreshAttention()
@@ -1073,6 +1073,7 @@ struct ProjectlessChatRow: View {
                         .interfaceFont(size: 12, weight: .medium)
                         .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
                         .lineLimit(1)
+                        .neonGlow(active: needsAttentionNow)
                     Spacer(minLength: 4)
                     Text(isSelected ? L.t(AppLocalizationKey.locNow) : timeBadge)
                         .interfaceFont(size: 10)
@@ -1102,7 +1103,6 @@ struct ProjectlessChatRow: View {
                 : Color.clear
         )
         .cornerRadius(6)
-        .attentionPulse(active: needsAttentionNow)
         .onAppear(perform: refreshAttention)
         .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
             refreshAttention()
@@ -1207,6 +1207,7 @@ struct SessionTaskRow: View {
                             .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .neonGlow(active: needsAttentionNow)
 
                         if isSelected {
                             // "now" badge
@@ -1283,7 +1284,6 @@ struct SessionTaskRow: View {
                 : Color.clear
         )
         .cornerRadius(6)
-        .attentionPulse(active: needsAttentionNow)
         .onAppear(perform: refreshAttention)
         .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
             refreshAttention()

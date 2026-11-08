@@ -1,38 +1,45 @@
 import SwiftUI
 import Foundation
 
-/// Моргающая подсветка «звоночка»: пока элемент требует решения пользователя,
-/// его фон пульсирует тёплым цветом (директива 2026-11-09).
-/// Активируется только когда `active == true`.
-struct AttentionPulseModifier: ViewModifier {
+/// Неоновая пульсирующая подсветка НАДПИСИ (директива 2026-11-09): когда
+/// элемент требует решения пользователя, его текст начинает светиться
+/// неоновым цветом — верхний слой-дубль с размытием и моргающей
+/// интенсивностью. Фон не трогается.
+struct NeonGlowModifier: ViewModifier {
     let active: Bool
-    @State private var pulsePhase = false
+    @State private var phase = false
 
     func body(content: Content) -> some View {
         content
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.mimo.warning.opacity(pulsePhase ? 0.08 : 0.30))
-            )
+            .foregroundColor(active ? Color.mimo.warning : nil)
+            .overlay {
+                if active {
+                    content
+                        .foregroundColor(Color.mimo.warning)
+                        .blur(radius: phase ? 7 : 2)
+                        .opacity(0.65)
+                        .allowsHitTesting(false)
+                }
+            }
             .task(id: active) {
                 guard active else {
-                    pulsePhase = false
+                    phase = false
                     return
                 }
-                // Моргание: фаза переключается каждые ~0.65 c, пока активно.
                 while !Task.isCancelled {
-                    withAnimation(.easeInOut(duration: 0.55)) {
-                        pulsePhase.toggle()
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        phase.toggle()
                     }
-                    try? await Task.sleep(for: .milliseconds(650))
+                    try? await Task.sleep(for: .milliseconds(600))
                 }
             }
     }
 }
 
 extension View {
-    func attentionPulse(active: Bool) -> some View {
-        modifier(AttentionPulseModifier(active: active))
+    /// Неоновая подсветка текста. `active` — горит ли «звоночек».
+    func neonGlow(active: Bool) -> some View {
+        modifier(NeonGlowModifier(active: active))
     }
 }
 
