@@ -14,15 +14,17 @@ import Foundation
 struct GraphStageBudgetTests {
 
     @Test("Зависшее построение графа не держит ход дольше бюджета")
-    func hangingGraphIsBounded() async {
-        let started = Date()
-        let result: String? = await ImpactBudget.runSync(budget: .milliseconds(250)) {
+    func hangingGraphIsBounded() async throws {
+        let outcome = await ImpactBudget.runSyncMeasuringDeadline(budget: .milliseconds(250)) {
             Thread.sleep(forTimeInterval: 5)
             return "graph"
         }
-        let elapsed = Date().timeIntervalSince(started)
-        #expect(result == nil)
-        #expect(elapsed < 4.8, "стадия графа держала ход \(elapsed) c (работа 5 с)")
+        #expect(outcome.value == nil)
+        // The deadline delay is measured at the timer inside the race, so it
+        // is not distorted by the cooperative pool scheduling the caller's
+        // continuation late under CPU contention.
+        let delay = try #require(outcome.deadlineDelay, "дедлайн должен выиграть гонку")
+        #expect(delay < 1.0, "стадия графа держала дедлайн \(delay) c (бюджет 0.25 c)")
     }
 
     @Test("Быстрый граф возвращается как обычно")

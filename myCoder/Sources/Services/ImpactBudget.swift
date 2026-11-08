@@ -22,6 +22,19 @@ enum ImpactBudget {
     static func run<T: Sendable>(budget: Duration,
                                  work: @escaping @Sendable () async -> T) async -> T? {
         guard budget > .zero else { return nil }
+        return await race(budget: budget) { await work() }.value
+    }
+
+    /// Same race as `run`, but it also reports WHEN the deadline timer fired.
+    ///
+    /// The delay is measured inside the race, at the timer — not by the
+    /// caller. A fully parallel suite saturates the cooperative pool, so the
+    /// caller's continuation can be scheduled seconds late; that delay
+    /// measures the scheduler, not the budget. The deadline delay is the
+    /// property the budget actually owns.
+    static func runMeasuringDeadline<T: Sendable>(budget: Duration,
+                                                  work: @escaping @Sendable () async -> T) async -> DeadlineOutcome<T> {
+        guard budget > .zero else { return DeadlineOutcome(value: nil, deadlineDelay: 0) }
         return await race(budget: budget) { await work() }
     }
 
@@ -35,6 +48,14 @@ enum ImpactBudget {
     static func runSync<T: Sendable>(budget: Duration = .seconds(defaultBudget),
                                      work: @escaping @Sendable () -> T) async -> T? {
         guard budget > .zero else { return nil }
+        return await race(budget: budget) { work() }.value
+    }
+
+    /// Same race as `runSync`, but it also reports WHEN the deadline timer
+    /// fired — measured at the timer, see `runMeasuringDeadline`.
+    static func runSyncMeasuringDeadline<T: Sendable>(budget: Duration = .seconds(defaultBudget),
+                                                      work: @escaping @Sendable () -> T) async -> DeadlineOutcome<T> {
+        guard budget > .zero else { return DeadlineOutcome(value: nil, deadlineDelay: 0) }
         return await race(budget: budget) { work() }
     }
 
@@ -46,33 +67,60 @@ enum ImpactBudget {
     /// continuation resolves exactly once and lets the loser run to completion
     /// in the background without blocking anyone.
     ///
-    /// The deadline is enforced TWICE. `Task.sleep` alone is not enough:
-    /// Swift's cooperative pool has a fixed width, and when it is saturated
-    /// with blocking work (full selftest 2026-11-04: 3418 parallel tests, or a
-    /// send on a busy project) the timer never gets a thread and the hanging
-    /// work wins the race — `"late"` after 5.0 s instead of nil after 0.3 s.
-    /// GCD's overcommit queue is independent of that pool, so its one-shot
-    /// timer still fires. `ResultBox` guarantees only one resume; the losing
-    /// timer is a harmless no-op.
+    /// The deadline runs on a DEDICATED thread (`DeadlineTimer`), not on a
+    /// queue: both GCD's global queue and Swift's cooperative pool are
+    /// exhausted under load (full selftest 2026-11-04: thousands of parallel
+    /// tests, many of them blocking), and a timer scheduled there fired
+    /// seconds late — measured 4.2 s for a 100 ms deadline, which defeats the
+    /// whole point of a budget. The cooperative `Task.sleep` stays as a
+    /// second line of defence; `ResultBox` guarantees only one resume, so the
+    /// losing timer is a harmless no-op.
     private static func race<T: Sendable>(budget: Duration,
-                                          work: @escaping @Sendable () async -> T) async -> T? {
+                                          work: @escaping @Sendable () async -> T) async -> DeadlineOutcome<T> {
         let box = ResultBox<T>()
-        return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+        let started = DispatchTime.now()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<DeadlineOutcome<T>, Never>) in
             let components = budget.components
             let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds) {
-                if box.claim() { continuation.resume(returning: nil) }
+            DeadlineTimer.shared.schedule(after: seconds) {
+                if box.claim() {
+                    let delay = elapsedSince(started)
+                    continuation.resume(returning: DeadlineOutcome(value: nil, deadlineDelay: delay))
+                }
             }
             Task.detached(priority: .utility) {
                 let value = await work()
-                if box.claim() { continuation.resume(returning: value) }
+                if box.claim() {
+                    continuation.resume(returning: DeadlineOutcome(value: value, deadlineDelay: nil))
+                }
             }
             Task.detached(priority: .utility) {
                 try? await Task.sleep(for: budget)
-                if box.claim() { continuation.resume(returning: nil) }
+                if box.claim() {
+                    let delay = elapsedSince(started)
+                    continuation.resume(returning: DeadlineOutcome(value: nil, deadlineDelay: delay))
+                }
             }
         }
     }
+
+    /// Seconds since the race started — monotonic, immune to clock changes.
+    private static func elapsedSince(_ started: DispatchTime) -> TimeInterval {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let then = started.uptimeNanoseconds
+        guard now > then else { return 0 }
+        return Double(now - then) / 1_000_000_000
+    }
+}
+
+/// Outcome of a budgeted run.
+///
+/// `value` is nil when the deadline won the race. `deadlineDelay` is how long
+/// the deadline timer took to fire, measured inside the race — nil when the
+/// work finished before the deadline.
+struct DeadlineOutcome<T: Sendable>: Sendable {
+    let value: T?
+    let deadlineDelay: TimeInterval?
 }
 
 /// One-shot latch: exactly one racer may resume the continuation.

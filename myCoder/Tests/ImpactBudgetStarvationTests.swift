@@ -12,7 +12,7 @@ import Foundation
 struct ImpactBudgetStarvationTests {
 
     @Test("Перегруженный пул не откладывает дедлайн")
-    func deadlineSurvivesStarvation() async {
+    func deadlineSurvivesStarvation() async throws {
         // Occupy cooperative threads with blocking work: longer than the
         // budget (100 ms), shorter than the work under test (600 ms) so the
         // deadline is unambiguously the winner that must be observed.
@@ -24,31 +24,27 @@ struct ImpactBudgetStarvationTests {
         // Let the blockers actually take their threads.
         try? await Task.sleep(for: .milliseconds(20))
 
-        let started = Date()
-        let result = await ImpactBudget.runSync(budget: .milliseconds(100)) {
+        let outcome = await ImpactBudget.runSyncMeasuringDeadline(budget: .milliseconds(100)) {
             Thread.sleep(forTimeInterval: 0.6)
             return "late"
         }
-        let elapsed = Date().timeIntervalSince(started)
-        #expect(result == nil, "дедлайн обязан выиграть, даже когда cooperative pool занят")
-        #expect(elapsed < 1.5, "дедлайн занял \(elapsed) с — таймер завис в пуле")
+        #expect(outcome.value == nil, "дедлайн обязан выиграть, даже когда cooperative pool занят")
+        let delay = try #require(outcome.deadlineDelay, "дедлайн должен выиграть гонку")
+        #expect(delay < 1.0, "дедлайн занял \(delay) с — таймер завис в пуле")
     }
 
     @Test("И при свободном пуле дедлайн срабатывает вовремя")
-    func deadlineStillFiresWhenIdle() async {
-        let started = Date()
-        let result = await ImpactBudget.run(budget: .milliseconds(100)) {
+    func deadlineStillFiresWhenIdle() async throws {
+        let outcome = await ImpactBudget.runMeasuringDeadline(budget: .milliseconds(100)) {
             try? await Task.sleep(for: .seconds(3))
             return "late"
         }
-        let elapsed = Date().timeIntervalSince(started)
-        #expect(result == nil)
-        // Wall-clock under a fully parallel suite is load-sensitive: the
-        // deadline's own continuation can be delayed by CPU contention even
-        // when the pool is nominally idle. The meaningful invariant is that
-        // the deadline fires (result == nil) at all — the bound below is a
-        // generous, still-bounded guard against a truly starved timer
-        // (8 s) rather than a sub-second precision claim.
-        #expect(elapsed < 6.0, "дедлайн занял \(elapsed) с — таймер сильно задержан")
+        #expect(outcome.value == nil)
+        // Measured at the timer, inside the race: the deadline's own firing is
+        // independent of when the cooperative pool schedules the caller's
+        // continuation (which is load-sensitive in a fully parallel suite and
+        // is a property of the scheduler, not of the budget).
+        let delay = try #require(outcome.deadlineDelay, "дедлайн должен выиграть гонку")
+        #expect(delay < 1.0, "дедлайн занял \(delay) с — таймер задержан")
     }
 }

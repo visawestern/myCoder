@@ -76,7 +76,12 @@ struct WebChatEventPresenterTests {
         let box = WebToolApprovalBox()
         let request = WebToolApprovalRequest(id: "c", tool: "t", message: "m")
         box.post(request)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+        // The answer is delivered by the dedicated deadline timer, not by
+        // `DispatchQueue.global().asyncAfter`: under load (thousands of
+        // parallel tests) the global queue can start the task seconds late,
+        // and then the test measures the queue's backlog instead of the
+        // mailbox's hand-over.
+        DeadlineTimer.shared.schedule(after: 0.1) {
             box.resolve(id: "c", approved: true)
         }
         #expect(box.awaitAnswer(timeoutSeconds: 5) == true)
