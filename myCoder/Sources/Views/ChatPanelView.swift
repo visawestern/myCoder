@@ -1642,6 +1642,11 @@ struct ChatPanelView: View {
         let capturedToolRoot = appState.toolWorkingDirectory
         let capturedModelID = appState.effectiveSelectedModel()
         let capturedParameters = ModelCallParametersStore.parameters(for: capturedModelID)
+        // The context-assembly log opens with the user's own request; every
+        // later action is recorded against it (user directive 2026-11-07).
+        await MainActor.run {
+            appState.beginContextAssembly(message: text, projectRoot: capturedProjectRoot)
+        }
         // Auto-compact BEFORE any history is assembled for this turn (plan:
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.
@@ -1662,6 +1667,12 @@ struct ChatPanelView: View {
             return history.map {
                 ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
             }
+        }
+        await MainActor.run {
+            appState.finishContextAction(
+                key: ContextAssemblyLogLogic.requestKey,
+                result: "История: \(priorTurnsForContext.count) ход(ов); проект: \(capturedProjectRoot.isEmpty ? "не открыт" : capturedProjectRoot)"
+            )
         }
         // Every message collects context, including the first one in a chat
         // with an open project (user directive 2026-11-03). The send path
@@ -1738,8 +1749,23 @@ struct ChatPanelView: View {
             await MainActor.run { appState.isCompilingContext = true }
             await MainActor.run {
                 appState.contextPreparationStage = ContextStageLogLogic.line(for: .index)
+                appState.startContextAction(
+                    key: ContextAssemblyLogLogic.indexKey,
+                    title: ContextAssemblyLogLogic.title(for: .index),
+                    request: "Корень проекта: \(pointContextProjectRoot)",
+                    processing: ContextStageLogLogic.line(for: .index)
+                )
             }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
+            await MainActor.run {
+                appState.finishContextAction(
+                    key: ContextAssemblyLogLogic.indexKey,
+                    result: pointContextRecords.isEmpty
+                        ? "Индекс пуст: файлов в индексе 0."
+                        : "Файлов в индексе: \(pointContextRecords.count).",
+                    status: pointContextRecords.isEmpty ? .warning : .done
+                )
+            }
             // Memory lives in the project database. A read failure must be
             // visible: sending without the facts the user saved would answer
             // from a wrong assumption.
@@ -1748,13 +1774,30 @@ struct ChatPanelView: View {
                     for: .memory,
                     detail: pointContextRecords.isEmpty ? "" : "файлов в индексе: \(pointContextRecords.count)"
                 )
+                appState.startContextAction(
+                    key: ContextAssemblyLogLogic.memoryKey,
+                    title: ContextAssemblyLogLogic.title(for: .memory),
+                    request: "Память проекта: \(pointContextProjectRoot)",
+                    processing: ContextStageLogLogic.line(for: .memory)
+                )
             }
+            var memoryLoadFailed = false
             do {
                 projectMemories = try await Task.detached(priority: .utility) {
                     try ProjectMemoryStore.loadChunks(projectPath: pointContextProjectRoot)
                 }.value
             } catch {
+                memoryLoadFailed = true
                 contextWarning = L.t(AppLocalizationKey.locMemoryLoadFailed)
+            }
+            await MainActor.run {
+                appState.finishContextAction(
+                    key: ContextAssemblyLogLogic.memoryKey,
+                    result: memoryLoadFailed
+                        ? "Память проекта не прочитана: \(L.t(AppLocalizationKey.locMemoryLoadFailed))"
+                        : "Чанков памяти: \(projectMemories.count).",
+                    status: memoryLoadFailed ? .warning : .done
+                )
             }
 
             // The ledger is append-only: it merges the persisted state with the
@@ -1763,6 +1806,14 @@ struct ChatPanelView: View {
             // a brand-new session simply has no ledger yet.
             let ledgerSessionID = turnSessionID ?? ""
             if !ledgerSessionID.isEmpty {
+                await MainActor.run {
+                    appState.startContextAction(
+                        key: ContextAssemblyLogLogic.ledgerKey,
+                        title: "Состояние задачи",
+                        request: "Сессия: \(ledgerSessionID); цель: \(appState.currentSessionGoal ?? "не задана")",
+                        processing: "Читаю сохранённое состояние задачи и объединяю его с видимыми ходами"
+                    )
+                }
                 var persisted: TaskLedger?
                 do {
                     persisted = try await Task.detached(priority: .utility) {
@@ -1796,6 +1847,18 @@ struct ChatPanelView: View {
                             .compactMap { $0 }.joined(separator: "\n")
                     }
                 }
+                await MainActor.run {
+                    appState.finishContextAction(
+                        key: ContextAssemblyLogLogic.ledgerKey,
+                        result: taskLedger.map { ledger in
+                            let summary = ledger.summaryText
+                            return summary.isEmpty
+                                ? "Состояние задачи пустое."
+                                : "Состояние задачи: \(summary.count) символов."
+                        } ?? "Состояние задачи не найдено.",
+                        status: taskLedger == nil ? .warning : .done
+                    )
+                }
             }
         }
         // The optional local planner runs before compilation and only widens
@@ -1821,6 +1884,12 @@ struct ChatPanelView: View {
             // (user directive 2026-10-29, §16.2).
             await MainActor.run {
                 appState.contextPreparationStage = ContextStageLogLogic.line(for: .planning)
+                appState.startContextAction(
+                    key: ContextAssemblyLogLogic.planningKey,
+                    title: ContextAssemblyLogLogic.title(for: .planning),
+                    request: "Запрос: \(text)",
+                    processing: ContextStageLogLogic.line(for: .planning)
+                )
             }
             localPlan = await Task.detached(priority: .utility) {
                 await TurnContextPlanningService.plan(
@@ -1832,15 +1901,30 @@ struct ChatPanelView: View {
                     ledger: taskLedger
                 )
             }.value
+            let planningOutcome = ContextAssemblyLogLogic.planningResult(localPlan)
+            await MainActor.run {
+                appState.finishContextAction(
+                    key: ContextAssemblyLogLogic.planningKey,
+                    result: planningOutcome.0,
+                    status: planningOutcome.1
+                )
+            }
         }
         // Harness pass: a structural change ("хранилище переехало", "раздел
         // больше не нужен") must arrive with its reverse edges and the
         // questions that force a decision on each one. Deterministic host
         // work over the code graph — the internal model only widens the plan.
         var impactReport: ImpactReport?
+        var impactTimedOut = false
         if appState.isPointContextEnabled, hasProjectForContext, needsContextPrep {
             await MainActor.run {
                 appState.contextPreparationStage = ContextStageLogLogic.line(for: .impact)
+                appState.startContextAction(
+                    key: ContextAssemblyLogLogic.impactKey,
+                    title: ContextAssemblyLogLogic.title(for: .impact),
+                    request: "Запрос: \(text)",
+                    processing: ContextStageLogLogic.line(for: .impact)
+                )
             }
             let impactQuery = {
                 let plan = ContextQueryPlanner.plan(for: text)
@@ -1872,6 +1956,15 @@ struct ChatPanelView: View {
                 }
             }
             impactReport = impactResult ?? nil
+            impactTimedOut = impactResult == nil
+            let impactOutcome = ContextAssemblyLogLogic.impactResult(impactReport, timedOut: impactTimedOut)
+            await MainActor.run {
+                appState.finishContextAction(
+                    key: ContextAssemblyLogLogic.impactKey,
+                    result: impactOutcome.0,
+                    status: impactOutcome.1
+                )
+            }
         }
         // The system instruction is built BEFORE the context is compiled: the
         // pack carries it, so the context viewer can show the whole payload
@@ -1884,6 +1977,14 @@ struct ChatPanelView: View {
         if case .web(let configID) = route {
             webUserRules = WebProviderStore.load().first(where: { $0.id == configID })?.systemPrompt ?? ""
         } else { webUserRules = "" }
+        await MainActor.run {
+            appState.startContextAction(
+                key: ContextAssemblyLogLogic.systemKey,
+                title: "Системная инструкция",
+                request: "Модель: \(capturedModelID); проект: \(capturedProjectRoot.isEmpty ? "не открыт" : capturedProjectRoot); режим: \(agentMode.rawValue)",
+                processing: "Собираю правила проекта, режим работы и правила провайдера"
+            )
+        }
         let sysPrompt = TurnDelivery.systemInstruction(
             route: route,
             userRules: [webUserRules, turnParams.systemPrompt ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n"),
@@ -1891,11 +1992,27 @@ struct ChatPanelView: View {
             isProject: !capturedProjectRoot.isEmpty,
             agentMode: agentMode
         )
+        await MainActor.run {
+            appState.finishContextAction(
+                key: ContextAssemblyLogLogic.systemKey,
+                result: sysPrompt.isEmpty
+                    ? "Системная инструкция пуста."
+                    : "Инструкция: \(sysPrompt.utf8.count) Б.",
+                status: sysPrompt.isEmpty ? .warning : .done
+            )
+        }
         // Prior turns already computed above (before any potentially heavy
         // project scan) — do not recompute.
         await MainActor.run {
             appState.contextPreparationStage = ContextStageLogLogic.line(for: .files)
         }
+        // What the compiler is about to look at — captured once so the log can
+        // name the real inputs of every stage.
+        let skillsDirectory = MyCoderPaths.skillsDir(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
+        let mergedPlan = TurnContextCompiler.merged(ContextQueryPlanner.plan(for: text), with: localPlan?.plan)
+        let contextQuery = (mergedPlan.terms + mergedPlan.symbols + mergedPlan.files).joined(separator: " ")
+        let evidenceQuery = ([text] + mergedPlan.symbols + mergedPlan.terms).joined(separator: " ")
+        let indexedFileCount = pointContextRecords.count
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -1909,15 +2026,34 @@ struct ChatPanelView: View {
             priorTurns: priorTurnsForContext,
             isPlanMode: agentMode == .plan,
             systemPrompt: sysPrompt,
-            skillsDirectory: MyCoderPaths.skillsDir(homeDirectory: FileManager.default.homeDirectoryForCurrentUser),
+            skillsDirectory: skillsDirectory,
             impact: impactReport,
             onStage: { stage in
                 // The compiler runs off the main actor; the composer line is
                 // UI state. Hop back for each real stage instead of leaving
                 // the graph/skills steps invisible (user directive п.2).
                 let line = ContextStageLogLogic.line(for: stage)
+                let request: String
+                switch stage {
+                case .skills:
+                    request = "Каталог скиллов: \(skillsDirectory.path)\nЗапрос: \(evidenceQuery)"
+                case .graph:
+                    request = "Запрос к графу: \(contextQuery)\nФайлов в индексе: \(indexedFileCount)"
+                case .files:
+                    request = "Бюджет: \(TurnContextCompiler.defaultBudgetTokens) токенов\nКандидатов: до \(TurnContextCompiler.defaultMaxFiles)\nЗапрос: \(contextQuery)"
+                case .impact:
+                    request = "Запрос: \(text)"
+                default:
+                    request = ""
+                }
                 DispatchQueue.main.async {
                     appState.contextPreparationStage = line
+                    appState.startContextAction(
+                        key: stage.rawValue,
+                        title: ContextAssemblyLogLogic.title(for: stage),
+                        request: request,
+                        processing: line
+                    )
                 }
             }
         )
@@ -1934,6 +2070,18 @@ struct ChatPanelView: View {
                 hasGraph: preparation.pack?.sections.contains { $0.title == "Граф кода" } ?? false,
                 hasImpact: preparation.pack?.sections.contains { $0.title.contains("зависимостях") } ?? false
             )
+            // Close the journal: every action now has its real outcome, and
+            // the skipped ones say why they were skipped.
+            appState.completeContextAssembly(ContextAssemblyLogLogic.Facts(
+                preparation: preparation,
+                projectRoot: pointContextProjectRoot,
+                contextEnabled: appState.isPointContextEnabled,
+                plannerEnabled: appState.isLocalQueryPlannerEnabled,
+                impact: impactReport,
+                impactTimedOut: impactTimedOut,
+                systemPromptBytes: sysPrompt.utf8.count,
+                historyTurnCount: priorTurnsForContext.count
+            ))
             appState.isCompilingContext = false
         }
         let modelText: String

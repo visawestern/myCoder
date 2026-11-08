@@ -547,7 +547,8 @@ final class AppActionRouter {
                 stageLine: appState.contextPreparationStage,
                 internalModels: InternalModelStore.shared.models,
                 indexedFileCount: appState.selectedWorkspace
-                    .map { ProjectFileIndexStore.load(projectPath: $0.path).count } ?? 0
+                    .map { ProjectFileIndexStore.load(projectPath: $0.path).count } ?? 0,
+                log: appState.contextAssemblyLog
             )
         ]
         if let path = appState.activeSpecWizardProjectPath,

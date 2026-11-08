@@ -14,8 +14,9 @@ enum ContextStateSnapshotLogic {
                       isCompiling: Bool,
                       stageLine: String,
                       internalModels: [InternalModelRef],
-                      indexedFileCount: Int) -> [String: Any] {
-        [
+                      indexedFileCount: Int,
+                      log: ContextAssemblyLogLogic.Log = .empty) -> [String: Any] {
+        var snapshot: [String: Any] = [
             "isPointContextEnabled": isPointContextEnabled,
             "isLocalQueryPlannerEnabled": isLocalQueryPlannerEnabled,
             "isCompiling": isCompiling,
@@ -23,7 +24,21 @@ enum ContextStateSnapshotLogic {
             "indexedFileCount": indexedFileCount,
             "internalModels": internalModels.map {
                 ["providerID": $0.providerID, "modelID": $0.modelID]
+            },
+            "assemblyRunning": log.isRunning,
+            "assemblySummary": log.summary,
+            "assemblyLog": log.entries.map { entry -> [String: Any] in
+                [
+                    "key": entry.key,
+                    "title": entry.title,
+                    "status": entry.status.rawValue,
+                    "request": entry.request,
+                    "processing": entry.processing,
+                    "result": entry.result,
+                    "durationMs": entry.durationMilliseconds.map { $0 as Any } ?? NSNull()
+                ]
             }
         ]
+        return snapshot
     }
 }

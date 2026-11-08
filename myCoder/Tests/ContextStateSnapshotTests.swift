@@ -57,4 +57,38 @@ struct ContextStateSnapshotTests {
         )
         #expect((block["internalModels"] as? [[String: String]])?.isEmpty == true)
     }
+
+    @Test("Журнал сборки виден по HTTP со всеми тремя частями действия")
+    func assemblyLogIsExposed() {
+        var log = ContextAssemblyLogLogic.begin(message: "q", projectRoot: "/tmp/p")
+        log = ContextAssemblyLogLogic.start(
+            key: ContextAssemblyLogLogic.indexKey,
+            title: "Индекс проекта",
+            request: "Корень проекта: /tmp/p",
+            processing: "Читаю индекс",
+            in: log
+        )
+        log = ContextAssemblyLogLogic.finish(
+            key: ContextAssemblyLogLogic.indexKey,
+            result: "Файлов в индексе: 42",
+            status: .done,
+            in: log
+        )
+        let block = ContextStateSnapshotLogic.block(
+            isPointContextEnabled: true,
+            isLocalQueryPlannerEnabled: false,
+            isCompiling: false,
+            stageLine: "",
+            internalModels: [],
+            indexedFileCount: 42,
+            log: log
+        )
+        let entries = block["assemblyLog"] as? [[String: Any]]
+        #expect(entries?.count == 2)
+        let indexEntry = entries?.first { $0["key"] as? String == ContextAssemblyLogLogic.indexKey }
+        #expect(indexEntry?["request"] as? String == "Корень проекта: /tmp/p")
+        #expect(indexEntry?["processing"] as? String == "Читаю индекс")
+        #expect(indexEntry?["result"] as? String == "Файлов в индексе: 42")
+        #expect(indexEntry?["status"] as? String == "done")
+    }
 }

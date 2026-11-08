@@ -152,6 +152,10 @@ class AppState: ObservableObject {
     /// (user directive D1: the loader says "собираем точечный контекст").
     @Published var isCompilingContext = false
     @Published var contextPreparationStage = ""
+    /// The complete, honest log of the last context-assembly run. The composer
+    /// status line is a spoiler over this log: every action keeps what was
+    /// requested, how it was processed and what came back.
+    @Published var contextAssemblyLog: ContextAssemblyLogLogic.Log = .empty
     /// Whether the point context is compiled before every send. On by default:
     /// compilation is deterministic and local, and without it the send carries
     /// no evidence at all.

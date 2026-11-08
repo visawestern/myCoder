@@ -575,6 +575,16 @@ enum AppLocalizationKey: String, CaseIterable {
     case locCompilingPointContext
     case locShowCompiledContext
     case locCompiledContextTitle
+    case locContextAssemblyLog
+    case locContextActionsCount
+    case locContextRequestLabel
+    case locContextProcessingLabel
+    case locContextResultLabel
+    case locContextStatusRunning
+    case locContextStatusDone
+    case locContextStatusWarning
+    case locContextStatusFailed
+    case locContextStatusSkipped
     case locContextCompilationFailed
     case locMemorySaved
     case locMemoryFailed
@@ -1528,6 +1538,16 @@ enum AppLocalization {
         "locCompilingPointContext": ["en": "Building point context…", "ru": "Собираем точечный контекст…", "es": "Preparando contexto puntual…", "fr": "Préparation du contexte ciblé…", "de": "Gezielter Kontext wird erstellt…", "zh": "正在构建精准上下文…", "ja": "ポイントコンテキストを準備中…", "ko": "포인트 컨텍스트 구성 중…", "pt": "Preparando contexto pontual…", "ar": "جارٍ تجهيز السياق النقطي…"],
         "locShowCompiledContext": ["en": "Context", "ru": "Контекст", "es": "Contexto", "fr": "Contexte", "de": "Kontext", "zh": "上下文", "ja": "コンテキスト", "ko": "컨텍스트", "pt": "Contexto", "ar": "السياق"],
         "locCompiledContextTitle": ["en": "Compiled point context", "ru": "Собранный точечный контекст", "es": "Contexto puntual compilado", "fr": "Contexte ciblé compilé", "de": "Kompilierter gezielter Kontext", "zh": "已编译的精准上下文", "ja": "コンパイル済みポイントコンテキスト", "ko": "컴파일된 포인트 컨텍스트", "pt": "Contexto pontual compilado", "ar": "السياق النقطي المُجمَّع"],
+        "locContextAssemblyLog": ["en": "Context assembly log", "ru": "Журнал сборки контекста", "es": "Registro de montaje del contexto", "fr": "Journal d'assemblage du contexte", "de": "Kontextaufbau-Protokoll", "zh": "上下文组装日志", "ja": "コンテキスト組み立てログ", "ko": "컨텍스트 구성 로그", "pt": "Registro de montagem do contexto", "ar": "سجل تجميع السياق"],
+        "locContextActionsCount": ["en": "%d actions", "ru": "Действий: %d", "es": "%d acciones", "fr": "%d actions", "de": "%d Aktionen", "zh": "%d 个操作", "ja": "%d 件の操作", "ko": "작업 %d개", "pt": "%d ações", "ar": "%d إجراءات"],
+        "locContextRequestLabel": ["en": "Request", "ru": "Запрос", "es": "Solicitud", "fr": "Demande", "de": "Anfrage", "zh": "请求", "ja": "リクエスト", "ko": "요청", "pt": "Solicitação", "ar": "الطلب"],
+        "locContextProcessingLabel": ["en": "Processing", "ru": "Обработка", "es": "Procesamiento", "fr": "Traitement", "de": "Verarbeitung", "zh": "处理", "ja": "処理", "ko": "처리", "pt": "Processamento", "ar": "المعالجة"],
+        "locContextResultLabel": ["en": "Result", "ru": "Результат", "es": "Resultado", "fr": "Résultat", "de": "Ergebnis", "zh": "结果", "ja": "結果", "ko": "결과", "pt": "Resultado", "ar": "النتيجة"],
+        "locContextStatusRunning": ["en": "running", "ru": "выполняется", "es": "en curso", "fr": "en cours", "de": "läuft", "zh": "进行中", "ja": "実行中", "ko": "실행 중", "pt": "em execução", "ar": "قيد التنفيذ"],
+        "locContextStatusDone": ["en": "done", "ru": "готово", "es": "hecho", "fr": "terminé", "de": "fertig", "zh": "完成", "ja": "完了", "ko": "완료", "pt": "concluído", "ar": "اكتمل"],
+        "locContextStatusWarning": ["en": "warning", "ru": "с предупреждением", "es": "con aviso", "fr": "avertissement", "de": "Warnung", "zh": "有警告", "ja": "警告あり", "ko": "경고", "pt": "com aviso", "ar": "تحذير"],
+        "locContextStatusFailed": ["en": "failed", "ru": "ошибка", "es": "falló", "fr": "échec", "de": "fehlgeschlagen", "zh": "失败", "ja": "失敗", "ko": "실패", "pt": "falhou", "ar": "فشل"],
+        "locContextStatusSkipped": ["en": "skipped", "ru": "пропущено", "es": "omitido", "fr": "ignoré", "de": "übersprungen", "zh": "已跳过", "ja": "スキップ", "ko": "건너뜀", "pt": "ignorado", "ar": "تم التخطي"],
         "locContextCompilationFailed": ["en": "Could not build the point context", "ru": "Не удалось собрать точечный контекст", "es": "No se pudo preparar el contexto puntual", "fr": "Impossible de préparer le contexte ciblé", "de": "Gezielter Kontext konnte nicht erstellt werden", "zh": "无法构建精准上下文", "ja": "ポイントコンテキストを構築できませんでした", "ko": "포인트 컨텍스트를 만들지 못했습니다", "pt": "Não foi possível preparar o contexto pontual", "ar": "تعذر تجهيز السياق النقطي"],
         "locMemorySaved": ["en": "Remembered", "ru": "Запомнил", "es": "Recordado", "fr": "Mémorisé", "de": "Gemerkt", "zh": "已记住", "ja": "記憶しました", "ko": "기억함", "pt": "Memorizado", "ar": "تم التذكر"],
         "locMemoryFailed": ["en": "Could not save this to project memory", "ru": "Не удалось сохранить это в память проекта", "es": "No se pudo guardar en la memoria del proyecto", "fr": "Impossible d'enregistrer dans la mémoire du projet", "de": "Konnte nicht im Projektgedächtnis gespeichert werden", "zh": "无法保存到项目记忆", "ja": "プロジェクトメモリに保存できませんでした", "ko": "프로젝트 메모리에 저장하지 못했습니다", "pt": "Não foi possível salvar na memória do projeto", "ar": "تعذر حفظ هذا في ذاكرة المشروع"],

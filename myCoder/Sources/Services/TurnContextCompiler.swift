@@ -137,6 +137,8 @@ struct CompiledContextPack: Equatable, Sendable {
 enum TurnContextCompiler {
 
     static let defaultBudgetTokens = 6_000
+    /// How many ranked files may enter the pack before the budget applies.
+    static let defaultMaxFiles = 8
     /// Rough but stable: four bytes per token. Only used for budgeting, never
     /// shown as a billing number.
     static let bytesPerToken = 4
@@ -148,7 +150,7 @@ enum TurnContextCompiler {
                         ledger: TaskLedger? = nil,
                         chatHistory: [ChatHistoryBuilder.Turn] = [],
                         budgetTokens: Int = defaultBudgetTokens,
-                        maxFiles: Int = 8,
+                        maxFiles: Int = defaultMaxFiles,
                         localPlan: LocalQueryPlanResult? = nil,
                         systemPrompt: String? = nil,
                         skillsDirectory: URL? = nil,
