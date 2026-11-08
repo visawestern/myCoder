@@ -786,6 +786,19 @@ struct WorkspaceSidebarSection: View {
     @State private var isExpanded: Bool
     @State private var hoveredSessionID: String?
     @State private var isHovered = false
+    @State private var projectNeedsAttentionNow = false
+
+    /// «Звоночек» проекта: хотя бы один его чат ждёт решения пользователя.
+    /// Когда проект скрыт (свёрнут), моргает сам проект.
+    private func refreshAttention() {
+        projectNeedsAttentionNow = workspaceSessions.contains { session in
+            SidebarAttentionLogic.chatNeedsAttention(
+                sessionID: session.id,
+                pendingApprovalCount: ToolApprovalCenter.shared.pendingCount(in: session.id),
+                pendingQuestionSessionID: appState.pendingQuestionRequest?.sessionID
+            )
+        }
+    }
 
     init(
         workspace: Workspace,
@@ -893,6 +906,14 @@ struct WorkspaceSidebarSection: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .onHover { hovering in isHovered = hovering }
+            .attentionPulse(active: projectNeedsAttentionNow && !isExpanded)
+            .onAppear(perform: refreshAttention)
+            .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
+                refreshAttention()
+            }
+            .onReceive(appState.$pendingQuestionRequest) { _ in
+                refreshAttention()
+            }
             
             // Nested Sessions
             if isExpanded {
@@ -1010,6 +1031,15 @@ struct ProjectlessChatRow: View {
     let node: SidebarProjectlessChatNode
     @EnvironmentObject var appState: AppState
     @State private var isHovered = false
+    @State private var needsAttentionNow = false
+
+    private func refreshAttention() {
+        needsAttentionNow = SidebarAttentionLogic.chatNeedsAttention(
+            sessionID: node.id,
+            pendingApprovalCount: ToolApprovalCenter.shared.pendingCount(in: node.id),
+            pendingQuestionSessionID: appState.pendingQuestionRequest?.sessionID
+        )
+    }
 
     private var isSelected: Bool {
         SidebarSelectionLogic.isSelected(sessionID: node.id, selectedSessionID: appState.selectedSession?.id)
@@ -1072,6 +1102,14 @@ struct ProjectlessChatRow: View {
                 : Color.clear
         )
         .cornerRadius(6)
+        .attentionPulse(active: needsAttentionNow)
+        .onAppear(perform: refreshAttention)
+        .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
+            refreshAttention()
+        }
+        .onReceive(appState.$pendingQuestionRequest) { _ in
+            refreshAttention()
+        }
         .onHover { hovering in isHovered = hovering }
     }
 }
@@ -1086,6 +1124,17 @@ struct SessionTaskRow: View {
     @FocusState private var isRenameFocused: Bool
     @State private var showingDeleteConfirm = false
     @State private var renameText = ""
+    @State private var needsAttentionNow = false
+
+    /// «Звоночек»: чат ждёт решения пользователя (одобрение инструмента или
+    /// вопрос) — строка моргает подсветкой.
+    private func refreshAttention() {
+        needsAttentionNow = SidebarAttentionLogic.chatNeedsAttention(
+            sessionID: session.id,
+            pendingApprovalCount: ToolApprovalCenter.shared.pendingCount(in: session.id),
+            pendingQuestionSessionID: appState.pendingQuestionRequest?.sessionID
+        )
+    }
 
     private func commitRename() {
         isRenaming = false
@@ -1234,6 +1283,14 @@ struct SessionTaskRow: View {
                 : Color.clear
         )
         .cornerRadius(6)
+        .attentionPulse(active: needsAttentionNow)
+        .onAppear(perform: refreshAttention)
+        .onReceive(NotificationCenter.default.publisher(for: SidebarAttentionNotification.changed)) { _ in
+            refreshAttention()
+        }
+        .onReceive(appState.$pendingQuestionRequest) { _ in
+            refreshAttention()
+        }
         .alert("Delete this chat?", isPresented: $showingDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 appState.deleteSessionInDatabaseUI(id: session.id)

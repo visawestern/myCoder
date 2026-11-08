@@ -38,6 +38,7 @@ final class ToolApprovalCenter {
             sessionID: sessionID,
             assistantID: assistantID
         )
+        SidebarAttentionNotification.post()
     }
 
     /// Suspends until the user resolves this approval. If a verdict was
@@ -67,6 +68,7 @@ final class ToolApprovalCenter {
         } else {
             bufferedVerdicts[id] = approved
         }
+        SidebarAttentionNotification.post()
     }
 
     /// Denies every queued approval belonging to one chat. Other chats keep

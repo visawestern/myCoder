@@ -3293,7 +3293,7 @@ struct ChatPanelView: View {
             sessionID: explicitSessionID
         )
         await runAnswerQualityGate(sessionID: gateSessionID, request: text, depth: qualityGateDepth)
-        await runGoalVerification(sessionID: gateSessionID, depth: goalVerifyDepth)
+        await runGoalVerification(sessionID: gateSessionID, noProgressCount: goalVerifyDepth)
     }
 
     /// The post-turn devil's-advocate review. Honest by construction: an
@@ -3350,8 +3350,13 @@ struct ChatPanelView: View {
     /// and the turn auto-continues. When complete, the goal is marked done.
     /// Honest by construction: no active goal, an unfinished turn, or a
     /// missing internal model all skip quietly instead of inventing a verdict.
-    private func runGoalVerification(sessionID: String?, depth: Int) async {
-        guard depth < GoalPlanStatusLogic.maxAutoContinues else { return }
+    ///
+    /// `noProgressCount` — число БЕЗРЕЗУЛЬТАТНЫХ продолжений подряд (после
+    /// них план не изменился: модель буксует). Лимит применяется только к
+    /// ним; пока план движется (появляются done-шаги), счётчик сбрасывается
+    /// и авто-цикл идёт до выполнения (директива 2026-11-09).
+    private func runGoalVerification(sessionID: String?, noProgressCount: Int) async {
+        guard !GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: noProgressCount) else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let session = await MainActor.run { () -> ChatSession? in
             guard let sessionID,
@@ -3399,6 +3404,7 @@ struct ChatPanelView: View {
         // Помечаем прогресс: план обновляется по вердикту (done для
         // подтверждённых шагов, in_progress для текущих).
         let updatedPlan = GoalRunner.updatedPlan(goal.plan, verdict: outcome.verdict)
+        let progressed = GoalCyclePolicy.progressed(from: goal.plan, to: updatedPlan)
         _ = try? GoalStore.updatePlan(id: goal.id, plan: updatedPlan, homeDirectory: home)
         NotificationCenter.default.post(name: Notification.Name("myCoderGoalStoreChanged"), object: nil)
 
@@ -3432,7 +3438,9 @@ struct ChatPanelView: View {
             files: [],
             agentModeOverride: nil,
             sessionID: sessionID,
-            goalVerifyDepth: depth + 1
+            goalVerifyDepth: progressed
+                ? GoalCyclePolicy.success(afterFailureCount: noProgressCount)
+                : GoalCyclePolicy.failure(afterFailureCount: noProgressCount)
         )
     }
 
