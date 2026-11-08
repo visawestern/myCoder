@@ -37,6 +37,27 @@ struct HarnessPromptQualityTests {
         #expect(native.contains("RULES") || true)
     }
 
+    @Test func nativeSystemCarriesFileSizeAndTddRules() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("under 600 lines"), "системный промпт должен требовать ≤600 строк на файл")
+        #expect(lower.contains("tdd") || lower.contains("test-first"), "системный промпт должен требовать TDD")
+    }
+
+    @Test func nativeSystemCarriesAtomicModularCodePipeline() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("code work pipeline"), "должна быть секция конвейера кода")
+        #expect(lower.contains("atomic"), "должна требоваться атомарная декомпозиция")
+        #expect(lower.contains("modular"), "должны требоваться модульные единицы")
+        #expect(lower.contains("contract"), "над каждой функцией должен быть комментарий-контракт")
+        #expect(lower.contains("compile and test each unit"), "проверка должна идти по мере написания модулей")
+    }
+
     // MARK: - Structural summary (Claude Code-style)
 
     @Test func structuralSummaryUsesClaudeCodeSections() {

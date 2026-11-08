@@ -1214,7 +1214,7 @@ struct CompiledContextSheet: View {
             }
 
             TabView {
-                ForEach(Array(TurnPresentation.inspectionTabs(displayText).enumerated()), id: \.offset) { _, section in
+                ForEach(Array(TurnPresentation.inspectionTabs(displayText).enumerated()), id: \.offset) { index, section in
                 ScrollView {
                 Text(section.body)
                     .interfaceFont(size: 11, design: .monospaced)
@@ -1223,7 +1223,16 @@ struct CompiledContextSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-                .tabItem { Text(section.title) }
+                .tabItem {
+                    if index == 0 {
+                        // Первая вкладка «Итоговый промпт» — зелёная и открыта
+                        // по умолчанию (директива 2026-11-08).
+                        Label(section.title, systemImage: "doc.text.fill")
+                            .foregroundColor(Color.mimo.success)
+                    } else {
+                        Text(section.title)
+                    }
+                }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

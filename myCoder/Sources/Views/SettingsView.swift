@@ -104,6 +104,8 @@ struct SettingsContent: View {
                         SkillsSettingsView()
                     case .mcpServers:
                         MCPServersSettingsView()
+                    case .lspServers:
+                        LSPServersSettingsView()
                     case .plugins:
                         PluginsSettingsView()
                     case .commands:

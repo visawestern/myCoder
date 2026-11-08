@@ -1008,6 +1008,14 @@ enum AppLocalization {
         case .providers: return string(.settingsTabProviders, language: language)
         case .skills: return string(.settingsTabSkills, language: language)
         case .mcpServers: return string(.settingsTabMCPServers, language: language)
+        case .lspServers:
+            switch language {
+            case .russian: return "Языковые серверы"
+            case .spanish: return "Servidores de lenguaje"
+            case .french: return "Serveurs de langage"
+            case .german: return "Sprachserver"
+            default: return "LSP Servers"
+            }
         case .plugins: return string(.settingsTabPlugins, language: language)
         case .commands: return string(.settingsTabCommands, language: language)
         case .indexing: return string(.settingsTabIndexing, language: language)

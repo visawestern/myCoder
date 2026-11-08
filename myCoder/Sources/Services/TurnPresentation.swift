@@ -32,11 +32,15 @@ enum TurnPresentation {
             }
             groups[group, default: []].append("## \(section.title)\n\(section.body)")
         }
-        return ["Инструкции", "Задача", "Диалог", "Память", "Навыки", "Связи", "Файлы", "Пробелы", "Контекст", "Запрос"]
-            .compactMap { title in
-                guard let bodies = groups[title] else { return nil }
-                return ContextSection(title: title, body: bodies.joined(separator: "\n\n"))
-            }
+        let order: [String] = ["Инструкции", "Задача", "Диалог", "Память", "Навыки", "Связи", "Файлы", "Пробелы", "Контекст", "Запрос"]
+        let grouped = order.compactMap { title -> ContextSection? in
+            guard let bodies = groups[title] else { return nil }
+            return ContextSection(title: title, body: bodies.joined(separator: "\n\n"))
+        }
+        // User directive 2026-11-08: the FIRST tab of the context dialog is the
+        // "Итоговый промпт" — the full real prompt sent to the model. It is
+        // prepended so the dialog opens on it by default.
+        return [ContextSection(title: "Итоговый промпт", body: text)] + grouped
     }
 
     static func sections(_ text: String) -> [ContextSection] {

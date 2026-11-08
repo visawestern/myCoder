@@ -67,6 +67,13 @@ enum MyCoderPaths {
 
     static let skillsRegistryRelativePath = ".mycoder/skills/registry.json"
     static let mcpRegistryRelativePath = ".mycoder/mcp/registry.json"
+    static let lspRegistryRelativePath = ".mycoder/lsp/registry.json"
+
+    /// JSON config of installed/enabled language servers (LSP). Mirrors how
+    /// `mcp.json` stores MCP servers: id → {command, args, languages, disabled}.
+    static func lspConfigURL(homeDirectory: URL) -> URL {
+        appDir(homeDirectory: homeDirectory).appendingPathComponent("lsp.json")
+    }
 
     static func commandsDir(homeDirectory: URL) -> URL {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("commands", isDirectory: true)

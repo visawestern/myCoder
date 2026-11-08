@@ -699,19 +699,19 @@ struct SettingsTabNavigationTests {
         // `.modelSettings` is kept for back-compat but must NEVER be in the
         // visible tab list: the plan (Раздел 1 Блок 3) merged Model settings
         // into a single Providers tab, and SettingsView renders only
-        // `SettingsTab.visibleCases`. Asserting `allCases.count == 11` (the old
-        // contract) validated the wrong thing — the UI shows 10 tabs.
-        #expect(SettingsTab.allCases.count == 11)
+        // `SettingsTab.visibleCases`. LSP Servers was added as a visible tab
+        // (директива 2026-11-08), so the visible count is now 11.
+        #expect(SettingsTab.allCases.count == 12)
         #expect(SettingsTab.allCases.contains(.modelSettings))
     }
 
-    @Test("the visible tab list is the consolidated 10-tab Providers set, no Model settings")
+    @Test("the visible tab list is the consolidated 11-tab Providers set, no Model settings")
     func settingsTabVisibleList() {
-        #expect(SettingsTab.visibleCases.count == 10)
+        #expect(SettingsTab.visibleCases.count == 11)
         #expect(!SettingsTab.visibleCases.contains(.modelSettings))
         let expected: [SettingsTab] = [
             .general, .codePreview, .providers, .skills,
-            .mcpServers, .plugins, .commands, .indexing,
+            .mcpServers, .lspServers, .plugins, .commands, .indexing,
             .storage, .usage
         ]
         #expect(SettingsTab.visibleCases == expected)
