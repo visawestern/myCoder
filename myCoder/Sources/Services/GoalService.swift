@@ -20,6 +20,7 @@ enum GoalService {
             }
             let goal = UserGoal(title: title, state: .pending)
             try GoalStore.upsert(goal, homeDirectory: homeDirectory)
+            notifyChanged()
             return (GoalStore.load(homeDirectory: homeDirectory), "Цель создана: \(title)")
 
         case .start:
@@ -28,6 +29,7 @@ enum GoalService {
                 return (goals, "Нет цели. Сначала задай её: /goal <текст>")
             }
             try GoalStore.setState(id: goal.id, state: .active, homeDirectory: homeDirectory)
+            notifyChanged()
             let planReady = GoalPlanStatusLogic.ready(goal.plan)
             let reply = planReady
                 ? "Цель запущена. Проверяю готовность плана."
@@ -40,6 +42,7 @@ enum GoalService {
                   (try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: homeDirectory)) == true else {
                 return (goals, "Нет активной цели.")
             }
+            notifyChanged()
             return (GoalStore.load(homeDirectory: homeDirectory), "Цель поставлена на паузу.")
 
         case .resume:
@@ -48,6 +51,7 @@ enum GoalService {
                   (try? GoalStore.setState(id: goal.id, state: .active, homeDirectory: homeDirectory)) == true else {
                 return (goals, "Нет цели для возобновления.")
             }
+            notifyChanged()
             return (GoalStore.load(homeDirectory: homeDirectory), "Цель возобновлена.")
 
         case .delete(let index):
@@ -57,6 +61,7 @@ enum GoalService {
             }
             let target = goals[min(index ?? 0, goals.count - 1)]
             _ = try GoalStore.remove(id: target.id, homeDirectory: homeDirectory)
+            notifyChanged()
             return (GoalStore.load(homeDirectory: homeDirectory), "Цель удалена: \(target.title)")
 
         case .list:
@@ -73,5 +78,12 @@ enum GoalService {
         case .none:
             return (GoalStore.load(homeDirectory: homeDirectory), "")
         }
+    }
+
+    /// Tell the live UI (right-panel goals section, composer goal spoiler) that
+    /// the goal store changed so it refreshes — whether the change came from the
+    /// `/goal` command, the sidebar buttons, or the HTTP API.
+    private static func notifyChanged() {
+        NotificationCenter.default.post(name: Notification.Name("myCoderGoalStoreChanged"), object: nil)
     }
 }
