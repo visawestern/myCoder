@@ -15,6 +15,7 @@ final class PlanModeToolPolicyTests: XCTestCase {
     }
 
     // MARK: - Мутирующие тулы запрещены в plan/compose
+    // (планировочные — только в plan, см. testPlanModeAllowsPlanTools)
 
     func testMutationsAreDeniedInPlanAndComposeWithoutPrompt() {
         let names = [
@@ -22,15 +23,49 @@ final class PlanModeToolPolicyTests: XCTestCase {
             "git_commit", "git_push", "git_pull", "git_checkout", "git_branch",
             "todo_write", "task_create", "task_update", "task",
         ]
-        for mode in readOnlyModes {
-            for name in names {
-                let decision = PlanModeToolPolicy.decision(for: call(name), mode: mode)
-                guard case .deny(let reason) = decision else {
-                    return XCTFail("\(name) должен отклоняться в \(mode.rawValue)")
-                }
-                XCTAssertTrue(reason.contains("read-only"), "отказ должен объяснять read-only режим")
-                XCTAssertTrue(reason.contains("build mode"), "отказ должен указывать на build режим")
+        for name in names {
+            let decision = PlanModeToolPolicy.decision(for: call(name), mode: .compose)
+            guard case .deny(let reason) = decision else {
+                return XCTFail("\(name) должен отклоняться в compose")
             }
+            XCTAssertTrue(reason.contains("read-only"), "отказ должен объяснять read-only режим")
+            XCTAssertTrue(reason.contains("build mode"), "отказ должен указывать на build режим")
+        }
+        // В plan-режиме мутации ФАЙЛОВ/ГИТА запрещены, но ведение плана
+        // (task_*/todo_write) разрешено — проверяется отдельным тестом.
+        let fileAndGitMutations = [
+            "write_file", "edit_file", "patch", "write", "edit", "rename_file",
+            "git_commit", "git_push", "git_pull", "git_checkout", "git_branch",
+            "task",
+        ]
+        for name in fileAndGitMutations {
+            let decision = PlanModeToolPolicy.decision(for: call(name), mode: .plan)
+            guard case .deny(let reason) = decision else {
+                return XCTFail("\(name) должен отклоняться в plan")
+            }
+            XCTAssertTrue(reason.contains("read-only"), "отказ должен объяснять read-only режим")
+            XCTAssertTrue(reason.contains("build mode"), "отказ должен указывать на build режим")
+        }
+    }
+
+    /// Директива 2026-11-08: в режиме «План» модель ведёт план — создание и
+    /// обновление шагов плана (task_create/task_update/todo_write) разрешено.
+    /// Запрещено только то, что изменяет состояние проекта: файлы, гит,
+    /// шелл, сабагенты.
+    func testPlanModeAllowsPlanTools() {
+        let planTools = ["task_create", "task_update", "todo_write"]
+        for name in planTools {
+            XCTAssertEqual(
+                PlanModeToolPolicy.decision(for: call(name), mode: .plan),
+                .execute,
+                "\(name) должен выполняться в plan (ведение плана)"
+            )
+            // В compose по-прежнему строгий read-only.
+            XCTAssertEqual(
+                PlanModeToolPolicy.decision(for: call(name), mode: .compose),
+                .deny(reason: PlanModeToolPolicy.deniedReason),
+                "\(name) должен отклоняться в compose"
+            )
         }
     }
 

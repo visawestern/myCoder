@@ -10,6 +10,11 @@ import Foundation
 /// opencode plan-агенте (права edit/write/patch запрещены). Только
 /// читающие команды (включая баш-тулы вроде `ls`/`grep`/`git status`)
 /// выполняются как обычно.
+///
+/// Исключение (директива 2026-11-08): в режиме «План» модель ВЕДЁТ план —
+/// создание и обновление шагов плана (task_create/task_update/todo_write)
+/// разрешено, потому что они не изменяют состояние проекта, а лишь
+/// планировочную структуру. В compose эти тулы остаются запрещёнными.
 enum PlanModeToolPolicy {
 
     enum Decision: Equatable {
@@ -37,9 +42,18 @@ enum PlanModeToolPolicy {
         }
 
         switch tool {
-        // Мутирующие тулы — всегда отклоняются без вопроса.
-        case .writeFile, .editFile, .todoWrite, .taskCreate, .taskUpdate,
-             .gitBranch, .gitCheckout, .gitCommit, .gitPush, .gitPull, .task:
+        // Мутирующие тулы (файлы, гит, сабагенты) — всегда отклоняются без
+        // вопроса в обоих read-only режимах.
+        case .writeFile, .editFile, .gitBranch, .gitCheckout, .gitCommit,
+             .gitPush, .gitPull, .task:
+            return .deny(reason: deniedReason)
+
+        // Планировочные тулы: в plan-режиме модель ведёт план (создание/
+        // обновление шагов), в compose они запрещены (строгий read-only).
+        case .todoWrite, .taskCreate, .taskUpdate:
+            if mode == .plan {
+                return .execute
+            }
             return .deny(reason: deniedReason)
 
         // Шелл: только читающие команды. Пишущие — отклоняются.
