@@ -110,4 +110,41 @@ struct ConversationCompactionLogicTests {
         let summary = try await summarizer.summarize(messages: conversation(20))
         #expect(summary == "- summary line")
     }
+
+    @Test("Бюджет транскрипта помещается в окно целевой модели")
+    func summaryTranscriptBudgetFitsTheTargetWindow() {
+        // An 8k model must not receive the default 48k-character transcript:
+        // the request would not fit its window at all.
+        let small = ConversationCompactionLogic.summaryTranscriptBudget(contextWindowTokens: 8_192)
+        #expect(small < 48_000)
+        #expect(small >= 2_000)
+
+        // An unknown window keeps the default budget.
+        #expect(ConversationCompactionLogic.summaryTranscriptBudget(contextWindowTokens: 0) == 48_000)
+
+        // A huge window does not inflate the budget past the default.
+        #expect(ConversationCompactionLogic.summaryTranscriptBudget(contextWindowTokens: 1_000_000) == 48_000)
+    }
+
+    @Test("Суммаризатор режет транскрипт по заданному бюджету")
+    func summarizerBoundsTheTranscriptByTheRequestedBudget() async throws {
+        final class Box: @unchecked Sendable { var prompt = "" }
+        let box = Box()
+        let summarizer = ConversationSummarizer(transport: { prompt in
+            box.prompt = prompt
+            return "- summary"
+        })
+        let messages = (0..<40).map { index in
+            message(index % 2 == 0 ? .user : .assistant,
+                    String(repeating: "x", count: 400) + " turn \(index) payload")
+        }
+        _ = try await summarizer.summarize(messages: messages, maxCharacters: 1_000)
+
+        // The newest turn survives, the oldest ones do not.
+        #expect(box.prompt.contains("turn 39 payload"))
+        #expect(!box.prompt.contains("turn 0 payload"))
+        // The transcript is bounded; the rest of the prompt is the fixed
+        // instruction block.
+        #expect(box.prompt.count < 5_000)
+    }
 }

@@ -196,6 +196,25 @@ class MessageStore: ObservableObject {
     /// Reattaches in-memory approval cards after a session switch. Pending
     /// approvals live in `ToolApprovalCenter`, not the database, so a history
     /// reload must merge them back into the matching assistant message.
+    /// Remove a message from the feed AND from the database.
+    ///
+    /// Used to roll back a compaction: the summary is only an appended
+    /// message, so removing it restores the full model-bound history. The
+    /// original turns were never dropped from the feed — only from the
+    /// model's view — which is what makes the rollback exact.
+    @discardableResult
+    func remove(id: String) -> Bool {
+        guard let key = feeds.first(where: { $0.value.messages.contains { $0.id == id } })?.key,
+              let index = feeds[key]?.messages.firstIndex(where: { $0.id == id }) else { return false }
+        objectWillChange.send()
+        feeds[key]?.messages.remove(at: index)
+        if !key.isEmpty {
+            dbBridge.deleteMessage(id: id)
+        }
+        refreshStreamingSessions()
+        return true
+    }
+
     func setPendingApprovals(_ approvalsByAssistant: [String: [PendingToolApproval]]) {
         guard !messages.isEmpty else { return }
         objectWillChange.send()

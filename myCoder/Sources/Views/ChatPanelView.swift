@@ -90,6 +90,16 @@ struct ChatPanelView: View {
     @State private var draftSaveTask: Task<Void, Never>?
     @State private var serveTimeoutTask: Task<Void, Never>?
     @State private var isCompacting = false
+    /// Task of the automatic compaction that follows a model switch into a
+    /// smaller context window. It is kept here so the user can stop it and
+    /// so the send path can wait for it before building the history.
+    @State private var modelSwitchCompactionTask: Task<Void, Never>?
+    /// Generation counter of the model-switch compaction. A finished task may
+    /// only update the notice it started — a retry must not be overwritten by
+    /// the previous attempt.
+    @State private var modelSwitchCompactionGeneration = 0
+    /// Model that was selected before the last switch: the notice names both.
+    @State private var lastSelectedModel = ""
     #if canImport(WebKit)
     @State private var activeWebProviderID: String?
     @State private var activeWebChatID: String?
@@ -314,6 +324,23 @@ struct ChatPanelView: View {
                         .padding(.bottom, 8)
                     }
 
+                    // A model switch into a smaller context window compacts
+                    // the chat before it continues. The banner is the visible
+                    // control of that compaction: stop, rollback, retry, or
+                    // pick a model with a larger window.
+                    if let notice = appState.modelSwitchCompactionNotice {
+                        ModelSwitchCompactionBanner(
+                            notice: notice,
+                            onStop: { stopModelSwitchCompaction() },
+                            onRollback: { rollbackModelSwitchCompaction() },
+                            onRetry: { retryModelSwitchCompaction() },
+                            onChooseModel: { chooseLargerModel($0) },
+                            onDismiss: { dismissModelSwitchCompactionNotice() }
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 6)
+                    }
+
                     BottomInputBar(
                         messageText: $messageText,
                         onSend: sendMessage,
@@ -368,6 +395,9 @@ struct ChatPanelView: View {
         .onChange(of: appState.selectedSession?.id) { newSessionID in
             handleSelectedSessionChange(newSessionID)
         }
+        .onChange(of: appState.effectiveSelectedModel()) { newModel in
+            handleModelSwitch(to: newModel)
+        }
         .onChange(of: appState.isLoading) { loading in
             if !loading {
                 messageQueue.processNext()
@@ -408,6 +438,9 @@ struct ChatPanelView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .apiSendRequested)) { notification in
             handleAPISendRequest(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .apiCompactionControlRequested)) { notification in
+            handleAPICompactionControl(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .submitPlanQuestionAnswers)) { notification in
             guard let answers = notification.userInfo?["answers"] as? [[String]] else { return }
@@ -827,6 +860,9 @@ struct ChatPanelView: View {
             prepareMarkdownPrewarmProfile()
             loadSessionMessages(sessionID: sessionID)
         }
+        // The model that is selected when the panel appears is the baseline
+        // for the next switch: the notice names the model the chat came from.
+        lastSelectedModel = appState.effectiveSelectedModel()
         flushPendingSpecNodePrompt()
         syncBackgroundActivity()
     }
@@ -872,6 +908,40 @@ struct ChatPanelView: View {
         }
         messageText = message
         sendMessage()
+    }
+
+    /// Stop / roll back / repeat the model-switch compaction from outside the
+    /// app (the HTTP API). The banner offers the same actions — this is the
+    /// same code path, not a second implementation.
+    @MainActor
+    private func handleAPICompactionControl(_ notification: Notification) {
+        guard let control = notification.userInfo?["action"] as? String else { return }
+        switch control {
+        case "stop":
+            stopModelSwitchCompaction()
+        case "rollback":
+            rollbackModelSwitchCompaction()
+        case "retry":
+            retryModelSwitchCompaction()
+        case "chooseModel":
+            chooseAlternativeModelFromNotice(notification)
+        default:
+            break
+        }
+    }
+
+    /// Pick one of the offered alternatives (the banner's model menu) from
+    /// outside the app. Only the models the banner offers can be chosen — the
+    /// notice is the list of models that hold the context without compaction.
+    @MainActor
+    private func chooseAlternativeModelFromNotice(_ notification: Notification) {
+        guard let providerID = notification.userInfo?["providerID"] as? String,
+              let modelID = notification.userInfo?["modelID"] as? String,
+              let notice = appState.modelSwitchCompactionNotice,
+              let candidate = notice.alternatives.first(where: {
+                  $0.providerID == providerID && $0.id == modelID
+              }) else { return }
+        chooseLargerModel(candidate)
     }
 
     private func handleLocalToolApprovalResolved(_ notification: Notification) {
@@ -1444,9 +1514,16 @@ struct ChatPanelView: View {
         }
     }
 
+    /// Context window of the selected model: the provider metadata when it
+    /// reports one, otherwise the catalog/default window. The badge and the
+    /// auto-compaction threshold must use the SAME number as the model-switch
+    /// decision — otherwise the chat compacts at the wrong moment.
     private var selectedContextLimit: Int {
-        let model = appState.effectiveSelectedModel()
-        return ContextWindowCatalog.limit(for: model, reported: nil)
+        ModelCapabilityLogic.effectiveContextWindow(
+            for: appState.effectiveSelectedModel(),
+            in: appState.serverProviders,
+            providerID: appState.selectedProviderID
+        )
     }
 
     /// Measured over the MODEL-BOUND history so the badge drops right after a
@@ -1479,7 +1556,10 @@ struct ChatPanelView: View {
                     baseURL: baseURL,
                     apiKey: apiKey,
                     model: model,
-                    messages: [DirectChatMessage(role: "user", content: prompt)]
+                    messages: [DirectChatMessage(role: "user", content: prompt)],
+                    transport: URLSessionDirectChatTransport(
+                        timeout: ConversationCompactionLogic.summaryRequestTimeout
+                    )
                 )
                 return result.content
             }
@@ -1490,29 +1570,28 @@ struct ChatPanelView: View {
 
     /// Replace the model-bound history with a factual summary message. The
     /// full chat stays visible; `historyForModel` cuts at the newest summary.
+    ///
+    /// The outcome is a value, not a chat message: the model-switch flow
+    /// needs to know whether the history was touched (to offer a rollback) or
+    /// not (a stopped compaction changes nothing).
     @MainActor
-    private func compactConversation(reason: String, sessionID: String? = nil) async {
-        guard !isCompacting else { return }
+    private func performCompaction(
+        reason: String,
+        sessionID: String? = nil
+    ) async -> ConversationCompactionOutcome {
+        guard !isCompacting else {
+            return .failed("A compaction is already running.")
+        }
         let targetSessionID = sessionID ?? messageStore.currentSessionID
         let history = ConversationCompactionLogic.historyForModel(
             messageStore.messages(in: targetSessionID)
         )
         guard ConversationCompactionLogic.plan(messages: history) != nil else {
-            messageStore.append(Message(
-                role: .assistant,
-                content: ConversationSummarizerError.nothingToCompact.errorDescription ?? "Nothing to compact.",
-                isFinished: true
-            ), to: targetSessionID)
-            return
+            return .nothingToCompact
         }
         let route = currentRoute()
         guard supportsLocalHistoryCompaction(route) else {
-            messageStore.append(Message(
-                role: .assistant,
-                content: "Compaction is not available for this provider: its history is kept on the server (mimo/opencode serve, web or ACP), so a local summary would not shrink it.",
-                isFinished: true
-            ), to: targetSessionID)
-            return
+            return .unsupported("Compaction is not available for this provider: its history is kept on the server (mimo/opencode serve, web or ACP), so a local summary would not shrink it.")
         }
         isCompacting = true
         defer { isCompacting = false }
@@ -1520,21 +1599,74 @@ struct ChatPanelView: View {
         let beforeTokens = ContextUsageLogic.usedTokens(messages: history)
         let summarizer = ConversationSummarizer(transport: summaryTransport(for: route))
         do {
-            let summary = try await summarizer.summarize(messages: history)
-            messageStore.append(
-                ConversationCompactionLogic.summaryMessage(summary: summary),
-                to: targetSessionID
+            // The summary request goes to the model that will continue the
+            // chat, so the transcript must fit into ITS window: a 48k
+            // character transcript does not fit an 8k model.
+            let transcriptBudget = ConversationCompactionLogic.summaryTranscriptBudget(
+                contextWindowTokens: selectedContextLimit
             )
+            let summary = try await summarizer.summarize(
+                messages: history,
+                maxCharacters: transcriptBudget
+            )
+            // The user may have stopped the compaction while the summary was
+            // being produced: nothing may be appended then.
+            try Task.checkCancellation()
+            let summaryMessage = ConversationCompactionLogic.summaryMessage(summary: summary)
+            messageStore.append(summaryMessage, to: targetSessionID)
             let afterTokens = ContextUsageLogic.estimateTokens(summary)
-            messageStore.append(Message(
+            let note = Message(
                 role: .assistant,
                 content: "Context compacted (\(reason)): \(history.count) messages summarized, ~\(ContextUsageLogic.formatTokens(beforeTokens)) → ~\(ContextUsageLogic.formatTokens(afterTokens)) tokens. The full chat stays visible; the model now continues from the summary.",
                 isFinished: true
-            ), to: targetSessionID)
+            )
+            messageStore.append(note, to: targetSessionID)
+            return .compacted(
+                summaryMessageID: summaryMessage.id,
+                noticeMessageID: note.id,
+                beforeTokens: beforeTokens,
+                afterTokens: afterTokens
+            )
+        } catch is CancellationError {
+            // The history is untouched: the summary was never appended.
+            return .cancelled
         } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    /// Manual compaction (`/compact`): the outcome is reported in the chat.
+    @MainActor
+    private func compactConversation(reason: String, sessionID: String? = nil) async {
+        guard !isCompacting else { return }
+        let targetSessionID = sessionID ?? messageStore.currentSessionID
+        let outcome = await performCompaction(reason: reason, sessionID: targetSessionID)
+        switch outcome {
+        case .compacted:
+            // The "context compacted" note is already in the feed.
+            break
+        case .cancelled:
             messageStore.append(Message(
                 role: .assistant,
-                content: "Context compaction failed: \(error.localizedDescription)",
+                content: "Context compaction stopped — the history is unchanged.",
+                isFinished: true
+            ), to: targetSessionID)
+        case .failed(let message):
+            messageStore.append(Message(
+                role: .assistant,
+                content: "Context compaction failed: \(message)",
+                isFinished: true
+            ), to: targetSessionID)
+        case .unsupported(let message):
+            messageStore.append(Message(
+                role: .assistant,
+                content: message,
+                isFinished: true
+            ), to: targetSessionID)
+        case .nothingToCompact:
+            messageStore.append(Message(
+                role: .assistant,
+                content: ConversationSummarizerError.nothingToCompact.errorDescription ?? "Nothing to compact.",
                 isFinished: true
             ), to: targetSessionID)
         }
@@ -1552,6 +1684,198 @@ struct ChatPanelView: View {
         let usage = ContextUsageLogic.usage(messages: history, limitTokens: selectedContextLimit)
         guard ContextUsageLogic.shouldCompact(usage) else { return }
         await compactConversation(reason: "auto at \(usage.percent)%", sessionID: sessionID)
+    }
+
+    // MARK: - Model switch compaction
+
+    /// Model switch into a smaller context window: the chat is compacted
+    /// BEFORE it continues (user directive 2026-11-08). The user keeps
+    /// control — the compaction can be stopped, rolled back, or replaced by
+    /// another model with a larger window.
+    @MainActor
+    private func handleModelSwitch(to newModel: String) {
+        let previousModel = lastSelectedModel
+        lastSelectedModel = newModel
+        guard !newModel.isEmpty else { return }
+
+        let sessionID = messageStore.currentSessionID
+        let history = ConversationCompactionLogic.historyForModel(
+            messageStore.messages(in: sessionID)
+        )
+        let usedTokens = ContextUsageLogic.usedTokens(messages: history)
+        let limitTokens = ModelCapabilityLogic.effectiveContextWindow(
+            for: newModel,
+            in: appState.serverProviders,
+            providerID: appState.selectedProviderID
+        )
+        // The candidates are collected only when a compaction is really
+        // needed: the scan walks every provider and every model.
+        let candidates = ModelSwitchCompactionLogic.requiresCompaction(
+            previousModel: previousModel,
+            usedTokens: usedTokens,
+            limitTokens: limitTokens
+        ) ? appState.modelSwitchCompactionCandidates : []
+        guard let notice = ModelSwitchCompactionLogic.notice(
+            previousModel: previousModel,
+            newModel: newModel,
+            usedTokens: usedTokens,
+            limitTokens: limitTokens,
+            candidates: candidates,
+            sessionID: sessionID
+        ) else {
+            // The chat fits into the new window: nothing has to be compacted.
+            stopRunningModelSwitchCompaction(clearNotice: true)
+            return
+        }
+        appState.modelSwitchCompactionNotice = notice
+        startModelSwitchCompaction(notice: notice)
+    }
+
+    /// Start the automatic compaction that follows a model switch.
+    @MainActor
+    private func startModelSwitchCompaction(notice: ModelSwitchCompactionNotice) {
+        modelSwitchCompactionTask?.cancel()
+        modelSwitchCompactionGeneration += 1
+        let generation = modelSwitchCompactionGeneration
+        var running = notice
+        running.phase = .running
+        appState.modelSwitchCompactionNotice = running
+        modelSwitchCompactionTask = Task { @MainActor in
+            let outcome = await performCompaction(
+                reason: "model switch to \(notice.newModel)",
+                sessionID: notice.sessionID
+            )
+            applyModelSwitchCompactionOutcome(outcome, notice: notice, generation: generation)
+            if modelSwitchCompactionGeneration == generation {
+                modelSwitchCompactionTask = nil
+            }
+        }
+    }
+
+    /// Apply the result of a compaction to the visible notice. A stale task
+    /// (a retry, another chat) never overwrites a newer notice.
+    @MainActor
+    private func applyModelSwitchCompactionOutcome(
+        _ outcome: ConversationCompactionOutcome,
+        notice: ModelSwitchCompactionNotice,
+        generation: Int
+    ) {
+        guard generation == modelSwitchCompactionGeneration else { return }
+        guard var current = appState.modelSwitchCompactionNotice,
+              current.newModel == notice.newModel,
+              current.sessionID == notice.sessionID else { return }
+        current.phase = ModelSwitchCompactionLogic.phase(for: outcome)
+        switch outcome {
+        case .compacted(let summaryID, let noticeID, _, _):
+            current.summaryMessageID = summaryID
+            current.noticeMessageID = noticeID
+            current.error = nil
+            current.retryable = true
+        case .failed(let message):
+            current.error = message
+            current.retryable = true
+        case .unsupported(let message):
+            current.error = message
+            // The provider keeps the history on the server: running it again
+            // would fail the same way, so the retry button is pointless.
+            current.retryable = false
+        case .cancelled:
+            current.error = nil
+            current.retryable = true
+        case .nothingToCompact:
+            current.error = "There is nothing to compact."
+            current.retryable = true
+        }
+        appState.modelSwitchCompactionNotice = current
+    }
+
+    /// Stop a running model-switch compaction. `clearNotice` also drops the
+    /// banner — used when the new model fits and there is nothing to say.
+    @MainActor
+    private func stopRunningModelSwitchCompaction(clearNotice: Bool) {
+        if modelSwitchCompactionTask != nil {
+            modelSwitchCompactionTask?.cancel()
+            modelSwitchCompactionTask = nil
+            modelSwitchCompactionGeneration += 1
+        }
+        guard clearNotice else { return }
+        if appState.modelSwitchCompactionNotice?.phase == .compacted {
+            // The chat really was compacted — keep the banner so the user can
+            // still roll it back.
+            return
+        }
+        appState.modelSwitchCompactionNotice = nil
+    }
+
+    /// Stop the compaction: the history stays exactly as it was.
+    @MainActor
+    private func stopModelSwitchCompaction() {
+        modelSwitchCompactionTask?.cancel()
+        modelSwitchCompactionTask = nil
+        modelSwitchCompactionGeneration += 1
+        guard var notice = appState.modelSwitchCompactionNotice else { return }
+        notice.phase = .cancelled
+        appState.modelSwitchCompactionNotice = notice
+    }
+
+    /// Roll the compaction back: the appended summary and note are removed,
+    /// so the model sees the full history again.
+    @MainActor
+    private func rollbackModelSwitchCompaction() {
+        guard var notice = appState.modelSwitchCompactionNotice else { return }
+        let targets = ModelSwitchCompactionLogic.rollbackTargets(
+            summaryMessageID: notice.summaryMessageID,
+            noticeMessageID: notice.noticeMessageID
+        )
+        for target in targets {
+            messageStore.remove(id: target)
+        }
+        notice.phase = .rolledBack
+        notice.summaryMessageID = nil
+        notice.noticeMessageID = nil
+        appState.modelSwitchCompactionNotice = notice
+    }
+
+    /// Compact again after a stop, a failure or a rollback.
+    @MainActor
+    private func retryModelSwitchCompaction() {
+        guard let notice = appState.modelSwitchCompactionNotice else { return }
+        startModelSwitchCompaction(notice: notice)
+    }
+
+    /// Switch to a model with a larger context window instead of compacting.
+    ///
+    /// The bigger window often lives in another provider, so the provider is
+    /// switched first and the model second: `selectModel` only accepts a model
+    /// of the currently selected provider.
+    @MainActor
+    private func chooseLargerModel(_ candidate: ModelSwitchCompactionLogic.Candidate) {
+        // The chat fits into the new window — the compaction is not needed.
+        stopRunningModelSwitchCompaction(clearNotice: true)
+        if candidate.providerID != appState.selectedProviderID {
+            appState.selectProvider(candidate.providerID)
+        }
+        appState.selectModel(candidate.id)
+    }
+
+    /// Hide the banner without touching the history. A running compaction is
+    /// stopped first — otherwise the summary would land in the chat after the
+    /// user closed the notice.
+    @MainActor
+    private func dismissModelSwitchCompactionNotice() {
+        if appState.modelSwitchCompactionNotice?.canStop == true {
+            stopModelSwitchCompaction()
+        }
+        appState.modelSwitchCompactionNotice = nil
+    }
+
+    /// Wait for the automatic compaction that follows a model switch: the turn
+    /// must not be built from a history that is about to be replaced.
+    @MainActor
+    private func awaitModelSwitchCompactionIfNeeded() async {
+        guard let notice = appState.modelSwitchCompactionNotice,
+              ModelSwitchCompactionLogic.blocksSend(phase: notice.phase) else { return }
+        await modelSwitchCompactionTask?.value
     }
 
     func performDirectSend(
@@ -1647,6 +1971,11 @@ struct ChatPanelView: View {
         await MainActor.run {
             appState.beginContextAssembly(message: text, projectRoot: capturedProjectRoot)
         }
+        // A model switch into a smaller context window compacts the chat
+        // before it continues: the turn waits for that compaction, otherwise
+        // the history would be built from messages that are about to be
+        // replaced by a summary.
+        await awaitModelSwitchCompactionIfNeeded()
         // Auto-compact BEFORE any history is assembled for this turn (plan:
         // 90% of the model window). A failed summary is reported in-chat by
         // compactConversation and the send proceeds with the full history.

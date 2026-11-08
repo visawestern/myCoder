@@ -328,6 +328,10 @@ enum DirectChatError: Error, Equatable, LocalizedError {
 }
 
 /// Live transport over URLSession (cross-platform continuation bridge).
+///
+/// The requests are cancellable: a stopped compaction must not keep a summary
+/// request alive at the provider. The cancellation handler closes the socket
+/// and the completion handler resumes the continuation exactly once.
 struct URLSessionDirectChatTransport: DirectChatTransport {
     let session: URLSession
     init(timeout: TimeInterval = 120) {
@@ -335,19 +339,35 @@ struct URLSessionDirectChatTransport: DirectChatTransport {
         cfg.timeoutIntervalForRequest = timeout
         self.session = URLSession(configuration: cfg)
     }
+
+    /// Holds the running request so the cancellation handler can close it.
+    private final class RequestBox: @unchecked Sendable {
+        var task: URLSessionDataTask?
+    }
+
     func post(url: String, headers: [String: String], body: Data) async -> (Int, Data)? {
         guard let u = URL(string: url) else { return nil }
         var req = URLRequest(url: u)
         req.httpMethod = "POST"
         req.httpBody = body
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
-        return await withCheckedContinuation { cont in
-            session.dataTask(with: req) { data, response, _ in
-                guard let http = response as? HTTPURLResponse, let data = data else {
-                    cont.resume(returning: nil); return
+        let box = RequestBox()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<(Int, Data)?, Never>) in
+                let task = session.dataTask(with: req) { data, response, _ in
+                    guard let http = response as? HTTPURLResponse, let data = data else {
+                        cont.resume(returning: nil); return
+                    }
+                    cont.resume(returning: (http.statusCode, data))
                 }
-                cont.resume(returning: (http.statusCode, data))
-            }.resume()
+                box.task = task
+                // The cancellation may have arrived before the request was
+                // created — close it right away in that case.
+                if Task.isCancelled { task.cancel() }
+                task.resume()
+            }
+        } onCancel: {
+            box.task?.cancel()
         }
     }
 
@@ -356,13 +376,21 @@ struct URLSessionDirectChatTransport: DirectChatTransport {
         var req = URLRequest(url: u)
         req.httpMethod = "GET"
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
-        return await withCheckedContinuation { cont in
-            session.dataTask(with: req) { data, response, _ in
-                guard let http = response as? HTTPURLResponse, let data = data else {
-                    cont.resume(returning: nil); return
+        let box = RequestBox()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<(Int, Data)?, Never>) in
+                let task = session.dataTask(with: req) { data, response, _ in
+                    guard let http = response as? HTTPURLResponse, let data = data else {
+                        cont.resume(returning: nil); return
+                    }
+                    cont.resume(returning: (http.statusCode, data))
                 }
-                cont.resume(returning: (http.statusCode, data))
-            }.resume()
+                box.task = task
+                if Task.isCancelled { task.cancel() }
+                task.resume()
+            }
+        } onCancel: {
+            box.task?.cancel()
         }
     }
 }

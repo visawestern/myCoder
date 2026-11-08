@@ -129,6 +129,13 @@ final class AppActionRouter {
             param("modelId", "string", false, nil)
         ]),
         action("chat.stop", "Stop the current generation", []),
+        action("context.compaction.stop", "Stop the running model-switch compaction", []),
+        action("context.compaction.rollback", "Roll back the model-switch compaction", []),
+        action("context.compaction.retry", "Compact again after a stop, a failure or a rollback", []),
+        action("context.compaction.chooseModel", "Switch to a model with a larger context window instead of compacting", [
+            param("providerID", "string", true, "Provider of the model to switch to"),
+            param("modelID", "string", true, "Model to switch to")
+        ]),
         action("toolApproval.resolve", "Allow or deny a pending local tool approval", [
             param("id", "string", true, "Approval id from the app log"),
             param("approved", "bool", true, "true = Allow once, false = Deny")
@@ -438,6 +445,34 @@ final class AppActionRouter {
             NotificationCenter.default.post(name: .stopGeneration, object: nil)
             return ["status": "stopping"]
 
+        case "context.compaction.stop", "context.compaction.rollback", "context.compaction.retry":
+            // The compaction lives in the chat panel (it owns the task and
+            // the message store), so the router only asks for the action.
+            let control = String(action.split(separator: ".").last ?? "")
+            NotificationCenter.default.post(
+                name: .apiCompactionControlRequested,
+                object: nil,
+                userInfo: ["action": control]
+            )
+            return ["status": "requested", "action": control]
+
+        case "context.compaction.chooseModel":
+            // The model menu of the banner is a choice too — it must be
+            // reachable without the accessibility tree.
+            let providerID = try requireString("providerID", params)
+            let modelID = try requireString("modelID", params)
+            NotificationCenter.default.post(
+                name: .apiCompactionControlRequested,
+                object: nil,
+                userInfo: [
+                    "action": "chooseModel",
+                    "providerID": providerID,
+                    "modelID": modelID
+                ]
+            )
+            return ["status": "requested", "action": "chooseModel",
+                    "providerID": providerID, "modelID": modelID]
+
         case "browser.fetch":
             return try await BrowserFetchAPILogic.perform(params: params) { arguments in
                 // This closure is entered only after pure validation succeeds.
@@ -549,6 +584,9 @@ final class AppActionRouter {
                 indexedFileCount: appState.selectedWorkspace
                     .map { ProjectFileIndexStore.load(projectPath: $0.path).count } ?? 0,
                 log: appState.contextAssemblyLog
+            ),
+            "modelSwitchCompaction": ModelSwitchCompactionSnapshotLogic.block(
+                appState.modelSwitchCompactionNotice
             )
         ]
         if let path = appState.activeSpecWizardProjectPath,

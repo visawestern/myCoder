@@ -91,4 +91,55 @@ struct ContextStateSnapshotTests {
         #expect(indexEntry?["result"] as? String == "Файлов в индексе: 42")
         #expect(indexEntry?["status"] as? String == "done")
     }
+
+    @Test("Сжатие при смене модели видно по HTTP со всеми действиями")
+    func modelSwitchCompactionIsExposed() {
+        var notice = ModelSwitchCompactionNotice(
+            previousModel: "big",
+            newModel: "small",
+            usedTokens: 120_000,
+            limitTokens: 64_000,
+            phase: .compacted,
+            alternatives: [
+                ModelSwitchCompactionLogic.Candidate(
+                    id: "huge",
+                    window: 1_000_000,
+                    providerID: "p2",
+                    providerName: "Two"
+                )
+            ],
+            summaryMessageID: "summary",
+            noticeMessageID: "note",
+            error: nil,
+            sessionID: "s1"
+        )
+        let block = ModelSwitchCompactionSnapshotLogic.block(notice)
+        #expect(block["active"] as? Bool == true)
+        #expect(block["phase"] as? String == "compacted")
+        #expect(block["previousModel"] as? String == "big")
+        #expect(block["newModel"] as? String == "small")
+        #expect(block["usedTokens"] as? Int == 120_000)
+        #expect(block["limitTokens"] as? Int == 64_000)
+        #expect((block["alternatives"] as? [[String: Any]])?.count == 1)
+        let alternative = (block["alternatives"] as? [[String: Any]])?.first
+        #expect(alternative?["modelID"] as? String == "huge")
+        #expect(alternative?["providerID"] as? String == "p2")
+        #expect(alternative?["providerName"] as? String == "Two")
+        #expect(alternative?["window"] as? Int == 1_000_000)
+        #expect(block["canRollback"] as? Bool == true)
+        #expect(block["canStop"] as? Bool == false)
+        #expect(block["canRetry"] as? Bool == false)
+
+        notice.phase = .rolledBack
+        notice.summaryMessageID = nil
+        notice.noticeMessageID = nil
+        let rolledBack = ModelSwitchCompactionSnapshotLogic.block(notice)
+        #expect(rolledBack["phase"] as? String == "rolledBack")
+        #expect(rolledBack["canRetry"] as? Bool == true)
+        #expect(rolledBack["canRollback"] as? Bool == false)
+
+        let empty = ModelSwitchCompactionSnapshotLogic.block(nil)
+        #expect(empty["active"] as? Bool == false)
+        #expect(empty["phase"] == nil)
+    }
 }

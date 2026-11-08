@@ -80,24 +80,37 @@ enum ConversationCompactionLogic {
     }
 
     static func summaryPrompt(messages: [Message], maxCharacters: Int = 48_000) -> String {
-        """
-        You are compacting a coding-assistant conversation so it can continue \
-        within a smaller context window. Write a dense factual summary.
+        HarnessPromptQuality.structuralSummaryPrompt(messages: messages, maxCharacters: maxCharacters)
+    }
 
-        Preserve, when present:
-        - the user's goal, constraints and preferences;
-        - decisions made and alternatives rejected;
-        - files/paths touched and their current state;
-        - commands run and their outcomes;
-        - errors encountered and how they were fixed;
-        - open tasks and next steps.
+    /// Smallest transcript worth sending — below this the summary request
+    /// cannot carry any real context.
+    static let minimumSummaryTranscriptCharacters = 2_000
 
-        Do not invent facts. Do not add commentary about summarizing. \
-        Output only the summary as Markdown bullet points (max 400 words).
+    /// Time budget for one summarization request.
+    ///
+    /// The transcript is large (tens of thousands of characters), so the
+    /// default 120 s of the chat transport is not enough — the request was
+    /// killed before the model answered (verified live). The compaction is a
+    /// background action the user watches and can stop, so it may take longer.
+    static let summaryRequestTimeout: TimeInterval = 300
 
-        Conversation:
-        \(transcript(messages: messages, maxCharacters: maxCharacters))
-        """
+    /// How many characters of transcript fit into a model window.
+    ///
+    /// The summary request goes to the model that will continue the chat, so
+    /// the transcript must fit into ITS window: a fixed 48k-character
+    /// transcript does not fit an 8k model at all. The budget assumes the
+    /// worst case (wide characters cost ~1 token each, Latin text ~1/4), and
+    /// gives half of the window to the transcript — the rest is the prompt,
+    /// the answer and the provider's own overhead.
+    ///
+    /// An unknown window (0) keeps the default budget.
+    static func summaryTranscriptBudget(contextWindowTokens: Int,
+                                        defaultCharacters: Int = 48_000) -> Int {
+        guard contextWindowTokens > 0 else { return defaultCharacters }
+        let transcriptTokens = contextWindowTokens / 2
+        let characters = transcriptTokens * 2
+        return max(minimumSummaryTranscriptCharacters, min(defaultCharacters, characters))
     }
 }
 
@@ -115,6 +128,26 @@ enum ConversationSummarizerError: LocalizedError, Equatable {
     }
 }
 
+/// Result of one compaction attempt.
+///
+/// The outcome is a value, not a chat message: the panel turns it into the
+/// visible notice, and the model-switch flow decides from it whether the
+/// history was touched. `.cancelled` means the history is EXACTLY as it was —
+/// a stopped compaction never appends anything.
+enum ConversationCompactionOutcome: Equatable {
+    /// The summary (and the human-readable note) were appended to the feed.
+    case compacted(summaryMessageID: String, noticeMessageID: String, beforeTokens: Int, afterTokens: Int)
+    /// The user stopped the compaction; nothing was appended.
+    case cancelled
+    /// The summarizer failed; nothing was appended.
+    case failed(String)
+    /// This provider keeps the history on the server, so a local summary
+    /// would not shrink it.
+    case unsupported(String)
+    /// There was nothing worth compacting.
+    case nothingToCompact
+}
+
 /// Runs one summarization turn through an injected transport. Keeping the
 /// transport a closure makes the service testable without network access and
 /// lets the UI supply the route-specific client (direct OpenAI-compatible,
@@ -128,12 +161,33 @@ struct ConversationSummarizer {
         self.transport = transport
     }
 
-    func summarize(messages: [Message]) async throws -> String {
+    /// Summarize the conversation.
+    ///
+    /// `maxCharacters` bounds the transcript that goes into the request: the
+    /// caller knows the window of the model that will continue the chat, and
+    /// a transcript that does not fit that window would be rejected.
+    func summarize(messages: [Message], maxCharacters: Int = 48_000) async throws -> String {
+        // A compaction the user stopped must never produce a summary: the
+        // history has to stay exactly as it was.
+        try Task.checkCancellation()
         guard let plan = ConversationCompactionLogic.plan(messages: messages) else {
             throw ConversationSummarizerError.nothingToCompact
         }
-        let prompt = ConversationCompactionLogic.summaryPrompt(messages: plan.toSummarize)
-        let raw = try await transport(prompt)
+        let prompt = ConversationCompactionLogic.summaryPrompt(
+            messages: plan.toSummarize,
+            maxCharacters: maxCharacters
+        )
+        let raw: String
+        do {
+            raw = try await transport(prompt)
+        } catch {
+            // A cancelled request fails with a transport error (the socket was
+            // closed). The user stopped it on purpose — report the stop, not
+            // the network noise.
+            try Task.checkCancellation()
+            throw error
+        }
+        try Task.checkCancellation()
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ConversationSummarizerError.emptySummary }
         return trimmed

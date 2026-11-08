@@ -2,6 +2,10 @@ import Foundation
 
 extension Notification.Name {
     static let apiSendRequested = Notification.Name("apiSendRequested")
+    /// Control of the model-switch compaction from outside the app: the
+    /// banner's stop / roll back / compact again must be reachable over HTTP
+    /// too (the accessibility tree is not always available).
+    static let apiCompactionControlRequested = Notification.Name("apiCompactionControlRequested")
     static let webToolApprovalResolved = Notification.Name("webToolApprovalResolved")
     static let localToolApprovalResolved = Notification.Name("localToolApprovalResolved")
     /// Fired after any provider store (custom/local/web) changes so the

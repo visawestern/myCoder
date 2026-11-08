@@ -156,6 +156,11 @@ class AppState: ObservableObject {
     /// status line is a spoiler over this log: every action keeps what was
     /// requested, how it was processed and what came back.
     @Published var contextAssemblyLog: ContextAssemblyLogLogic.Log = .empty
+    /// Compaction that follows a model switch into a smaller context window.
+    /// The chat compacts before it continues; the user can stop the
+    /// compaction, roll it back, or pick a model with a larger window
+    /// (user directive 2026-11-08).
+    @Published var modelSwitchCompactionNotice: ModelSwitchCompactionNotice?
     /// Whether the point context is compiled before every send. On by default:
     /// compilation is deterministic and local, and without it the send carries
     /// no evidence at all.

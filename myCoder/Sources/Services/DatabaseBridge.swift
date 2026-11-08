@@ -462,6 +462,17 @@ class DatabaseBridge: ObservableObject {
         }
     }
     
+    /// Delete one message (with its parts) from the program database. Used to
+    /// roll back a compaction summary: the summary is a real message, so the
+    /// rollback has to remove it from the store as well.
+    func deleteMessage(id: String) {
+        do {
+            try db.deleteMessage(id: id)
+        } catch {
+            MyCoderAPIServer.appendLog("❌ Failed to delete message \(id): \(error)")
+        }
+    }
+
     /// Load messages from the program database.
     /// `offset` counts from the oldest row (ASC). The initial history load uses
     /// `loadMessageTail` — oldest-first + limit hides new messages as soon as a
