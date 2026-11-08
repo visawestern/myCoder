@@ -1981,7 +1981,22 @@ struct ChatPanelView: View {
             ?? retryPlan?.sessionID
             ?? messageStore.currentSessionID
             ?? appState.selectedSession?.id
-        let capturedProjectRoot = appState.selectedWorkspace?.path ?? ""
+        // The context collection must use the project of the OPEN CHAT, not
+        // the globally selected workspace (user check 2026-11-08: a myCoder
+        // chat collected llama.cpp context because llama.cpp was selected).
+        // The session owns its project; the workspace is only the fallback
+        // for chats that do not have one yet.
+        let sessionProjectRoot = await MainActor.run { () -> String in
+            guard let turnSessionID,
+                  let session = appState.sessions.first(where: { $0.id == turnSessionID }) else {
+                return ""
+            }
+            return session.directory
+        }
+        let capturedProjectRoot = SessionProjectRootLogic.resolve(
+            sessionDirectory: sessionProjectRoot,
+            selectedWorkspacePath: appState.selectedWorkspace?.path
+        )
         let capturedToolRoot = appState.toolWorkingDirectory
         let capturedModelID = appState.effectiveSelectedModel()
         let capturedParameters = ModelCallParametersStore.parameters(for: capturedModelID)

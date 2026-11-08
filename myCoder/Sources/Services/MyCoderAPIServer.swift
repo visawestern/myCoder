@@ -250,7 +250,16 @@ final class MyCoderAPIServer {
         let semaphore = DispatchSemaphore(value: 0)
         var payload: [String: Any] = ["error": "preview timed out"]
         Task { @MainActor in
-            let projectPath = appState.selectedWorkspace?.path ?? ""
+            // The request body may name the project to preview. Without it,
+            // fall back to the currently selected workspace so the preview
+            // mirrors what a send would collect (user check 2026-11-08: the
+            // preview ignored the passed projectPath and always used the
+            // selected workspace).
+            let requestedProject = (object["projectPath"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let projectPath = requestedProject.isEmpty
+                ? (appState.selectedWorkspace?.path ?? "")
+                : requestedProject
             let params = ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel())
             let toolRoot = appState.toolWorkingDirectory
             let route = SendRouteResolver.route(
