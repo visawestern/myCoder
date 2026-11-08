@@ -18,6 +18,11 @@ enum GoalPlanStatusLogic {
         !plan.isEmpty && plan.allSatisfy { $0.status == .done }
     }
 
+    /// Hard cap on automatic goal-continue turns. After this many verification
+    /// rounds the goal is not being closed by the model, we stop injecting
+    /// continuation prompts to avoid an infinite loop.
+    static let maxAutoContinues = 5
+
     /// Titles of steps that are NOT done (including blocked/in-progress/todo).
     static func notDoneItems(_ plan: [UserGoal.PlanItem]) -> [String] {
         plan.filter { $0.status != .done }.map(\.title)

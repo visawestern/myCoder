@@ -626,6 +626,8 @@ struct BottomInputBar: View {
                 isLoadingMessages: isLoadingMessages
             )
 
+            GoalStatusPanel()
+
             CompactMessageTextField(
                 text: $messageText,
                 placeholder: MiMoCopy.followUpPlaceholder(language: appState.appLanguage),

@@ -15,6 +15,10 @@ struct RightPanelView: View {
             
             ProgressSection()
             
+            Divider()
+            
+            GoalsSection()
+            
             Spacer()
         }
         .background(Color.mimo.surface)

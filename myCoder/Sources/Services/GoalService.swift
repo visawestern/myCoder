@@ -1,0 +1,77 @@
+import Foundation
+
+/// High-level goal (ЦЕЛЬ) operations used by the UI and the `/goal` command.
+/// Pure enough to test with a temporary home directory.
+enum GoalService {
+
+    /// Apply a parsed `/goal` command. Returns the updated goal list and a
+    /// chat reply (confirmation / errors). Does not start long verification
+    /// work — that belongs to `GoalVerificationService`. The localized *core*
+    /// prompts (продолжай по плану, адвокат дьявола) live in
+    /// `GoalVerificationPromptBuilder`; these short confirmations are plain
+    /// strings for v1.
+    static func apply(_ command: GoalCommand,
+                      homeDirectory: URL,
+                      language: AppLanguage) throws -> (goals: [UserGoal], reply: String) {
+        switch command {
+        case .create(let title):
+            guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return (GoalStore.load(homeDirectory: homeDirectory), "Пустая цель.")
+            }
+            let goal = UserGoal(title: title, state: .pending)
+            try GoalStore.upsert(goal, homeDirectory: homeDirectory)
+            return (GoalStore.load(homeDirectory: homeDirectory), "Цель создана: \(title)")
+
+        case .start:
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            guard let goal = goals.last else {
+                return (goals, "Нет цели. Сначала задай её: /goal <текст>")
+            }
+            try GoalStore.setState(id: goal.id, state: .active, homeDirectory: homeDirectory)
+            let planReady = GoalPlanStatusLogic.ready(goal.plan)
+            let reply = planReady
+                ? "Цель запущена. Проверяю готовность плана."
+                : GoalVerificationPromptBuilder.readinessMessage(language: language)
+            return (GoalStore.load(homeDirectory: homeDirectory), reply)
+
+        case .pause:
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            guard let goal = goals.last,
+                  (try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: homeDirectory)) == true else {
+                return (goals, "Нет активной цели.")
+            }
+            return (GoalStore.load(homeDirectory: homeDirectory), "Цель поставлена на паузу.")
+
+        case .resume:
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            guard let goal = goals.last,
+                  (try? GoalStore.setState(id: goal.id, state: .active, homeDirectory: homeDirectory)) == true else {
+                return (goals, "Нет цели для возобновления.")
+            }
+            return (GoalStore.load(homeDirectory: homeDirectory), "Цель возобновлена.")
+
+        case .delete(let index):
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            guard !goals.isEmpty else {
+                return (goals, "Нет целей для удаления.")
+            }
+            let target = goals[min(index ?? 0, goals.count - 1)]
+            _ = try GoalStore.remove(id: target.id, homeDirectory: homeDirectory)
+            return (GoalStore.load(homeDirectory: homeDirectory), "Цель удалена: \(target.title)")
+
+        case .list:
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            if goals.isEmpty {
+                return (goals, "Целей пока нет.")
+            }
+            let lines = goals.enumerated().map { i, g in
+                let plural = g.plan.count == 1 ? "" : "ов"
+                return "\(i). [\(g.state.rawValue)] \(g.title) (\(g.plan.count) шаг\(plural))"
+            }
+            return (goals, lines.joined(separator: "\n"))
+
+        case .none:
+            return (GoalStore.load(homeDirectory: homeDirectory), "")
+        }
+    }
+}

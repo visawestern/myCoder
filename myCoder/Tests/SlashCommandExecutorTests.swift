@@ -5,14 +5,22 @@ import Foundation
 @Suite("Slash command execution + session goal (plan Раздел 5 Блок 1/3)")
 struct SlashCommandExecutorTests {
 
-    @Test func goalWithArgumentSetsGoal() {
+    @Test func goalWithArgumentCreatesGoal() {
         let exec = SlashCommandExecutor(hasGitRepo: true)
-        #expect(exec.execute("/goal improve chat perf") == .setSessionGoal("improve chat perf"))
+        #expect(exec.execute("/goal improve chat perf") == .goal(.create(title: "improve chat perf")))
     }
 
-    @Test func goalWithoutArgumentShowsGoal() {
+    @Test func goalWithoutArgumentListsGoals() {
         let exec = SlashCommandExecutor(hasGitRepo: true)
-        #expect(exec.execute("/goal") == .showSessionGoal)
+        #expect(exec.execute("/goal") == .goal(.list))
+    }
+
+    @Test func goalLifecycleSubcommands() {
+        let exec = SlashCommandExecutor(hasGitRepo: true)
+        #expect(exec.execute("/goal start") == .goal(.start))
+        #expect(exec.execute("/goal pause") == .goal(.pause))
+        #expect(exec.execute("/goal resume") == .goal(.resume))
+        #expect(exec.execute("/goal delete") == .goal(.delete(index: nil)))
     }
 
     @Test func planEntersPlanMode() {

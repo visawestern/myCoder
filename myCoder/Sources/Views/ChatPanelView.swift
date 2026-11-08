@@ -564,6 +564,21 @@ struct ChatPanelView: View {
         }
     }
 
+    /// `/goal` → ЦЕЛЬ: applies the goal command (create/start/pause/resume/
+    /// delete/list) via GoalStore and replies in chat.
+    @MainActor
+    private func runGoalCommand(_ command: GoalCommand) async {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let reply: String
+        do {
+            let result = try GoalService.apply(command, homeDirectory: home, language: appState.appLanguage)
+            reply = result.reply.isEmpty ? "🎯 Целей нет." : result.reply
+        } catch {
+            reply = "Ошибка команды цели: \(error.localizedDescription)"
+        }
+        messageStore.append(Message(role: .assistant, content: reply, isFinished: true))
+    }
+
     // MARK: - Body event handlers
     //
     // These live outside `body` on purpose: the view body is large enough that
@@ -1256,6 +1271,10 @@ struct ChatPanelView: View {
             case .remember(let fact):
                 messageText = ""
                 Task { await self.rememberProjectFact(fact) }
+                return
+            case .goal(let goalCommand):
+                messageText = ""
+                Task { await self.runGoalCommand(goalCommand) }
                 return
             case .gitRequiredError(let cmd):
                 messageText = ""
@@ -3185,7 +3204,8 @@ struct ChatPanelView: View {
         retryPlan: SessionBusyRetryLogic.RetryPlan? = nil,
         existingUserMessageID: String? = nil,
         sessionID explicitSessionID: String? = nil,
-        qualityGateDepth: Int = 0
+        qualityGateDepth: Int = 0,
+        goalVerifyDepth: Int = 0
     ) async {
         let gateSessionID = explicitSessionID
             ?? retryPlan?.sessionID
@@ -3204,6 +3224,7 @@ struct ChatPanelView: View {
             sessionID: explicitSessionID
         )
         await runAnswerQualityGate(sessionID: gateSessionID, request: text, depth: qualityGateDepth)
+        await runGoalVerification(sessionID: gateSessionID, depth: goalVerifyDepth)
     }
 
     /// The post-turn devil's-advocate review. Honest by construction: an
@@ -3251,6 +3272,76 @@ struct ChatPanelView: View {
                 qualityGateDepth: depth + 1
             )
         }
+    }
+
+    /// Post-turn ЦЕЛЬ auto-verification. After the assistant's answer is
+    /// complete, an internal model acts as devil's advocate and checks whether
+    /// the active goal's plan steps are REALLY done. When not complete, a
+    /// continuation prompt («продолжай по плану, обнови прогресс») is injected
+    /// and the turn auto-continues. When complete, the goal is marked done.
+    /// Honest by construction: no active goal, an unfinished turn, or a
+    /// missing internal model all skip quietly instead of inventing a verdict.
+    private func runGoalVerification(sessionID: String?, depth: Int) async {
+        guard depth < GoalPlanStatusLogic.maxAutoContinues else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let goals = GoalStore.load(homeDirectory: home)
+        guard let goal = goals.first(where: { $0.state == .active }),
+              !GoalPlanStatusLogic.isComplete(goal.plan) else { return }
+
+        // The turn must be fully finished: an unfinished turn has no final
+        // answer to verify.
+        let answer = await MainActor.run { () -> String? in
+            guard !appState.isStreaming,
+                  appState.pendingQuestionRequest?.sessionID != sessionID else { return nil }
+            let messages = sessionID.flatMap { messageStore.messages(in: $0) } ?? []
+            guard let last = messages.last(where: {
+                $0.role == .assistant && $0.isFinished && !$0.content.isEmpty
+            }), !last.content.hasPrefix("Error:") else { return nil }
+            return last.content
+        }
+        guard let answer else { return }
+
+        let service = GoalVerificationService { system, user in
+            try await InternalModelRunner.complete(messages: [
+                DirectChatMessage(role: "system", content: system),
+                DirectChatMessage(role: "user", content: user),
+            ])
+        }
+        let outcome = await service.verify(
+            goal: goal, lastAssistantText: answer, language: appState.appLanguage)
+
+        if outcome.verdict.complete {
+            _ = try? GoalStore.setState(id: goal.id, state: .done, homeDirectory: home)
+            await MainActor.run {
+                if let sessionID {
+                    messageStore.append(
+                        Message(id: UUID().uuidString, role: .system,
+                                content: "🎯 Цель выполнена: \(goal.title)",
+                                isStreaming: false),
+                        to: sessionID)
+                }
+            }
+            return
+        }
+
+        // Not complete → status note + auto-continue with the continuation prompt.
+        guard let continuation = outcome.continuation else { return }
+        await MainActor.run {
+            if let sessionID {
+                messageStore.append(
+                    Message(id: UUID().uuidString, role: .system,
+                            content: "🎯 \(goal.title): \(outcome.verdict.reason)",
+                            isStreaming: false),
+                    to: sessionID)
+            }
+        }
+        await sendDirectly(
+            text: continuation,
+            files: [],
+            agentModeOverride: nil,
+            sessionID: sessionID,
+            goalVerifyDepth: depth + 1
+        )
     }
 
     /// Direct OpenAI-compatible turn with real token streaming. The answer is

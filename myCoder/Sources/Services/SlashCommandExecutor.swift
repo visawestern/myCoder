@@ -24,6 +24,8 @@ enum SlashCommandAction: Equatable {
     case compactConversation
     /// Store a durable project fact from `/remember <text>`.
     case remember(String)
+    /// Manage a ЦЕЛЬ goal (`/goal`): create/start/pause/resume/delete/list.
+    case goal(GoalCommand)
     /// The command needs a git repo but none is present.
     case gitRequiredError(command: String)
     /// Unknown command; suggest available ones.
@@ -77,7 +79,11 @@ struct SlashCommandExecutor {
 
         switch builtIn {
         case .goal:
-            return parsed.argument.isEmpty ? .showSessionGoal : .setSessionGoal(parsed.argument)
+            let goalCommand = GoalCommandLogic.parse("/goal \(parsed.argument)")
+            if goalCommand == .none, parsed.argument.isEmpty {
+                return .showSessionGoal
+            }
+            return .goal(goalCommand)
         case .plan:
             return .enterPlanMode
         case .commit:
