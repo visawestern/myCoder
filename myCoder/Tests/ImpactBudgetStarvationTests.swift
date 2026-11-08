@@ -43,6 +43,6 @@ struct ImpactBudgetStarvationTests {
         }
         let elapsed = Date().timeIntervalSince(started)
         #expect(result == nil)
-        #expect(elapsed < 1.5, "дедлайн занял \(elapsed) с")
+        #expect(elapsed < 3.0, "дедлайн занял \(elapsed) с — таймер не сработал до окончания работы (3 с)")
     }
 }

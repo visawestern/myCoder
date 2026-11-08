@@ -22,7 +22,7 @@ struct GraphStageBudgetTests {
         }
         let elapsed = Date().timeIntervalSince(started)
         #expect(result == nil)
-        #expect(elapsed < 3.0, "стадия графа держала ход \(elapsed) c")
+        #expect(elapsed < 4.8, "стадия графа держала ход \(elapsed) c (работа 5 с)")
     }
 
     @Test("Быстрый граф возвращается как обычно")

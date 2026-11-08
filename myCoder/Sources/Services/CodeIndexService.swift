@@ -167,7 +167,14 @@ enum CodeIndexService {
         // took 59-60 s and regularly hit its 60 s deadline. Indexing is
         // event-driven (FSEvents watcher / explicit ensureIndexed); only a
         // brand-new, completely empty store needs a first build here.
-        if (try? store.counts().symbols == 0) == true {
+        //
+        // One more case needs a re-index: after a changed file is read and
+        // marked stale (`read_symbol` refuses to return stale line numbers),
+        // a later search must heal it. We re-index only when the store has
+        // stale files — in steady state that count is 0, so the performance
+        // win of the event-driven model is preserved.
+        if (try? store.counts().symbols == 0) == true
+            || (try? store.counts().staleFiles > 0) == true {
             let fileRecords = records ?? PointContextIndexLogic.records(projectPath: projectPath)
             _ = try index(store: store, projectPath: projectPath, records: fileRecords)
         }
