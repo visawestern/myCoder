@@ -39,6 +39,12 @@ enum HarnessPromptQuality {
     - Verify as you go: compile and test each unit the moment it is written, not after the whole program exists. Never write a large chunk and then dig through it to find errors.
     - When a bug appears, isolate it to the smallest module, fix it at that level, and run that module's tests before moving on. Do not debug inside a finished program when a unit test can pinpoint the fault.
     - Prefer many small, pure, composable functions over a few large ones; separation makes each piece testable in isolation.
+
+    # Plan/todo tools (ЦЕЛЬ)
+    - When a goal is set, first break it into concrete, atomic plan steps and record them with the todo tools: `todo_add`, `todo_update`, `todo_list`.
+    - Keep every step atomic and each item's status accurate (`todo` | `in_progress` | `done` | `blocked`); update the status the moment work on a step changes.
+    - If a step cannot be finished, mark it `blocked` with the concrete reason rather than silently skipping it.
+    - Before declaring work complete, re-check the plan: every step must be `done`, and a blocked step must have a stated reason.
     """
 
     // MARK: - Human-like problem solving (least-resistance path + uncertainty)

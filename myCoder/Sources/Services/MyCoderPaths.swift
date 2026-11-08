@@ -75,6 +75,11 @@ enum MyCoderPaths {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("lsp.json")
     }
 
+    /// Persisted goals (ЦЕЛЬ) list: `~/.mycoder/goals.json`.
+    static func goalsURL(homeDirectory: URL) -> URL {
+        appDir(homeDirectory: homeDirectory).appendingPathComponent("goals.json")
+    }
+
     static func commandsDir(homeDirectory: URL) -> URL {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("commands", isDirectory: true)
     }
