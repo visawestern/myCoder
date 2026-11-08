@@ -21,25 +21,53 @@ enum UserMessageNavigatorLogic {
 
     static func preview(for message: Message,
                         limit: Int = previewCharacterLimit) -> String {
-        var text = normalized(message.content)
-        if text.isEmpty, let files = message.files {
-            text = normalized(files.map(\.name).joined(separator: ", "))
+        var scan = normalizedPrefix(message.content, limit: limit)
+        if scan.text.isEmpty, let files = message.files {
+            scan = normalizedPrefix(files.map(\.name).joined(separator: ", "), limit: limit)
         }
-        guard limit > 0, text.count > limit else { return text }
-        let prefix = String(text.prefix(limit))
-            .trimmingCharacters(in: .whitespaces)
-        return prefix + "…"
+        let text = scan.text.trimmingCharacters(in: .whitespaces)
+        guard limit > 0, scan.hasMore else { return text }
+        return text + "…"
+    }
+
+    /// The first `limit` characters of the whitespace-normalized text, and
+    /// whether more normalized text follows.
+    ///
+    /// The scan STOPS as soon as the prefix is complete. Normalizing the
+    /// whole message on every render froze the app on a megabyte-long paste
+    /// (the navigator is re-evaluated on every layout pass), so only the
+    /// beginning of the text is ever read.
+    static func normalizedPrefix<Characters: Sequence>(
+        _ characters: Characters,
+        limit: Int
+    ) -> (text: String, hasMore: Bool) where Characters.Element == Character {
+        guard limit > 0 else { return ("", false) }
+        var result = ""
+        result.reserveCapacity(limit)
+        var count = 0
+        var pendingSpace = false
+        var hasMore = false
+
+        for character in characters {
+            if character.isWhitespace {
+                if count > 0 { pendingSpace = true }
+                continue
+            }
+            if pendingSpace {
+                pendingSpace = false
+                if count >= limit { hasMore = true; break }
+                result.append(" ")
+                count += 1
+            }
+            if count >= limit { hasMore = true; break }
+            result.append(character)
+            count += 1
+        }
+        return (result, hasMore)
     }
 
     static func buttonTitle(index: Int, offset: Int = 0) -> String {
         "\(index + offset + 1)"
-    }
-
-    private static func normalized(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
     }
 }
 

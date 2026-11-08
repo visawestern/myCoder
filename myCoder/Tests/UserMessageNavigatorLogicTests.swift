@@ -57,4 +57,50 @@ struct UserMessageNavigatorLogicTests {
         #expect(UserMessageNavigatorLogic.steppedIndex(from: 2, direction: .up, messageCount: 3) == 1)
         #expect(UserMessageNavigatorLogic.steppedIndex(from: 0, direction: .down, messageCount: 0) == nil)
     }
+
+    /// A character sequence that counts how much of it was actually read.
+    /// The navigator must not walk a megabyte-long message on every render —
+    /// that froze the whole app when a huge paste was opened.
+    private final class CountingCharacters: Sequence, @unchecked Sendable {
+        private let text: String
+        private(set) var consumed = 0
+
+        init(_ text: String) { self.text = text }
+
+        struct Iterator: IteratorProtocol {
+            let text: String
+            let owner: CountingCharacters
+            var index: String.Index
+
+            mutating func next() -> Character? {
+                guard index < text.endIndex else { return nil }
+                defer { index = text.index(after: index) }
+                owner.consumed += 1
+                return text[index]
+            }
+        }
+
+        func makeIterator() -> Iterator {
+            Iterator(text: text, owner: self, index: text.startIndex)
+        }
+    }
+
+    @Test("Нормализация превью читает только начало сообщения")
+    func previewScanStopsAtTheLimit() {
+        let huge = String(repeating: "a ", count: 200_000)
+        let counter = CountingCharacters(huge)
+        let result = UserMessageNavigatorLogic.normalizedPrefix(counter, limit: 100)
+        #expect(result.text.count <= 100)
+        #expect(result.hasMore)
+        // The whole message is 400k characters — the scan must stop early.
+        #expect(counter.consumed <= 250)
+    }
+
+    @Test("Превью огромного сообщения остаётся коротким")
+    func previewOfHugeMessage() {
+        let huge = String(repeating: "word ", count: 100_000)
+        let preview = UserMessageNavigatorLogic.preview(for: message("big", content: huge))
+        #expect(preview.hasSuffix("…"))
+        #expect(preview.count <= 101)
+    }
 }
