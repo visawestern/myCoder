@@ -77,7 +77,18 @@ struct GoalStatusPanel: View {
 
     private func apply(_ state: UserGoal.State) {
         guard let goal else { return }
-        _ = try? GoalStore.setState(id: goal.id, state: state, homeDirectory: home)
+        if state == .active {
+            // Старт/Продолжить из панели композера — автономный запуск:
+            // полный промпт уходит в чат как юзер.
+            _ = GoalLauncher.launch(
+                goalID: goal.id,
+                homeDirectory: home,
+                language: language,
+                fallbackChatID: context.chatID
+            )
+        } else {
+            _ = try? GoalStore.setState(id: goal.id, state: state, homeDirectory: home)
+        }
         NotificationCenter.default.post(name: .init("myCoderGoalStoreChanged"), object: nil)
         reload()
     }

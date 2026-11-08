@@ -579,6 +579,7 @@ struct ChatPanelView: View {
             selectedWorkspacePath: appState.selectedWorkspace?.path
         )
         let reply: String
+        var launchedGoalID: UUID?
         do {
             let result = try GoalService.apply(
                 command,
@@ -586,9 +587,22 @@ struct ChatPanelView: View {
                 language: appState.appLanguage,
                 context: context
             )
+            // Команда start/resume запускает автономный цикл: полный промпт
+            // цели уходит в чат как юзер (с контекстом).
+            if case .start = command, let active = result.goals.first(where: { $0.state == .active }) {
+                launchedGoalID = active.id
+            }
             reply = result.reply.isEmpty ? "🎯 Целей нет." : result.reply
         } catch {
             reply = "Ошибка команды цели: \(error.localizedDescription)"
+        }
+        if let launchedGoalID {
+            _ = GoalLauncher.launch(
+                goalID: launchedGoalID,
+                homeDirectory: home,
+                language: appState.appLanguage,
+                fallbackChatID: context.chatID
+            )
         }
         messageStore.append(Message(role: .assistant, content: reply, isFinished: true))
     }
@@ -3381,6 +3395,12 @@ struct ChatPanelView: View {
         }
         let outcome = await service.verify(
             goal: goal, lastAssistantText: answer, language: appState.appLanguage)
+
+        // Помечаем прогресс: план обновляется по вердикту (done для
+        // подтверждённых шагов, in_progress для текущих).
+        let updatedPlan = GoalRunner.updatedPlan(goal.plan, verdict: outcome.verdict)
+        _ = try? GoalStore.updatePlan(id: goal.id, plan: updatedPlan, homeDirectory: home)
+        NotificationCenter.default.post(name: Notification.Name("myCoderGoalStoreChanged"), object: nil)
 
         if outcome.verdict.complete {
             _ = try? GoalStore.setState(id: goal.id, state: .done, homeDirectory: home)

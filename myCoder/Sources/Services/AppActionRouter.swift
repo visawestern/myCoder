@@ -605,6 +605,18 @@ final class AppActionRouter {
             language: appState.appLanguage,
             context: context
         )
+        // start/resume запускают автономный цикл: полный промпт цели уходит
+        // в чат через обычный send-путь (обработчик apiSendRequested), чтобы
+        // модель получила его с полным контекстом, как от юзера.
+        if case .start = command,
+           let active = outcome.goals.first(where: { $0.state == .active }) {
+            _ = GoalLauncher.launch(
+                goalID: active.id,
+                homeDirectory: Self.homeDirectory,
+                language: appState.appLanguage,
+                fallbackChatID: context.chatID
+            )
+        }
         return ["reply": outcome.reply, "goals": outcome.goals.map(goalRow)]
     }
 

@@ -216,11 +216,24 @@ struct GoalsSection: View {
     private func apply(_ action: GoalRow.Action, to goal: UserGoal) {
         switch action {
         case .start:
-            _ = try? GoalStore.setState(id: goal.id, state: .active, homeDirectory: home)
+            // Старт цели = автономный запуск: цель помечается активной и её
+            // полный промпт уходит в чат как юзер (с контекстом), дальше —
+            // авто-проверка и продолжение до выполнения.
+            _ = GoalLauncher.launch(
+                goalID: goal.id,
+                homeDirectory: home,
+                language: language,
+                fallbackChatID: appState.selectedSession?.id
+            )
         case .pause:
             _ = try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: home)
         case .resume:
-            _ = try? GoalStore.setState(id: goal.id, state: .active, homeDirectory: home)
+            _ = GoalLauncher.launch(
+                goalID: goal.id,
+                homeDirectory: home,
+                language: language,
+                fallbackChatID: appState.selectedSession?.id
+            )
         case .delete:
             _ = try? GoalStore.remove(id: goal.id, homeDirectory: home)
         }

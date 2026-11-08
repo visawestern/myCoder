@@ -77,4 +77,16 @@ enum GoalStore {
         try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
         return true
     }
+
+    /// Replace a goal's plan (progress marking by the goal runner) and touch
+    /// `updatedAt`.
+    @discardableResult
+    static func updatePlan(id: UUID, plan: [UserGoal.PlanItem], homeDirectory: URL, fileManager: FileManager = .default) throws -> Bool {
+        var goals = load(homeDirectory: homeDirectory, fileManager: fileManager)
+        guard let idx = goals.firstIndex(where: { $0.id == id }) else { return false }
+        goals[idx].plan = plan
+        goals[idx].updatedAt = Date()
+        try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
+        return true
+    }
 }
