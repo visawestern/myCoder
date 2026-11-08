@@ -69,4 +69,24 @@ enum PlanModeToolPolicy {
             return .execute
         }
     }
+
+    /// Должен ли планировочный тул в plan-режиме обойти гейт одобрения.
+    ///
+    /// Планировочные тулы (`task_create`/`task_update`/`todo_write`) меняют
+    /// только чек-лист плана, не проект. На уровне доступа «Спрашивать перед
+    /// изменениями» `WebToolAccessGate` относит их к мутирующим и просит
+    /// одобрение — цикл агента останавливался на карточке одобрения (живой
+    /// дефект 2026-11-08). В plan-режиме такие вызовы исполняются сразу;
+    /// в остальных режимах гейт работает как раньше.
+    static func bypassesApproval(for call: WebToolCall, mode: AgentMode) -> Bool {
+        guard mode == .plan else { return false }
+        let call = WebToolProtocolEmulator.canonicalized(call)
+        guard let tool = WebEmulatedTool(rawValue: call.name) else { return false }
+        switch tool {
+        case .todoWrite, .taskCreate, .taskUpdate:
+            return true
+        default:
+            return false
+        }
+    }
 }

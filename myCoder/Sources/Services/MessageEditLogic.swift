@@ -60,6 +60,11 @@ enum MessageEditLogic {
         return message.role == .assistant
     }
 
+    /// Панель кнопок под сообщением (копировать … сырой ответ).
+    ///
+    /// `hasToolCalls` больше НЕ скрывает панель (живой дефект 2026-11-08:
+    /// у ответа с действиями кнопок не было вовсе). Скрываем только пока
+    /// идёт стриминг или у сообщения нет ни текста, ни вложений.
     static func shouldShowActions(
         hasToolCalls: Bool,
         isStreaming: Bool,
@@ -67,8 +72,8 @@ enum MessageEditLogic {
         displayText: String,
         hasAttachments: Bool = false
     ) -> Bool {
-        !hasToolCalls
-            && !isStreaming
+        _ = hasToolCalls
+        return !isStreaming
             && (!displayText.isEmpty || hasAttachments)
             && (canEdit || !displayText.isEmpty)
     }

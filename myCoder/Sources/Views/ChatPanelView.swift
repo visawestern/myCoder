@@ -569,9 +569,23 @@ struct ChatPanelView: View {
     @MainActor
     private func runGoalCommand(_ command: GoalCommand) async {
         let home = FileManager.default.homeDirectoryForCurrentUser
+        let session = appState.selectedSession
+        // Bind the goal to the open chat and its project (user directive
+        // 2026-11-08) — `/goal` must not create a global goal that migrates
+        // between chats.
+        let context = GoalContextLogic.context(
+            chatID: messageStore.currentSessionID ?? session?.id,
+            sessionDirectory: session?.directory,
+            selectedWorkspacePath: appState.selectedWorkspace?.path
+        )
         let reply: String
         do {
-            let result = try GoalService.apply(command, homeDirectory: home, language: appState.appLanguage)
+            let result = try GoalService.apply(
+                command,
+                homeDirectory: home,
+                language: appState.appLanguage,
+                context: context
+            )
             reply = result.reply.isEmpty ? "🎯 Целей нет." : result.reply
         } catch {
             reply = "Ошибка команды цели: \(error.localizedDescription)"
@@ -3325,7 +3339,24 @@ struct ChatPanelView: View {
     private func runGoalVerification(sessionID: String?, depth: Int) async {
         guard depth < GoalPlanStatusLogic.maxAutoContinues else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let goals = GoalStore.load(homeDirectory: home)
+        let session = await MainActor.run { () -> ChatSession? in
+            guard let sessionID,
+                  let session = appState.sessions.first(where: { $0.id == sessionID }) else {
+                return nil
+            }
+            return session
+        }
+        let context = await MainActor.run {
+            GoalContextLogic.context(
+                chatID: sessionID,
+                sessionDirectory: session?.directory,
+                selectedWorkspacePath: appState.selectedWorkspace?.path
+            )
+        }
+        let goals = GoalContextLogic.visibleGoals(
+            GoalStore.load(homeDirectory: home),
+            context: context
+        )
         guard let goal = goals.first(where: { $0.state == .active }),
               !GoalPlanStatusLogic.isComplete(goal.plan) else { return }
 
@@ -3530,6 +3561,7 @@ struct ChatPanelView: View {
                     accessGrant: OutOfProjectAccessLogic.grantRoot(forPath: path)
                 )
             } else if validationError == nil,
+                      !PlanModeToolPolicy.bypassesApproval(for: call, mode: agentMode),
                       WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
                 let details = WebToolApprovalDetails(
                     call: call,

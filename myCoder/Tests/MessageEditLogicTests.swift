@@ -56,4 +56,34 @@ struct MessageEditLogicTests {
             )
         )
     }
+
+    /// Живой дефект 2026-11-08: у ответа с действиями (tool calls) панель
+    /// кнопок скрывалась, поэтому под полученным сообщением не было ни
+    /// «Копировать», ни «Сырой ответ». Кнопки должны быть под ЛЮБЫМ
+    /// законченным ответом с текстом.
+    @Test("Ответ с инструментами тоже показывает кнопки под сообщением")
+    func showsActionsForAssistantMessageWithToolCalls() {
+        #expect(
+            MessageEditLogic.shouldShowActions(
+                hasToolCalls: true,
+                isStreaming: false,
+                canEdit: false,
+                displayText: "Готово: план из 3 шагов"
+            )
+        )
+    }
+
+    /// Во время стриминга панель по-прежнему не показывается: ответ ещё
+    /// меняется, кнопка сырого ответа неполна.
+    @Test("Стриминговый ответ не показывает кнопки до завершения")
+    func hidesActionsWhileStreaming() {
+        #expect(
+            !MessageEditLogic.shouldShowActions(
+                hasToolCalls: true,
+                isStreaming: true,
+                canEdit: false,
+                displayText: "Частичный ответ"
+            )
+        )
+    }
 }

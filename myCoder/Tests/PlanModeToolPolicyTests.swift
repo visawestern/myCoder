@@ -69,6 +69,33 @@ final class PlanModeToolPolicyTests: XCTestCase {
         }
     }
 
+    /// Живой дефект 2026-11-08: в plan-режиме с уровнем доступа
+    /// «Спрашивать перед изменениями» (`task_create`/`task_update`/
+    /// `todo_write`) политика разрешала, но гейт доступа требовал
+    /// одобрение — цикл агента останавливался на карточке одобрения,
+    /// хотя инструмент не меняет проект. Планировочные тулы в plan-режиме
+    /// должны исполняться без запроса.
+    func testPlanToolsBypassApprovalInPlanMode() {
+        for name in ["task_create", "task_update", "todo_write"] {
+            XCTAssertTrue(
+                PlanModeToolPolicy.bypassesApproval(for: call(name), mode: .plan),
+                "\(name) в plan-режиме не должен запрашивать одобрение"
+            )
+            XCTAssertFalse(
+                PlanModeToolPolicy.bypassesApproval(for: call(name), mode: .compose),
+                "\(name) в compose не исполняется, одобрение не нужно"
+            )
+        }
+        for name in ["write_file", "edit_file", "git_commit", "run_command"] {
+            XCTAssertFalse(
+                PlanModeToolPolicy.bypassesApproval(for: call(name), mode: .plan),
+                "\(name) не должен обходить гейт доступа"
+            )
+        }
+        // Build-режим: обычный гейт, без исключений.
+        XCTAssertFalse(PlanModeToolPolicy.bypassesApproval(for: call("task_create"), mode: .build))
+    }
+
     // MARK: - run_command: пишущие запрещены, читающие разрешены
 
     func testMutatingRunCommandDeniedInPlanAndCompose() {
