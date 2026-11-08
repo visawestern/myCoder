@@ -10,12 +10,12 @@ final class MyCoderAPIServer {
     static let shared = MyCoderAPIServer()
     static let fixedPort: UInt16 = 8766
     /// Deadline for `POST /api/context-preview`. The preview runs the real
-    /// pipeline: planner (20 s budget) + impact (20 s budget) + board build on
-    /// a 1000-file project. A 60 s hardcode was smaller than the worst-case
-    /// honest sum and reproduced "preview timed out" on real projects. This
-    /// constant covers the internal budgets with headroom.
-    static let contextPreviewDeadline: TimeInterval =
-        InternalContextPlanner.defaultBudget + ImpactBudget.defaultBudget + 60
+    /// pipeline: planner + impact + board build on a 1000-file project. The
+    /// collection itself is capped by the shared five-minute budget
+    /// (`ContextCollectionBudget.total`); this HTTP deadline only adds the
+    /// room to hand the answer back, so the endpoint never becomes a second,
+    /// larger ceiling for the collection itself (user directive 2026-11-08).
+    static let contextPreviewDeadline: TimeInterval = ContextCollectionBudget.total + 60
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "mycoder.api.server")
     private(set) var port: Int = 0

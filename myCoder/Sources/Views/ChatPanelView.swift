@@ -2093,6 +2093,11 @@ struct ChatPanelView: View {
         var projectMemories: [ProjectMemoryChunk] = []
         var taskLedger: TaskLedger?
         var contextWarning: String?
+        // The whole context collection — index, memory, ledger, board, planner,
+        // impact, compilation — shares one five-minute ceiling (user directive
+        // 2026-11-08). Every stage below spends from what is left of it, so
+        // the stages can no longer add up to more than five minutes.
+        let contextCollectionStartedAt = Date()
         if appState.isPointContextEnabled && hasProjectForContext && needsContextPrep {
             await MainActor.run { appState.isCompilingContext = true }
             await MainActor.run {
@@ -2218,13 +2223,18 @@ struct ChatPanelView: View {
            hasProjectForContext, needsContextPrep {
             // Board building extracts symbols/imports/tokens from every indexed
             // file — heavy CPU on the main actor froze the UI for seconds at
-            // send start (user report 2026-10-30). Build it off-main.
-            let board = await Task.detached(priority: .utility) {
+            // send start (user report 2026-10-30). Build it off-main and under
+            // what is left of the shared collection budget.
+            let boardBudget = ContextCollectionBudget.stageBudget(
+                ownLimit: ImpactBudget.defaultBudget,
+                startedAt: contextCollectionStartedAt
+            )
+            let board: ContextBoard? = await ImpactBudget.runSync(budget: .seconds(boardBudget)) {
                 ContextBoardBuilder.build(
                     projectPath: pointContextProjectRoot,
                     records: pointContextRecords
                 )
-            }.value
+            }
             preparedBoard = board
             await MainActor.run { appState.isCompilingContext = true }
             // The local planner runs a local model and can take seconds — run
@@ -2239,14 +2249,23 @@ struct ChatPanelView: View {
                     processing: ContextStageLogLogic.line(for: .planning)
                 )
             }
+            // The planner spends from the shared budget too: its own 20 s and
+            // the five-minute ceiling, whichever is smaller.
+            let planningBudget = ContextCollectionBudget.stageBudget(
+                ownLimit: InternalContextPlanner.defaultBudget,
+                startedAt: contextCollectionStartedAt
+            )
             localPlan = await Task.detached(priority: .utility) {
                 await TurnContextPlanningService.plan(
                     message: text,
-                    board: board,
+                    board: board ?? ContextBoard(projectPath: pointContextProjectRoot,
+                                                 entries: [],
+                                                 builtAt: Date()),
                     memories: projectMemories,
                     records: pointContextRecords,
                     priorTurns: priorTurnsForContext,
-                    ledger: taskLedger
+                    ledger: taskLedger,
+                    budget: planningBudget
                 )
             }.value
             let planningOutcome = ContextAssemblyLogLogic.planningResult(localPlan)
@@ -2287,7 +2306,14 @@ struct ChatPanelView: View {
             let impactIntent = localPlan?.plan?.intent
             let impactTerms = (localPlan?.plan?.terms ?? []) + (localPlan?.plan?.symbols ?? []) + (localPlan?.plan?.files ?? [])
             let messageText = text
-            let impactResult: ImpactReport?? = await ImpactBudget.runSync(budget: .seconds(ImpactBudget.defaultBudget)) { () -> ImpactReport? in
+            // The impact pass gets what is left of the shared five-minute
+            // collection budget — not its own full 300 s on top of the stages
+            // that already ran (user directive 2026-11-08).
+            let impactBudget = ContextCollectionBudget.stageBudget(
+                ownLimit: ImpactBudget.defaultBudget,
+                startedAt: contextCollectionStartedAt
+            )
+            let impactResult: ImpactReport?? = await ImpactBudget.runSync(budget: .seconds(impactBudget)) { () -> ImpactReport? in
                 do {
                     return try ImpactAnalyzer.report(
                         projectPath: impactRoot,

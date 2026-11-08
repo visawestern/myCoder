@@ -42,6 +42,10 @@ enum ContextPreviewService {
         guard !trimmed.isEmpty else {
             return ["error": "message is required"]
         }
+        // One shared five-minute ceiling for the whole collection (user
+        // directive 2026-11-08): the stages below spend from what is left of
+        // it, so the preview can never take longer than the send it mirrors.
+        let collectionStartedAt = Date()
         let records: [FileIndexRecord] = request.projectPath.isEmpty
             ? []
             : await Task.detached(priority: .utility) {
@@ -56,12 +60,25 @@ enum ContextPreviewService {
         var localPlan: LocalQueryPlanResult?
         var board: ContextBoard?
         if request.isPlannerEnabled, !request.projectPath.isEmpty {
-            let built = await Task.detached(priority: .utility) {
+            let built: ContextBoard? = await ImpactBudget.runSync(
+                budget: .seconds(ContextCollectionBudget.stageBudget(
+                    ownLimit: ImpactBudget.defaultBudget,
+                    startedAt: collectionStartedAt
+                ))
+            ) {
                 ContextBoardBuilder.build(projectPath: request.projectPath, records: records)
-            }.value
+            }
             board = built
-            localPlan = await TurnContextPlanningService.plan(message: trimmed, board: built, memories: memories,
-                                                              records: records, priorTurns: [], ledger: nil)
+            localPlan = await TurnContextPlanningService.plan(message: trimmed, board: built ?? ContextBoard(projectPath: request.projectPath,
+                                                                                                                entries: [],
+                                                                                                                builtAt: Date()),
+                                                              memories: memories,
+                                                              records: records,
+                                                              priorTurns: [], ledger: nil,
+                                                              budget: ContextCollectionBudget.stageBudget(
+                                                                ownLimit: InternalContextPlanner.defaultBudget,
+                                                                startedAt: collectionStartedAt
+                                                              ))
         }
         var impact: ImpactReport?
         if !request.projectPath.isEmpty {
@@ -85,7 +102,10 @@ enum ContextPreviewService {
                 + (localPlan?.plan?.symbols ?? [])
                 + (localPlan?.plan?.files ?? [])
             let bounded: ImpactReport?? = await ImpactBudget.runSync(
-                budget: .seconds(ImpactBudget.defaultBudget)
+                budget: .seconds(ContextCollectionBudget.stageBudget(
+                    ownLimit: ImpactBudget.defaultBudget,
+                    startedAt: collectionStartedAt
+                ))
             ) { () -> ImpactReport? in
                 try? ImpactAnalyzer.report(
                     projectPath: impactRoot,
