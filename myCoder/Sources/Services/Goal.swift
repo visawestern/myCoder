@@ -40,6 +40,12 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var lastError: String?
+    /// Project the goal belongs to. Nil for a chat-only goal (standalone
+    /// chat) and for legacy goals created before binding existed.
+    var projectPath: String?
+    /// Chat the goal was created in. A chat-bound goal is visible only in
+    /// that chat; nil means the goal belongs to the whole project.
+    var chatID: String?
 
     init(id: UUID = UUID(),
          title: String,
@@ -47,7 +53,9 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
          state: State = .pending,
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
-         lastError: String? = nil) {
+         lastError: String? = nil,
+         projectPath: String? = nil,
+         chatID: String? = nil) {
         self.id = id
         self.title = title
         self.plan = plan
@@ -55,5 +63,7 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastError = lastError
+        self.projectPath = projectPath
+        self.chatID = chatID
     }
 }

@@ -577,6 +577,16 @@ struct BottomInputBar: View {
     /// first. The composer keeps the text and the loader explains the wait.
     private var canSendNow: Bool { canSend && !isCompilingContext }
 
+    /// Goal scope of the open chat: its own project wins over the selected
+    /// workspace; a standalone chat has no project (goal stays chat-bound).
+    private var goalContext: GoalContext {
+        GoalContextLogic.context(
+            chatID: appState.selectedSession?.id,
+            sessionDirectory: appState.selectedSession?.directory,
+            selectedWorkspacePath: appState.selectedWorkspace?.path
+        )
+    }
+
     /// Round 8 P1: why sending is blocked, surfaced to the user.
     private var sendReason: String? {
         SendReadinessReason.reason(
@@ -626,7 +636,7 @@ struct BottomInputBar: View {
                 isLoadingMessages: isLoadingMessages
             )
 
-            GoalStatusPanel()
+            GoalStatusPanel(context: goalContext)
 
             CompactMessageTextField(
                 text: $messageText,

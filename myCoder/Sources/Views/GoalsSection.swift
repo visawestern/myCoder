@@ -24,6 +24,17 @@ struct GoalsSection: View {
     private var language: AppLanguage { appState.appLanguage }
     private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
 
+    /// Scope of the ЦЕЛЬ section: the chat's project, the selected workspace,
+    /// or nothing. The goal cards below are filtered by it so a goal never
+    /// floats across chats (user directive 2026-11-08).
+    private var goalContext: GoalContext {
+        GoalContextLogic.context(
+            chatID: appState.selectedSession?.id,
+            sessionDirectory: appState.selectedSession?.directory,
+            selectedWorkspacePath: appState.selectedWorkspace?.path
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
@@ -55,6 +66,9 @@ struct GoalsSection: View {
         }
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: .init("myCoderGoalStoreChanged"))) { _ in
+            reload()
+        }
+        .onChange(of: appState.selectedSession?.id) { _ in
             reload()
         }
         // The section must not absorb the panel's leftover height: the goal
@@ -141,7 +155,13 @@ struct GoalsSection: View {
     private func createGoal() {
         let trimmed = newGoalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let goal = UserGoal(title: trimmed, state: .pending)
+        let context = goalContext
+        let goal = UserGoal(
+            title: trimmed,
+            state: .pending,
+            projectPath: context.projectPath,
+            chatID: context.chatID
+        )
         _ = try? GoalStore.upsert(goal, homeDirectory: home)
         newGoalTitle = ""
         withAnimation(.easeOut(duration: 0.15)) {
@@ -187,7 +207,10 @@ struct GoalsSection: View {
     // MARK: - Data
 
     private func reload() {
-        goals = GoalStore.load(homeDirectory: home)
+        goals = GoalContextLogic.visibleGoals(
+            GoalStore.load(homeDirectory: home),
+            context: goalContext
+        )
     }
 
     private func apply(_ action: GoalRow.Action, to goal: UserGoal) {

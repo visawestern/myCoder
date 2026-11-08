@@ -548,28 +548,32 @@ final class AppActionRouter {
             return try AppAccessibilityBridge.setValue(params: params)
 
         case "goal.state":
-            return goalState(appState: appState)
+            return goalState(appState: appState, params: params)
         case "goal.list":
-            let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+            let context = goalContext(appState: appState, params: params)
+            let goals = GoalContextLogic.visibleGoals(
+                GoalStore.load(homeDirectory: Self.homeDirectory),
+                context: context
+            )
             return ["goals": goals.map(goalRow)]
         case "goal.create":
             let title = try requireString("title", params)
-            return try applyGoal(.create(title: title), appState: appState)
+            return try applyGoal(.create(title: title), appState: appState, params: params)
         case "goal.start":
-            return try applyGoal(.start, appState: appState)
+            return try applyGoal(.start, appState: appState, params: params)
         case "goal.pause":
-            return try applyGoal(.pause, appState: appState)
+            return try applyGoal(.pause, appState: appState, params: params)
         case "goal.resume":
-            return try applyGoal(.resume, appState: appState)
+            return try applyGoal(.resume, appState: appState, params: params)
         case "goal.delete":
             let index = int(params["index"])
-            return try applyGoal(.delete(index: index), appState: appState)
+            return try applyGoal(.delete(index: index), appState: appState, params: params)
         case "goal.edit":
             let title = try requireString("title", params)
-            return try applyGoal(.edit(title: title), appState: appState)
+            return try applyGoal(.edit(title: title), appState: appState, params: params)
         case "goal.verify":
             let answer = params["answer"] as? String ?? ""
-            return try await verifyGoal(answer: answer, appState: appState)
+            return try await verifyGoal(answer: answer, appState: appState, params: params)
 
         case "ui.screenshot":
             return try screenshot(params: params)
@@ -587,13 +591,46 @@ final class AppActionRouter {
 
     /// Apply a ЦЕЛЬ goal command through the SAME service the sidebar buttons
     /// and `/goal` use — the API never bypasses a user-doable path.
-    private func applyGoal(_ command: GoalCommand, appState: AppState) throws -> [String: Any] {
-        let outcome = try GoalService.apply(command, homeDirectory: Self.homeDirectory, language: appState.appLanguage)
+    ///
+    /// The command is scoped to the open chat/project, exactly like the
+    /// sidebar: an optional `chatID`/`projectPath` parameter overrides the
+    /// current scope for automation clients.
+    private func applyGoal(_ command: GoalCommand,
+                           appState: AppState,
+                           params: [String: Any] = [:]) throws -> [String: Any] {
+        let context = goalContext(appState: appState, params: params)
+        let outcome = try GoalService.apply(
+            command,
+            homeDirectory: Self.homeDirectory,
+            language: appState.appLanguage,
+            context: context
+        )
         return ["reply": outcome.reply, "goals": outcome.goals.map(goalRow)]
     }
 
-    private func goalState(appState: AppState) -> [String: Any] {
-        let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+    private func goalContext(appState: AppState, params: [String: Any] = [:]) -> GoalContext {
+        let session = appState.selectedSession
+        var context = GoalContextLogic.context(
+            chatID: session?.id,
+            sessionDirectory: session?.directory,
+            selectedWorkspacePath: appState.selectedWorkspace?.path
+        )
+        if let chatID = params["chatID"] as? String {
+            let trimmed = chatID.trimmingCharacters(in: .whitespacesAndNewlines)
+            context.chatID = trimmed.isEmpty ? nil : trimmed
+        }
+        if let projectPath = params["projectPath"] as? String {
+            let trimmed = projectPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            context.projectPath = trimmed.isEmpty ? nil : trimmed
+        }
+        return context
+    }
+
+    private func goalState(appState: AppState, params: [String: Any] = [:]) -> [String: Any] {
+        let goals = GoalContextLogic.visibleGoals(
+            GoalStore.load(homeDirectory: Self.homeDirectory),
+            context: goalContext(appState: appState, params: params)
+        )
         let active = goals.first(where: { $0.state == .active })
         return [
             "goals": goals.map(goalRow),
@@ -610,7 +647,9 @@ final class AppActionRouter {
             "doneCount": goal.plan.filter { $0.status == .done }.count,
             "plan": goal.plan.map { ["title": $0.title, "status": $0.status.rawValue] },
             "createdAt": goal.createdAt.timeIntervalSince1970,
-            "updatedAt": goal.updatedAt.timeIntervalSince1970
+            "updatedAt": goal.updatedAt.timeIntervalSince1970,
+            "chatID": goal.chatID ?? NSNull(),
+            "projectPath": goal.projectPath ?? NSNull()
         ]
     }
 
@@ -633,8 +672,13 @@ final class AppActionRouter {
 
     /// `goal.verify`: runs the same devil's-advocate verification the post-turn
     /// hook uses, on the active goal, and returns the verdict + continuation.
-    private func verifyGoal(answer: String, appState: AppState) async throws -> [String: Any] {
-        let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+    private func verifyGoal(answer: String,
+                            appState: AppState,
+                            params: [String: Any] = [:]) async throws -> [String: Any] {
+        let goals = GoalContextLogic.visibleGoals(
+            GoalStore.load(homeDirectory: Self.homeDirectory),
+            context: goalContext(appState: appState, params: params)
+        )
         guard let goal = goals.first(where: { $0.state == .active }) else {
             throw AppActionError.notFound("active goal")
         }
