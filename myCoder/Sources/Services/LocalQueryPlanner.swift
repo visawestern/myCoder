@@ -216,7 +216,10 @@ enum LocalPlannerPromptBuilder {
 
     static let maxTaskContextCharacters = 6_000
     static let maxGraphContextCharacters = 4_000
-    static let maxSkillCatalogItems = 64
+    /// Cap for how many installed skills the planner prompt lists. Raised
+    /// from 64 to 128 because the user installed the full OpenCode skill set
+    /// (100+); an under-sized cap would hide installed skills from the model.
+    static let maxSkillCatalogItems = 128
 
     static let system = """
     You help a code assistant find context. You never write code.

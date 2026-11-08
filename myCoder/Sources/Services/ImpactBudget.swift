@@ -11,9 +11,11 @@ import Dispatch
 /// continues with the graph it already has rather than waiting forever.
 enum ImpactBudget {
 
-    /// Generous enough for a real graph walk, short enough that a stall cannot
-    /// swallow the turn.
-    static let defaultBudget: TimeInterval = 20
+    /// Five minutes for a real graph walk on a large project. The user
+    /// directive (2026-11-08) raised this from 20 s to 300 s so the impact
+    /// pass can finish on big codebases; the turn still continues (with the
+    /// graph it already has) if a stall outruns even this.
+    static let defaultBudget: TimeInterval = 300
 
     /// Runs `work` and returns its value, or nil when the budget runs out.
     /// A nil result means "no impact evidence this turn", never "no answer".

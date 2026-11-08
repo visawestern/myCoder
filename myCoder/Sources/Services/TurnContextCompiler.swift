@@ -136,7 +136,10 @@ struct CompiledContextPack: Equatable, Sendable {
 /// blocks → budget → pack. Deterministic by construction (no model, no dates).
 enum TurnContextCompiler {
 
-    static let defaultBudgetTokens = 6_000
+    /// File-read budget for one context pack, in tokens. Raised to 128k per
+    /// the user directive (2026-11-08) so a real codebase's relevant files
+    /// fit; 6k dropped most candidates on a project with many hits.
+    static let defaultBudgetTokens = 128_000
     /// How many ranked files may enter the pack before the budget applies.
     static let defaultMaxFiles = 8
     /// Rough but stable: four bytes per token. Only used for budgeting, never
@@ -454,17 +457,16 @@ enum TurnContextCompiler {
     /// (user directive 2026-10-30): later prompts use the studied data AND
     /// the history; project-less chats use the history as their only context.
     static func historySection(_ turns: [ChatHistoryBuilder.Turn],
-                               maxTurns: Int = 12,
+                               maxTurns: Int = 40,
                                maxCharsPerTurn: Int = 800) -> ContextSection {
         let cleaned = turns.filter { $0.role == "user" || $0.role == "assistant" }
         let recent = cleaned.count > maxTurns ? Array(cleaned.suffix(maxTurns)) : cleaned
-        var lines: [String] = []
-        for turn in recent {
-            let label = turn.role == "user" ? "Пользователь" : "Ассистент"
-            let body = String(turn.content.prefix(maxCharsPerTurn))
-            lines.append("[\(label)] \(body)")
-        }
-        return ContextSection(title: "История чата", body: lines.joined(separator: "\n"))
+        // User directive 2026-11-08: history enters the pack as a compact
+        // thesis chain (done / not-done per the chat's version), not as a raw
+        // dump of full messages. Each extracted thesis is short, so we keep
+        // many more turns than the old raw 12.
+        let body = HistoryCompactifier.compact(recent)
+        return ContextSection(title: "История чата", body: body)
     }
 
     /// Context pack built ONLY from the chat history — for chats without a

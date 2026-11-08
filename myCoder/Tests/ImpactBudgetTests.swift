@@ -54,9 +54,8 @@ struct ImpactBudgetTests {
         #expect(elapsed < 3.0, "вызывающий актор был заблокирован: \(elapsed) c")
     }
 
-    @Test("Бюджет по умолчанию — секунды, не минуты")
-    func defaultBudgetIsSeconds() {
-        #expect(ImpactBudget.defaultBudget <= 30)
-        #expect(ImpactBudget.defaultBudget > 0)
+    @Test("Бюджет по умолчанию — пять минут (300 с)")
+    func defaultBudgetIsFiveMinutes() {
+        #expect(ImpactBudget.defaultBudget == 300)
     }
 }

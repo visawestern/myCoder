@@ -100,6 +100,11 @@ enum TurnEvidence {
         let summary: String
     }
 
+    /// Catalog cap. The user installed the full OpenCode skill set (100+),
+    /// so 64 was too small — the planner could not even see all installed
+    /// skills. Bumped to 128.
+    static let maxSkillCatalog = 128
+
     static func skillCatalog(directory: URL) -> [SkillEntry] {
         let entries = (try? FileManager.default.contentsOfDirectory(at: directory,
                        includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
@@ -107,7 +112,7 @@ enum TurnEvidence {
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
                   let text = try? String(contentsOf: url.appendingPathComponent("SKILL.md"), encoding: .utf8) else { return nil }
             return SkillEntry(id: url.lastPathComponent, summary: String(text.prefix(240)))
-        }.prefix(64).map { $0 }
+        }.prefix(maxSkillCatalog).map { $0 }
     }
 
     static func selectedSkills(ids: [String], directory: URL?) -> [ContextSection] {
