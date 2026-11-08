@@ -58,6 +58,18 @@ struct HarnessPromptQualityTests {
         #expect(lower.contains("compile and test each unit"), "проверка должна идти по мере написания модулей")
     }
 
+    @Test func nativeSystemCarriesGitSafetyRule() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("git safety"), "должна быть секция git-безопасности")
+        #expect(lower.contains("committed and pushed"), "должно требоваться «закомичено и запушено»")
+        #expect(lower.contains("branch is clean"), "должна требоваться чистая ветка")
+        #expect(lower.contains("backup"), "должны допускаться бекапы")
+        #expect(lower.contains("non-read-only"), "правило должно касаться не-только-чтение команд")
+    }
+
     // MARK: - Structural summary (Claude Code-style)
 
     @Test func structuralSummaryUsesClaudeCodeSections() {

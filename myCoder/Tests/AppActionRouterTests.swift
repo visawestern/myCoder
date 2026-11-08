@@ -22,6 +22,20 @@ struct AppActionRouterTests {
         #expect(names.count >= 45)
     }
 
+    @Test("Каталог содержит действия ЦЕЛЬ и скриншотов (привязанные к UI)")
+    @MainActor
+    func catalogCoversGoalAndScreenshots() {
+        let names = AppActionRouter.catalog.compactMap { $0["name"] as? String }
+        let required = [
+            "goal.state", "goal.list", "goal.create", "goal.start",
+            "goal.pause", "goal.resume", "goal.delete",
+            "ui.screenshot", "ui.screenshots.list"
+        ]
+        for name in required {
+            #expect(names.contains(name), "missing action \(name)")
+        }
+    }
+
     @Test("Every catalog parameter declares a type and required flag")
     @MainActor
     func catalogParametersAreDocumented() {

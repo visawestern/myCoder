@@ -84,6 +84,24 @@ struct MyCoderApp: App {
                 .keyboardShortcut("z", modifiers: [.command, .option])
                 .disabled(appState.selectedSession == nil)
             }
+            CommandMenu("Скриншоты") {
+                Button("Сохранить скриншот") {
+                    Task { @MainActor in
+                        do {
+                            let info = try ScreenshotsStore.captureAndSave()
+                            MyCoderAPIServer.appendLog("📸 screenshot saved: \(info.path)")
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: info.path)])
+                        } catch {
+                            MyCoderAPIServer.appendLog("📸 screenshot failed: \(error.localizedDescription)")
+                        }
+                    }
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                Divider()
+                Button("Открыть папку скриншотов") {
+                    ScreenshotsStore.reveal()
+                }
+            }
         }
     }
 }

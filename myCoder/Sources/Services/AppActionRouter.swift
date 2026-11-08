@@ -177,7 +177,22 @@ final class AppActionRouter {
             param("path", "string", false, nil),
             param("index", "int", false, nil),
             param("value", "string", true, nil)
-        ])
+        ]),
+
+        action("goal.state", "Return the ЦЕЛЬ goals state (list + active goal)", []),
+        action("goal.list", "List ЦЕЛЬ goals", []),
+        action("goal.create", "Create a ЦЕЛЬ goal", [param("title", "string", true, nil)]),
+        action("goal.start", "Start the active ЦЕЛЬ goal", []),
+        action("goal.pause", "Pause the active ЦЕЛЬ goal", []),
+        action("goal.resume", "Resume a paused ЦЕЛЬ goal", []),
+        action("goal.delete", "Delete a ЦЕЛЬ goal", [param("index", "int", false, "Defaults to the latest")]),
+        action("goal.verify", "Run the devil's-advocate verification on the active goal and report whether its plan is really done", [
+            param("answer", "string", false, "The model's last assistant answer to check")
+        ]),
+        action("ui.screenshot", "Capture an app-window screenshot (same as the Скриншоты menu)", [
+            param("path", "string", false, "Optional explicit destination .png path")
+        ]),
+        action("ui.screenshots.list", "List the saved screenshots", [])
     ]
 
     private static func action(_ name: String, _ description: String, _ params: [[String: Any]]) -> [String: Any] {
@@ -532,9 +547,110 @@ final class AppActionRouter {
         case "ui.setValue":
             return try AppAccessibilityBridge.setValue(params: params)
 
+        case "goal.state":
+            return goalState(appState: appState)
+        case "goal.list":
+            let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+            return ["goals": goals.map(goalRow)]
+        case "goal.create":
+            let title = try requireString("title", params)
+            return try applyGoal(.create(title: title), appState: appState)
+        case "goal.start":
+            return try applyGoal(.start, appState: appState)
+        case "goal.pause":
+            return try applyGoal(.pause, appState: appState)
+        case "goal.resume":
+            return try applyGoal(.resume, appState: appState)
+        case "goal.delete":
+            let index = int(params["index"])
+            return try applyGoal(.delete(index: index), appState: appState)
+        case "goal.verify":
+            let answer = params["answer"] as? String ?? ""
+            return try await verifyGoal(answer: answer, appState: appState)
+
+        case "ui.screenshot":
+            return try screenshot(params: params)
+        case "ui.screenshots.list":
+            return ["screenshots": ScreenshotsStore.list().map(\.dictionary)]
+
         default:
             throw AppActionError.unknownAction(action)
         }
+    }
+
+    // MARK: - ЦЕЛЬ + screenshots helpers
+
+    static var homeDirectory: URL { FileManager.default.homeDirectoryForCurrentUser }
+
+    /// Apply a ЦЕЛЬ goal command through the SAME service the sidebar buttons
+    /// and `/goal` use — the API never bypasses a user-doable path.
+    private func applyGoal(_ command: GoalCommand, appState: AppState) throws -> [String: Any] {
+        let outcome = try GoalService.apply(command, homeDirectory: Self.homeDirectory, language: appState.appLanguage)
+        return ["reply": outcome.reply, "goals": outcome.goals.map(goalRow)]
+    }
+
+    private func goalState(appState: AppState) -> [String: Any] {
+        let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+        let active = goals.first(where: { $0.state == .active })
+        return [
+            "goals": goals.map(goalRow),
+            "activeGoalId": active?.id.uuidString ?? NSNull()
+        ]
+    }
+
+    private func goalRow(_ goal: UserGoal) -> [String: Any] {
+        [
+            "id": goal.id.uuidString,
+            "title": goal.title,
+            "state": goal.state.rawValue,
+            "planCount": goal.plan.count,
+            "doneCount": goal.plan.filter { $0.status == .done }.count,
+            "plan": goal.plan.map { ["title": $0.title, "status": $0.status.rawValue] },
+            "createdAt": goal.createdAt.timeIntervalSince1970,
+            "updatedAt": goal.updatedAt.timeIntervalSince1970
+        ]
+    }
+
+    /// `ui.screenshot`: mirrors the «Скриншоты» menu — the same capture that a
+    /// user can trigger from the interface, never an API-only operation.
+    private func screenshot(params: [String: Any]) throws -> [String: Any] {
+        if let rawPath = params["path"] as? String, !rawPath.isEmpty {
+            guard let shot = AppWindowCapture.capture() else {
+                throw AppActionError.failed("capture failed: no visible window content")
+            }
+            let url = URL(fileURLWithPath: (rawPath as NSString).expandingTildeInPath)
+            try AppWindowCapture.write(shot, to: url)
+            return ["ok": true, "path": url.path, "method": shot.method,
+                    "width": shot.width, "height": shot.height, "windowTitle": shot.windowTitle]
+        }
+        let info = try ScreenshotsStore.captureAndSave()
+        return ["ok": true, "path": info.path, "method": info.method,
+                "width": info.width, "height": info.height, "windowTitle": info.windowTitle]
+    }
+
+    /// `goal.verify`: runs the same devil's-advocate verification the post-turn
+    /// hook uses, on the active goal, and returns the verdict + continuation.
+    private func verifyGoal(answer: String, appState: AppState) async throws -> [String: Any] {
+        let goals = GoalStore.load(homeDirectory: Self.homeDirectory)
+        guard let goal = goals.first(where: { $0.state == .active }) else {
+            throw AppActionError.notFound("active goal")
+        }
+        let service = GoalVerificationService { system, user in
+            try await InternalModelRunner.complete(messages: [
+                DirectChatMessage(role: "system", content: system),
+                DirectChatMessage(role: "user", content: user),
+            ])
+        }
+        let outcome = await service.verify(
+            goal: goal, lastAssistantText: answer, language: appState.appLanguage)
+        return [
+            "goalId": goal.id.uuidString,
+            "title": goal.title,
+            "complete": outcome.verdict.complete,
+            "notDone": outcome.verdict.notDone,
+            "reason": outcome.verdict.reason,
+            "continuation": outcome.continuation ?? NSNull()
+        ]
     }
 
     // MARK: - State snapshots

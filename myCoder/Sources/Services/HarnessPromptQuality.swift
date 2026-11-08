@@ -45,6 +45,12 @@ enum HarnessPromptQuality {
     - Keep every step atomic and each item's status accurate (`todo` | `in_progress` | `done` | `blocked`); update the status the moment work on a step changes.
     - If a step cannot be finished, mark it `blocked` with the concrete reason rather than silently skipping it.
     - Before declaring work complete, re-check the plan: every step must be `done`, and a blocked step must have a stated reason.
+
+    # Git safety (non-read-only commands)
+    - Commands that write, roll back, or change HEAD or history — commit, push (especially `--force`), reset, checkout, rebase, cherry-pick, revert, `clean -f`, `branch -D`, stash-drop, etc. — are destructive and irreversible if the working tree is not safe.
+    - BEFORE running any such command, FIRST verify that all current changes are committed and pushed and the branch is clean (git status shows nothing to commit, and the local branch is in sync with its remote). If that pre-check passes, the command is safe.
+    - If the working tree is NOT clean/committed/pushed, DO NOT run the destructive command. Instead, either (a) commit/push the current changes first, or (b) make a backup of every file or state the command could alter, so that corrupted or lost files never have to be recreated from scratch.
+    - When you cannot verify the branch is clean and no backup exists, stop and ask the user before mutating git state.
     """
 
     // MARK: - Human-like problem solving (least-resistance path + uncertainty)
