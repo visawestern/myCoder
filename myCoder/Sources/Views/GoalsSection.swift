@@ -1,11 +1,19 @@
 import SwiftUI
 import Foundation
 
-/// Right-panel «ЦЕЛЬ» section, redesigned around Google/Material UI
-/// principles: a clear empty state with a call-to-action, an inline creation
-/// path (so goals are creatable from the interface, not only via `/goal`), a
-/// progress bar per goal, color-coded status chips, labelled action buttons,
-/// and a two-step confirmation for the destructive delete.
+/// Right-panel «ЦЕЛЬ» section, redesigned for visual clarity:
+///
+/// - a section header with a target icon, a count badge and an explicit
+///   «add» affordance (the goal is creatable from the interface, not only via
+///   `/goal`);
+/// - one card per goal with a coloured status rail, a readable status chip
+///   (dot + label, never colour alone), a progress bar and an expandable plan;
+/// - a primary action button for the goal's main transition (Старт/Продолжить)
+///   plus a separated, two-step destructive delete;
+/// - a centred empty state with a call to action instead of a dead grey box.
+///
+/// Reads and writes the disk-backed GoalStore (`~/.mycoder/goals.json`), so it
+/// always reflects the same data the `/goal` command and auto-verification use.
 struct GoalsSection: View {
     @EnvironmentObject var appState: AppState
     @State private var goals: [UserGoal] = []
@@ -16,18 +24,8 @@ struct GoalsSection: View {
     private var language: AppLanguage { appState.appLanguage }
     private var home: URL { FileManager.default.homeDirectoryForCurrentUser }
 
-    private var title: String {
-        language == .russian ? "ЦЕЛЬ" : "GOAL"
-    }
-
-    private var emptyMessage: String {
-        language == .russian
-            ? "Здесь появятся ваши цели. Создайте первую — модель разобьёт её на шаги."
-            : "Your goals appear here. Create the first one — the model will split it into steps."
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             header
 
             if isCreating {
@@ -37,18 +35,20 @@ struct GoalsSection: View {
             if goals.isEmpty {
                 emptyState
             } else {
-                ForEach(goals) { goal in
-                    GoalRow(
-                        goal: goal,
-                        expanded: expandedGoalID == goal.id,
-                        language: language,
-                        onToggle: {
-                            withAnimation {
-                                expandedGoalID = expandedGoalID == goal.id ? nil : goal.id
-                            }
-                        },
-                        onAction: { action in apply(action, to: goal) }
-                    )
+                VStack(spacing: 8) {
+                    ForEach(goals) { goal in
+                        GoalRow(
+                            goal: goal,
+                            expanded: expandedGoalID == goal.id,
+                            language: language,
+                            onToggle: {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    expandedGoalID = expandedGoalID == goal.id ? nil : goal.id
+                                }
+                            },
+                            onAction: { action in apply(action, to: goal) }
+                        )
+                    }
                 }
             }
         }
@@ -56,84 +56,85 @@ struct GoalsSection: View {
         .onReceive(NotificationCenter.default.publisher(for: .init("myCoderGoalStoreChanged"))) { _ in
             reload()
         }
+        // The section must not absorb the panel's leftover height: the goal
+        // cards keep their natural size and the panel's Spacer takes the rest.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        HStack {
-            Text(title)
-                .interfaceFont(size: 14, weight: .semibold)
-                .foregroundColor(Color.mimo.textPrimary)
+        HStack(spacing: 8) {
+            Image(systemName: "target")
+                .interfaceFont(size: 13, weight: .semibold)
+                .foregroundColor(Color.mimo.brand)
+            Text(L.t(AppLocalizationKey.locGoalTitle))
+                .interfaceFont(size: 12, weight: .semibold)
+                .foregroundColor(Color.mimo.textSecondary)
+                .textCase(.uppercase)
+            if !goals.isEmpty {
+                Text("\(goals.count)")
+                    .interfaceFont(size: 10, weight: .semibold)
+                    .foregroundColor(Color.mimo.textSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color.mimo.backgroundAlt)
+                    .clipShape(Capsule())
+            }
             Spacer()
-            Button(action: { withAnimation { reload() } }) {
+            Button(action: { withAnimation(.easeOut(duration: 0.15)) { reload() } }) {
                 Image(systemName: "arrow.clockwise")
-                    .interfaceFont(size: 12)
+                    .interfaceFont(size: 11)
                     .foregroundColor(Color.mimo.textMuted)
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help(language == .russian ? "Обновить" : "Refresh")
-            Button(action: { withAnimation { isCreating.toggle() } }) {
+            .help(L.t(AppLocalizationKey.locGoalRefresh))
+            Button(action: { withAnimation(.easeOut(duration: 0.15)) { isCreating.toggle() } }) {
                 Image(systemName: isCreating ? "xmark" : "plus")
-                    .interfaceFont(size: 13, weight: .semibold)
-                    .foregroundColor(Color.mimo.brand)
+                    .interfaceFont(size: 11, weight: .bold)
+                    .foregroundColor(isCreating ? Color.mimo.textSecondary : Color.mimo.surface)
                     .frame(width: 22, height: 22)
-                    .background(Color.mimo.brand.opacity(0.12))
+                    .background(isCreating ? Color.mimo.backgroundAlt : Color.mimo.brand)
                     .clipShape(Circle())
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help(language == .russian ? "Новая цель" : "New goal")
+            .help(L.t(AppLocalizationKey.locGoalNew))
         }
     }
+
+    // MARK: - Creation
 
     private var creationRow: some View {
         HStack(spacing: 6) {
-            TextField(language == .russian ? "Новая цель…" : "New goal…",
-                      text: $newGoalTitle)
+            TextField(L.t(AppLocalizationKey.locGoalNewPlaceholder), text: $newGoalTitle)
                 .textFieldStyle(PlainTextFieldStyle())
                 .interfaceFont(size: 12)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color.mimo.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(Color.mimo.input)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(Color.mimo.border, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 7))
                 .onSubmit(createGoal)
             Button(action: createGoal) {
-                Text(language == .russian ? "Добавить" : "Add")
+                Text(L.t(AppLocalizationKey.locGoalAdd))
                     .interfaceFont(size: 11, weight: .semibold)
                     .foregroundColor(Color.mimo.surface)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.mimo.brand)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(canCreate ? Color.mimo.brand : Color.mimo.textMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
             }
             .buttonStyle(HandCursorButtonStyle())
-            .disabled(newGoalTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(newGoalTitle.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+            .disabled(!canCreate)
         }
     }
 
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "flag")
-                .interfaceFont(size: 18)
-                .foregroundColor(Color.mimo.textMuted)
-            Text(emptyMessage)
-                .interfaceFont(size: 11)
-                .foregroundColor(Color.mimo.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: { withAnimation { isCreating = true } }) {
-                Text(language == .russian ? "Создать цель" : "Create a goal")
-                    .interfaceFont(size: 11, weight: .semibold)
-                    .foregroundColor(Color.mimo.brand)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.mimo.brand.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(HandCursorButtonStyle())
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.mimo.backgroundAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+    private var canCreate: Bool {
+        !newGoalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func createGoal() {
@@ -142,12 +143,47 @@ struct GoalsSection: View {
         let goal = UserGoal(title: trimmed, state: .pending)
         _ = try? GoalStore.upsert(goal, homeDirectory: home)
         newGoalTitle = ""
-        withAnimation {
+        withAnimation(.easeOut(duration: 0.15)) {
             isCreating = false
             expandedGoalID = goal.id
             reload()
         }
     }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "target")
+                .interfaceFont(size: 20, weight: .light)
+                .foregroundColor(Color.mimo.brand)
+                .padding(10)
+                .background(Color.mimo.brand.opacity(0.10))
+                .clipShape(Circle())
+            Text(L.t(AppLocalizationKey.locGoalEmpty))
+                .interfaceFont(size: 11)
+                .foregroundColor(Color.mimo.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: { withAnimation(.easeOut(duration: 0.15)) { isCreating = true } }) {
+                Text(L.t(AppLocalizationKey.locGoalCreate))
+                    .interfaceFont(size: 11, weight: .semibold)
+                    .foregroundColor(Color.mimo.surface)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.mimo.brand)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(HandCursorButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
+        .padding(.horizontal, 12)
+        .background(Color.mimo.backgroundAlt.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Data
 
     private func reload() {
         goals = GoalStore.load(homeDirectory: home)
@@ -164,12 +200,12 @@ struct GoalsSection: View {
         case .delete:
             _ = try? GoalStore.remove(id: goal.id, homeDirectory: home)
         }
-        withAnimation { reload() }
+        withAnimation(.easeOut(duration: 0.15)) { reload() }
     }
 }
 
-/// One goal card: title + status chip, a progress bar, an expandable plan
-/// spoiler, and labelled lifecycle actions with confirmation for delete.
+/// One goal card: status rail, title, status chip, progress, plan spoiler and
+/// the goal's lifecycle actions.
 struct GoalRow: View {
     enum Action {
         case start, pause, resume, delete
@@ -183,143 +219,215 @@ struct GoalRow: View {
 
     @State private var confirmingDelete = false
 
-    private var stateLabel: String {
-        switch goal.state {
-        case .active: return language == .russian ? "выполняется" : "active"
-        case .paused: return language == .russian ? "пауза" : "paused"
-        case .done: return language == .russian ? "готово" : "done"
-        case .error: return language == .russian ? "ошибка" : "error"
-        case .pending: return language == .russian ? "создана" : "pending"
-        }
-    }
-
-    private var stateColor: Color {
-        switch goal.state {
-        case .active: return Color.mimo.brand
-        case .done: return Color.mimo.success
-        case .paused, .error: return Color.mimo.warning
-        case .pending: return Color.mimo.textMuted
-        }
-    }
-
-    private var doneCount: Int {
-        goal.plan.filter { $0.status == .done }.count
-    }
-
-    private var progress: Double {
-        guard !goal.plan.isEmpty else { return 0 }
-        return Double(doneCount) / Double(goal.plan.count)
-    }
+    /// All display rules live in the pure presentation model.
+    private var presentation: GoalPresentation { GoalPresentation(goal: goal) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(goal.title)
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
+        HStack(alignment: .top, spacing: 0) {
+            // Status rail — a non-textual anchor for the goal state.
+            RoundedRectangle(cornerRadius: 2)
+                .fill(stateColor)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 8) {
+                titleBlock
+                if presentation.showsPlanHint {
+                    planHint
+                } else {
+                    progressBlock
+                    planDisclosure
+                }
+                if expanded && presentation.showsPlanDisclosure {
+                    planList
+                }
+                actionBar
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 10)
+            .padding(.vertical, 10)
+        }
+        .background(Color.mimo.input)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.mimo.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Title + status
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(goal.title)
+                .interfaceFont(size: 12.5, weight: .semibold)
+                .foregroundColor(Color.mimo.textPrimary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(stateColor)
+                    .frame(width: 6, height: 6)
                 Text(stateLabel)
                     .interfaceFont(size: 10, weight: .medium)
                     .foregroundColor(stateColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(stateColor.opacity(0.14))
-                    .clipShape(Capsule())
             }
-
-            if !goal.plan.isEmpty {
-                HStack(spacing: 8) {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                    Text("\(doneCount)/\(goal.plan.count)")
-                        .interfaceFont(size: 10, weight: .medium)
-                        .foregroundColor(Color.mimo.textSecondary)
-                }
-                Button(action: onToggle) {
-                    HStack(spacing: 5) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .interfaceFont(size: 10)
-                            .foregroundColor(Color.mimo.textMuted)
-                        Text(language == .russian ? "Шаги" : "Steps")
-                            .interfaceFont(size: 10)
-                            .foregroundColor(Color.mimo.textSecondary)
-                        Spacer()
-                    }
-                }
-                .buttonStyle(HandCursorButtonStyle())
-
-                if expanded {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(goal.plan.enumerated()), id: \.offset) { _, item in
-                            HStack(spacing: 6) {
-                                Image(systemName: statusIcon(for: item.status))
-                                    .interfaceFont(size: 10)
-                                    .foregroundColor(statusColor(for: item.status))
-                                Text(item.title)
-                                    .interfaceFont(size: 11)
-                                    .foregroundColor(Color.mimo.textSecondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                    }
-                    .padding(.leading, 10)
-                }
-            }
-
-            actionBar
         }
-        .padding(10)
-        .background(Color.mimo.backgroundAlt)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    @ViewBuilder
-    private var actionBar: some View {
-        HStack(spacing: 6) {
-            Group {
-                switch goal.state {
-                case .pending:
-                    labelledButton("play.fill", startLabel, .start)
-                case .active:
-                    labelledButton("pause.fill", pauseLabel, .pause)
-                case .paused, .error:
-                    labelledButton("arrow.clockwise", resumeLabel, .resume)
-                case .done:
-                    EmptyView()
+    private var stateLabel: String {
+        L.t(presentation.stateLabel)
+    }
+
+    private var stateColor: Color {
+        switch presentation.stateColor {
+        case .brand: return Color.mimo.brand
+        case .success: return Color.mimo.success
+        case .warning: return Color.mimo.warning
+        case .error: return Color.mimo.error
+        case .muted: return Color.mimo.textMuted
+        }
+    }
+
+    // MARK: - Progress
+
+    private var progressBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.mimo.backgroundAlt)
+                    Capsule()
+                        .fill(stateColor)
+                        .frame(width: max(3, geo.size.width * presentation.progress))
                 }
             }
-            Spacer()
+            .frame(height: 4)
+            HStack(spacing: 4) {
+                Text(L.t(AppLocalizationKey.locGoalStepsDone,
+                         presentation.doneCount,
+                         presentation.totalCount))
+                    .interfaceFont(size: 10, weight: .medium)
+                    .foregroundColor(Color.mimo.textSecondary)
+                if presentation.isComplete {
+                    Image(systemName: "checkmark.seal.fill")
+                        .interfaceFont(size: 10)
+                        .foregroundColor(Color.mimo.success)
+                }
+            }
+        }
+    }
+
+    private var planHint: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "wand.and.stars")
+                .interfaceFont(size: 10)
+                .foregroundColor(Color.mimo.textMuted)
+            Text(L.t(AppLocalizationKey.locGoalPlanHint))
+                .interfaceFont(size: 10)
+                .foregroundColor(Color.mimo.textMuted)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var planDisclosure: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 5) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .interfaceFont(size: 9, weight: .semibold)
+                    .foregroundColor(Color.mimo.textMuted)
+                Text(L.t(AppLocalizationKey.locGoalPlan))
+                    .interfaceFont(size: 10, weight: .medium)
+                    .foregroundColor(Color.mimo.textSecondary)
+                Spacer()
+                Text("\(presentation.totalCount)")
+                    .interfaceFont(size: 9, weight: .medium)
+                    .foregroundColor(Color.mimo.textMuted)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.mimo.backgroundAlt)
+                    .clipShape(Capsule())
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(HandCursorButtonStyle())
+    }
+
+    private var planList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(goal.plan.enumerated()), id: \.offset) { index, item in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: statusIcon(for: item.status))
+                        .interfaceFont(size: 11)
+                        .foregroundColor(statusColor(for: item.status))
+                        .frame(width: 14)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .interfaceFont(size: 11)
+                            .foregroundColor(item.status == .done
+                                             ? Color.mimo.textMuted
+                                             : Color.mimo.textSecondary)
+                            .strikethrough(item.status == .done, color: Color.mimo.textMuted)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let note = item.note, !note.isEmpty {
+                            Text(note)
+                                .interfaceFont(size: 9.5)
+                                .foregroundColor(Color.mimo.textMuted)
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 4)
+                if index < goal.plan.count - 1 {
+                    Rectangle()
+                        .fill(Color.mimo.border)
+                        .frame(height: 1)
+                        .padding(.leading, 22)
+                }
+            }
+        }
+        .padding(.leading, 2)
+    }
+
+    // MARK: - Actions
+
+    private var actionBar: some View {
+        HStack(spacing: 8) {
+            primaryAction
+            Spacer(minLength: 0)
             deleteControl
         }
     }
 
-    private var startLabel: String {
-        language == .russian ? "Старт" : "Start"
-    }
-    private var pauseLabel: String {
-        language == .russian ? "Пауза" : "Pause"
-    }
-    private var resumeLabel: String {
-        language == .russian ? "Продолжить" : "Resume"
-    }
-    private var deleteLabel: String {
-        language == .russian ? "Удалить" : "Delete"
-    }
-    private var confirmDeleteLabel: String {
-        language == .russian ? "Точно?" : "Sure?"
+    @ViewBuilder
+    private var primaryAction: some View {
+        switch presentation.primaryAction {
+        case .start:
+            actionButton(title: L.t(AppLocalizationKey.locGoalStart), system: "play.fill", action: .start, filled: true)
+        case .pause:
+            actionButton(title: L.t(AppLocalizationKey.locGoalPause), system: "pause.fill", action: .pause, filled: false)
+        case .resume:
+            actionButton(title: L.t(AppLocalizationKey.locGoalResume), system: "arrow.clockwise", action: .resume, filled: true)
+        case .none:
+            EmptyView()
+        }
     }
 
-    private func labelledButton(_ system: String, _ label: String, _ action: Action) -> some View {
+    private func actionButton(title: String, system: String, action: Action, filled: Bool) -> some View {
         Button(action: { onAction(action) }) {
             HStack(spacing: 5) {
                 Image(systemName: system)
-                    .interfaceFont(size: 10)
-                Text(label)
-                    .interfaceFont(size: 10, weight: .medium)
+                    .interfaceFont(size: 9.5, weight: .semibold)
+                Text(title)
+                    .interfaceFont(size: 10.5, weight: .semibold)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .foregroundColor(filled ? Color.mimo.surface : Color.mimo.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(filled ? Color.mimo.brand : Color.mimo.backgroundAlt)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(HandCursorButtonStyle())
     }
@@ -327,29 +435,43 @@ struct GoalRow: View {
     @ViewBuilder
     private var deleteControl: some View {
         if confirmingDelete {
-            Button(action: {
-                onAction(.delete)
-                confirmingDelete = false
-            }) {
-                Text(confirmDeleteLabel)
-                    .interfaceFont(size: 10, weight: .semibold)
-                    .foregroundColor(Color.mimo.error)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.mimo.error.opacity(0.12))
+            HStack(spacing: 6) {
+                Text(L.t(AppLocalizationKey.locGoalDeleteQuestion))
+                    .interfaceFont(size: 10, weight: .medium)
+                    .foregroundColor(Color.mimo.textSecondary)
+                Button(action: {
+                    onAction(.delete)
+                    confirmingDelete = false
+                }) {
+                    Text(L.t(AppLocalizationKey.locGoalDelete))
+                        .interfaceFont(size: 10, weight: .semibold)
+                        .foregroundColor(Color.mimo.surface)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.mimo.error)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                Button(action: { confirmingDelete = false }) {
+                    Image(systemName: "xmark")
+                        .interfaceFont(size: 9, weight: .bold)
+                        .foregroundColor(Color.mimo.textMuted)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locGoalCancel))
+            }
+        } else {
+            Button(action: { confirmingDelete = true }) {
+                Image(systemName: "trash")
+                    .interfaceFont(size: 10.5)
+                    .foregroundColor(Color.mimo.textMuted)
+                    .frame(width: 24, height: 22)
+                    .background(Color.mimo.backgroundAlt)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(HandCursorButtonStyle())
-        } else if goal.state != .done {
-            Button(action: { confirmingDelete = true }) {
-                Image(systemName: "trash")
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .help(deleteLabel)
+            .help(L.t(AppLocalizationKey.locGoalDeleteHint))
         }
     }
 
@@ -357,7 +479,7 @@ struct GoalRow: View {
         switch status {
         case .done: return "checkmark.circle.fill"
         case .inProgress: return "circle.circle"
-        case .blocked: return "exclamationmark.circle"
+        case .blocked: return "exclamationmark.triangle.fill"
         case .todo: return "circle"
         }
     }

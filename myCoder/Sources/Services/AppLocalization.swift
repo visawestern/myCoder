@@ -717,6 +717,28 @@ enum AppLocalizationKey: String, CaseIterable {
     case locDisconnected
     case locUndoLastFileChange
     case locGoal
+    case locGoalTitle
+    case locGoalRefresh
+    case locGoalNew
+    case locGoalNewPlaceholder
+    case locGoalAdd
+    case locGoalEmpty
+    case locGoalCreate
+    case locGoalRunning
+    case locGoalPaused
+    case locGoalDone
+    case locGoalError
+    case locGoalCreated
+    case locGoalStepsDone
+    case locGoalPlanHint
+    case locGoalPlan
+    case locGoalStart
+    case locGoalPause
+    case locGoalResume
+    case locGoalDeleteQuestion
+    case locGoalDelete
+    case locGoalCancel
+    case locGoalDeleteHint
     case locTerminal
     case locCopyChat
     case locPickElement
@@ -1672,6 +1694,28 @@ enum AppLocalization {
         "locDisconnected": ["en": "Disconnected", "ru": "Отключено", "es": "Desconectado", "fr": "Déconnecté", "de": "Getrennt", "zh": "已断开", "ja": "切断されました", "ko": "연결 끊김", "pt": "Desligado", "ar": "غير متصل"],
         "locUndoLastFileChange": ["en": "Undo Last File Change", "ru": "Отменить последнее изменение файла", "es": "Deshacer último cambio de archivo", "fr": "Annuler le dernier changement de fichier", "de": "Letzte Dateiänderung rückgängig machen", "zh": "撤销上次文件更改", "ja": "最後のファイル変更を元に戻す", "ko": "마지막 파일 변경 실행 취소", "pt": "Desfazer última alteração de ficheiro", "ar": "التراجع عن آخر تغيير في الملف"],
         "locGoal": ["en": "Project", "ru": "Проект", "es": "Proyecto", "fr": "Projet", "de": "Projekt", "zh": "项目", "ja": "プロジェクト", "ko": "프로젝트", "pt": "Projeto", "ar": "مشروع"],
+        "locGoalTitle": ["en": "Goal", "ru": "Цель", "es": "Objetivo", "fr": "Objectif", "de": "Ziel", "zh": "目标", "ja": "目標", "ko": "목표", "pt": "Objetivo", "ar": "الهدف"],
+        "locGoalRefresh": ["en": "Refresh", "ru": "Обновить", "es": "Actualizar", "fr": "Actualiser", "de": "Aktualisieren", "zh": "刷新", "ja": "更新", "ko": "새로고침", "pt": "Atualizar", "ar": "تحديث"],
+        "locGoalNew": ["en": "New goal", "ru": "Новая цель", "es": "Nuevo objetivo", "fr": "Nouvel objectif", "de": "Neues Ziel", "zh": "新目标", "ja": "新しい目標", "ko": "새 목표", "pt": "Novo objetivo", "ar": "هدف جديد"],
+        "locGoalNewPlaceholder": ["en": "New goal…", "ru": "Новая цель…", "es": "Nuevo objetivo…", "fr": "Nouvel objectif…", "de": "Neues Ziel…", "zh": "新目标…", "ja": "新しい目標…", "ko": "새 목표…", "pt": "Novo objetivo…", "ar": "هدف جديد…"],
+        "locGoalAdd": ["en": "Add", "ru": "Добавить", "es": "Añadir", "fr": "Ajouter", "de": "Hinzufügen", "zh": "添加", "ja": "追加", "ko": "추가", "pt": "Adicionar", "ar": "إضافة"],
+        "locGoalEmpty": ["en": "Your goals appear here. The model splits a goal into atomic steps and keeps them checked.", "ru": "Здесь появятся ваши цели. Модель разобьёт цель на атомарные шаги и будет отмечать их выполнение.", "es": "Tus objetivos aparecerán aquí. El modelo divide un objetivo en pasos atómicos y los marca.", "fr": "Vos objectifs apparaissent ici. Le modèle découpe un objectif en étapes atomiques et les coche.", "de": "Deine Ziele erscheinen hier. Das Modell teilt ein Ziel in atomare Schritte und hakt sie ab.", "zh": "你的目标会显示在这里。模型会把目标拆分为原子步骤并逐项标记。", "ja": "ここに目標が表示されます。モデルが目標を原子的なステップに分解してチェックします。", "ko": "여기에 목표가 표시됩니다. 모델이 목표를 원자적 단계로 나누고 표시합니다.", "pt": "Seus objetivos aparecem aqui. O modelo divide um objetivo em passos atômicos e os marca.", "ar": "تظهر أهدافك هنا. يقسّم النموذج الهدف إلى خطوات ذرية ويعلّمها."],
+        "locGoalCreate": ["en": "Create a goal", "ru": "Создать цель", "es": "Crear un objetivo", "fr": "Créer un objectif", "de": "Ziel erstellen", "zh": "创建目标", "ja": "目標を作成", "ko": "목표 만들기", "pt": "Criar um objetivo", "ar": "إنشاء هدف"],
+        "locGoalRunning": ["en": "Running", "ru": "Выполняется", "es": "En curso", "fr": "En cours", "de": "Läuft", "zh": "进行中", "ja": "実行中", "ko": "진행 중", "pt": "Em execução", "ar": "قيد التنفيذ"],
+        "locGoalPaused": ["en": "Paused", "ru": "Пауза", "es": "En pausa", "fr": "En pause", "de": "Pausiert", "zh": "已暂停", "ja": "一時停止", "ko": "일시 중지", "pt": "Em pausa", "ar": "متوقف مؤقتًا"],
+        "locGoalDone": ["en": "Done", "ru": "Готово", "es": "Hecho", "fr": "Terminé", "de": "Fertig", "zh": "已完成", "ja": "完了", "ko": "완료", "pt": "Concluído", "ar": "مكتمل"],
+        "locGoalError": ["en": "Error", "ru": "Ошибка", "es": "Error", "fr": "Erreur", "de": "Fehler", "zh": "错误", "ja": "エラー", "ko": "오류", "pt": "Erro", "ar": "خطأ"],
+        "locGoalCreated": ["en": "Created", "ru": "Создана", "es": "Creado", "fr": "Créé", "de": "Erstellt", "zh": "已创建", "ja": "作成済み", "ko": "생성됨", "pt": "Criado", "ar": "منشأ"],
+        "locGoalStepsDone": ["en": "%d/%d steps done", "ru": "Выполнено шагов: %d/%d", "es": "%d/%d pasos completados", "fr": "%d/%d étapes terminées", "de": "%d/%d Schritte erledigt", "zh": "已完成 %d/%d 个步骤", "ja": "ステップ %d/%d 完了", "ko": "단계 %d/%d 완료", "pt": "%d/%d passos concluídos", "ar": "اكتملت %d/%d خطوة"],
+        "locGoalPlanHint": ["en": "The plan appears when the goal starts.", "ru": "План появится, когда цель запустят.", "es": "El plan aparece cuando se inicia el objetivo.", "fr": "Le plan apparaît quand l'objectif démarre.", "de": "Der Plan erscheint, wenn das Ziel startet.", "zh": "目标启动后会出现计划。", "ja": "目標を開始すると計画が表示されます。", "ko": "목표를 시작하면 계획이 나타납니다.", "pt": "O plano aparece quando o objetivo é iniciado.", "ar": "تظهر الخطة عند بدء الهدف."],
+        "locGoalPlan": ["en": "Plan", "ru": "План", "es": "Plan", "fr": "Plan", "de": "Plan", "zh": "计划", "ja": "計画", "ko": "계획", "pt": "Plano", "ar": "الخطة"],
+        "locGoalStart": ["en": "Start", "ru": "Старт", "es": "Iniciar", "fr": "Démarrer", "de": "Starten", "zh": "开始", "ja": "開始", "ko": "시작", "pt": "Iniciar", "ar": "ابدأ"],
+        "locGoalPause": ["en": "Pause", "ru": "Пауза", "es": "Pausa", "fr": "Pause", "de": "Pause", "zh": "暂停", "ja": "一時停止", "ko": "일시 중지", "pt": "Pausar", "ar": "إيقاف مؤقت"],
+        "locGoalResume": ["en": "Resume", "ru": "Продолжить", "es": "Reanudar", "fr": "Reprendre", "de": "Fortsetzen", "zh": "继续", "ja": "再開", "ko": "계속", "pt": "Retomar", "ar": "استئناف"],
+        "locGoalDeleteQuestion": ["en": "Delete?", "ru": "Удалить?", "es": "¿Eliminar?", "fr": "Supprimer ?", "de": "Löschen?", "zh": "删除？", "ja": "削除？", "ko": "삭제?", "pt": "Excluir?", "ar": "حذف؟"],
+        "locGoalDelete": ["en": "Delete", "ru": "Удалить", "es": "Eliminar", "fr": "Supprimer", "de": "Löschen", "zh": "删除", "ja": "削除", "ko": "삭제", "pt": "Excluir", "ar": "حذف"],
+        "locGoalCancel": ["en": "Cancel", "ru": "Отмена", "es": "Cancelar", "fr": "Annuler", "de": "Abbrechen", "zh": "取消", "ja": "キャンセル", "ko": "취소", "pt": "Cancelar", "ar": "إلغاء"],
+        "locGoalDeleteHint": ["en": "Delete goal", "ru": "Удалить цель", "es": "Eliminar objetivo", "fr": "Supprimer l'objectif", "de": "Ziel löschen", "zh": "删除目标", "ja": "目標を削除", "ko": "목표 삭제", "pt": "Excluir objetivo", "ar": "حذف الهدف"],
         "locTerminal": ["en": "Terminal", "ru": "Терминал", "es": "Terminal", "fr": "Terminal", "de": "Terminal", "zh": "终端", "ja": "ターミナル", "ko": "터미널", "pt": "Terminal", "ar": "طرفية"],
         "locCopyChat": ["en": "Copy entire chat", "ru": "Копировать весь чат", "es": "Copiar chat completo", "fr": "Copier le chat entier", "de": "Gespräch kopieren", "zh": "复制整个对话", "ja": "チャット全体을 コピー", "ko": "전체 채팅 복사", "pt": "Copiar chat completo", "ar": "نسخ المحادثة بالكامل"],
         "locPickElement": ["en": "Pick an element on the page to use as model selector", "ru": "Выберите элемент на странице для использования как селектор моделей", "es": "Elige un elemento en la página para usar como selector de modelos", "fr": "Choisissez un élément sur la page à utiliser comme sélecteur de modèles", "de": "Element auf der Seite als Modellauswahl auswählen", "zh": "在页面上选择一个元素用作模型选择器", "ja": "ページ上の要素を選択してモデルセレクターとして使用", "ko": "모델 선택기로 사용할 페이지 요소 선택", "pt": "Escolha um elemento na página para usar como seletor de modelos", "ar": "اختر عنصراً في الصفحة لاستخدامه كمحدد للنماذج"],
