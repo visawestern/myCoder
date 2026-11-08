@@ -14,11 +14,20 @@ enum TurnDelivery {
                 isGitRepo: (try? GitRepository.repositoryRoot(for: projectRoot)) != nil)
                 + "\n\n" + ToolInstructionGuide.build()
         default:
+            // Blended: OpenCode-style collaboration core + Claude Code evidence
+            // discipline, on top of the native tool contract.
             base = """
-            You are myCoder's assistant. The runtime provides native tools and their argument schemas.
-            Use the native tool interface; textual tool fences are not executed by this transport.
-            Only claim actions after their tool results. Respect tool permissions and report evidence and remaining gaps.
+            \(HarnessPromptQuality.collaborationCore)
+
+            \(HarnessPromptQuality.humanProblemSolvingGuidance)
+
+            The runtime provides native tools and their argument schemas. Use the
+            native tool interface; textual tool fences are not executed by this transport.
+            Never claim a tool ran or a file changed before you see its result.
+            Only claim actions after their tool results. Respect tool permissions and
+            report evidence and remaining gaps.
             cwd: \(projectRoot)
+
             \(rules)
             """
         }

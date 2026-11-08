@@ -66,13 +66,7 @@ enum SubagentRunner {
             sessionId: child.id
         )
 
-        let systemPrompt = """
-        You are a sub-agent working autonomously on a specific task for a parent agent.
-        Task description: \(description)
-        Work read-only: investigate, analyze and report. You cannot modify files —
-        if changes are needed, describe exactly what the parent should do.
-        Return a complete, self-contained result.
-        """
+        let systemPrompt = HarnessPromptQuality.subagentSystem(description: description)
 
         var conversation: [Message] = [
             Message(role: .system, content: systemPrompt),
