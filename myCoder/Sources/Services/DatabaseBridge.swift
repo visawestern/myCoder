@@ -381,7 +381,10 @@ class DatabaseBridge: ObservableObject {
                 content: message.content,
                 reasoning: message.reasoning.isEmpty ? nil : message.reasoning,
                 usage: message.usage,
-                metadata: Self.encodeSendInfo(message.sendInfo)
+                metadata: MessageMetadataCodec.encode(
+                    sendInfo: message.sendInfo,
+                    contextSummary: message.contextSummary
+                )
             )
             // Persist every part (text, reasoning, tool_call, steps, images).
             // Stale rows are cleared first: a message is re-saved on every
@@ -468,6 +471,7 @@ class DatabaseBridge: ObservableObject {
             let records = try db.getMessagesBySession(sessionId: sessionId, limit: limit, offset: offset)
             return records.map { record in
                 let parts = (try? db.getMessageParts(messageId: record.id)) ?? []
+                let metadata = MessageMetadataCodec.decode(record.metadata)
                 return Message(
                     id: record.id,
                     role: stringToRole(record.role),
@@ -476,7 +480,8 @@ class DatabaseBridge: ObservableObject {
                     parts: parts.map { convertPartRecord($0) },
                     reasoning: record.reasoning ?? "",
                     isFinished: record.isFinished,
-                    sendInfo: Self.decodeSendInfo(record.metadata)
+                    sendInfo: metadata.sendInfo,
+                    contextSummary: metadata.contextSummary
                 )
             }
         } catch {

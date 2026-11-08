@@ -1943,10 +1943,10 @@ struct ChatPanelView: View {
         default:
             modelText = TurnDelivery.withSystem(sysPrompt, modelText: preparation.modelText)
         }
-        let compiledParts = SendContextPreparationLogic.contextParts(preparation)
-        let contextParts: [MessagePartContent] = compiledParts.isEmpty
-            ? [.compiledContext(TurnDelivery.withSystem(sysPrompt, modelText: "## Запрос\n" + text))]
-            : compiledParts
+        // Когда пакета нет, `contextParts` пуст — тогда в `MessageRowView`
+        // срабатывает `contextSummaryButton` с честной причиной, а не
+        // запасной фолбэк-часть (которая навсегда прятала причину).
+        let contextParts = SendContextPreparationLogic.contextParts(preparation)
         // Сообщение уже показано заранее; теперь прикрепляем результат
         // сборки контекста к нему.
         if let appendedUserMessageID {

@@ -56,6 +56,16 @@ struct SendContextWiringTests {
             #expect(source.contains("\"\(key)\""))
         }
     }
+
+    @Test("Без пакета кнопка «Контекст» показывает честную причину, а не фолбэк-часть")
+    func noPackShowsHonestReasonInsteadOfFallback() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        // Части берутся напрямую из реального пакета (пусто, когда пакета нет).
+        #expect(source.contains("let contextParts = SendContextPreparationLogic.contextParts(preparation)"))
+        // Безусловная подстановка .compiledContext при пустом пакете должна
+        // отсутствовать — иначе contextSummaryButton никогда не срабатывает.
+        #expect(!source.contains("[.compiledContext(TurnDelivery.withSystem(sysPrompt"))
+    }
 }
 
 /// The user's design (2026-11-03): the system instruction is built BEFORE the

@@ -96,11 +96,14 @@ struct MessageRow: View {
     @State private var copied = false
     @State private var showRawText = false
     @State private var showCompiledContext = false
-    @State private var compiledContextText = ""
-    /// Причина, по которой пакета нет. Показывается в том же окне, что и сам
-    /// пакет: одно окно на оба случая, иначе SwiftUI берёт первый `.sheet`
-    /// и открывает пустое «Контекст не собран» даже когда пакет есть.
-    @State private var compiledContextFallback = ""
+
+    /// The sheet content is derived from the message itself — the persisted
+    /// `.compiledContext` part and `contextSummary`. Transient `@State` could
+    /// be empty exactly when the sheet is presented (row recreated, session
+    /// reloaded), which is how the user got an empty "Контекст" window.
+    private var contextSheetContent: MessageContextSheetLogic.Content {
+        MessageContextSheetLogic.content(for: message)
+    }
 
     private var displayTexts: [String] {
         let partTexts = message.parts.compactMap { part -> String? in
@@ -238,8 +241,8 @@ struct MessageRow: View {
         .animation(.easeInOut(duration: 0.25), value: isHighlighted)
         .sheet(isPresented: $showCompiledContext) {
             CompiledContextSheet(
-                text: compiledContextText,
-                fallback: compiledContextFallback.isEmpty ? nil : compiledContextFallback
+                text: contextSheetContent.text,
+                fallback: contextSheetContent.fallback
             )
         }
     }
@@ -462,8 +465,6 @@ struct MessageRow: View {
     private func compiledContextButton(_ text: String) -> some View {
         if !text.isEmpty {
             Button {
-                compiledContextText = text
-                compiledContextFallback = ""
                 showCompiledContext = true
             } label: {
                 HStack(spacing: 4) {
@@ -487,8 +488,6 @@ struct MessageRow: View {
     @ViewBuilder
     private func contextSummaryButton(_ summary: String) -> some View {
         Button {
-            compiledContextText = ""
-            compiledContextFallback = summary
             showCompiledContext = true
         } label: {
             HStack(spacing: 4) {
