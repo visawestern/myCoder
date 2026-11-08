@@ -1,45 +1,26 @@
 import SwiftUI
 import Foundation
 
-/// Неоновая пульсирующая подсветка НАДПИСИ (директива 2026-11-09): когда
-/// элемент требует решения пользователя, его текст начинает светиться
-/// неоновым цветом — верхний слой-дубль с размытием и моргающей
-/// интенсивностью. Фон не трогается.
-struct NeonGlowModifier: ViewModifier {
-    let active: Bool
-    @State private var phase = false
+/// Мигающая точка-индикатор «звоночка» (директива 2026-11-09):
+/// перед надписью чата/проекта пульсирует кружок, меняя цвет
+/// с зелёного на красный, пока элемент ждёт решения пользователя.
+struct AttentionBlinkDot: View {
+    @State private var isGreen = true
 
-    func body(content: Content) -> some View {
-        content
-            .foregroundColor(active ? Color.mimo.warning : nil)
-            .overlay {
-                if active {
-                    content
-                        .foregroundColor(Color.mimo.warning)
-                        .blur(radius: phase ? 7 : 2)
-                        .opacity(0.65)
-                        .allowsHitTesting(false)
-                }
-            }
-            .task(id: active) {
-                guard active else {
-                    phase = false
-                    return
-                }
+    var body: some View {
+        Circle()
+            .fill(isGreen ? Color.mimo.success : Color.mimo.error)
+            .frame(width: 8, height: 8)
+            .task {
                 while !Task.isCancelled {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        phase.toggle()
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        isGreen.toggle()
                     }
-                    try? await Task.sleep(for: .milliseconds(600))
+                    try? await Task.sleep(for: .milliseconds(450))
                 }
             }
-    }
-}
-
-extension View {
-    /// Неоновая подсветка текста. `active` — горит ли «звоночек».
-    func neonGlow(active: Bool) -> some View {
-        modifier(NeonGlowModifier(active: active))
+            .help(L.t(AppLocalizationKey.locGoalNoneInChat))
+            .accessibilityLabel("attention")
     }
 }
 

@@ -863,11 +863,13 @@ struct WorkspaceSidebarSection: View {
                     }
                 }) {
                     HStack(spacing: 4) {
+                        if projectNeedsAttentionNow && !isExpanded {
+                            AttentionBlinkDot()
+                        }
                         Text(workspace.name)
                             .interfaceFont(size: 12, weight: .medium)
                             .foregroundColor(Color.mimo.textPrimary)
                             .lineLimit(1)
-                            .neonGlow(active: projectNeedsAttentionNow && !isExpanded)
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .interfaceFont(size: 9)
                             .foregroundColor(Color.mimo.textMuted)
@@ -1069,11 +1071,13 @@ struct ProjectlessChatRow: View {
                     if appState.streamingSessionIDs.contains(node.id) {
                         BackgroundActivityIndicator()
                     }
+                    if needsAttentionNow {
+                        AttentionBlinkDot()
+                    }
                     Text(node.title)
                         .interfaceFont(size: 12, weight: .medium)
                         .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
                         .lineLimit(1)
-                        .neonGlow(active: needsAttentionNow)
                     Spacer(minLength: 4)
                     Text(isSelected ? L.t(AppLocalizationKey.locNow) : timeBadge)
                         .interfaceFont(size: 10)
@@ -1202,12 +1206,14 @@ struct SessionTaskRow: View {
                         if appState.streamingSessionIDs.contains(session.id) {
                             BackgroundActivityIndicator()
                         }
+                        if needsAttentionNow {
+                            AttentionBlinkDot()
+                        }
                         Text(session.title)
                             .interfaceFont(size: 12)
                             .foregroundColor(isSelected ? Color.mimo.textPrimary : Color.mimo.textSecondary)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .neonGlow(active: needsAttentionNow)
 
                         if isSelected {
                             // "now" badge
