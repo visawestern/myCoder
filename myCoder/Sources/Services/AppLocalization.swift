@@ -745,6 +745,10 @@ enum AppLocalizationKey: String, CaseIterable {
     case locGoalFullPrompt
     case locGoalTitlePlaceholder
     case locGoalNoneInChat
+    case locTerminalTitle
+    case locTerminalEmpty
+    case locTerminalOpen
+    case locTerminalCancel
     case locTerminal
     case locCopyChat
     case locPickElement
@@ -1728,6 +1732,10 @@ enum AppLocalization {
         "locGoalFullPrompt": ["en": "Full prompt", "ru": "Полный промпт", "es": "Prompt completo", "fr": "Prompt complet", "de": "Vollständiger Prompt", "zh": "完整提示", "ja": "完全なプロンプト", "ko": "전체 프롬프트", "pt": "Prompt completo", "ar": "المطالبة الكاملة"],
         "locGoalTitlePlaceholder": ["en": "Goal title", "ru": "Название цели", "es": "Título del objetivo", "fr": "Titre de l'objectif", "de": "Zieltitel", "zh": "目标标题", "ja": "目標のタイトル", "ko": "목표 제목", "pt": "Título do objetivo", "ar": "عنوان الهدف"],
         "locGoalNoneInChat": ["en": "No goal for this chat", "ru": "Для этого чата цель не задана", "es": "Este chat no tiene objetivo", "fr": "Aucun objectif pour ce chat", "de": "Kein Ziel für diesen Chat", "zh": "此聊天没有目标", "ja": "このチャットには目標がありません", "ko": "이 채팅에는 목표가 없습니다", "pt": "Este chat não tem objetivo", "ar": "لا يوجد هدف لهذه المحادثة"],
+        "locTerminalTitle": ["en": "Terminal", "ru": "Терминал", "es": "Terminal", "fr": "Terminal", "de": "Terminal", "zh": "终端", "ja": "ターミナル", "ko": "터미널", "pt": "Terminal", "ar": "الطرفية"],
+        "locTerminalEmpty": ["en": "No background commands", "ru": "Фоновых команд нет", "es": "Sin comandos en segundo plano", "fr": "Aucune commande en arrière-plan", "de": "Keine Hintergrundbefehle", "zh": "没有后台命令", "ja": "バックグラウンドコマンドはありません", "ko": "백그라운드 명령이 없습니다", "pt": "Nenhum comando em segundo plano", "ar": "لا توجد أوامر في الخلفية"],
+        "locTerminalOpen": ["en": "Open terminal", "ru": "Открыть терминал", "es": "Abrir terminal", "fr": "Ouvrir le terminal", "de": "Terminal öffnen", "zh": "打开终端", "ja": "ターミナルを開く", "ko": "터미널 열기", "pt": "Abrir terminal", "ar": "فتح الطرفية"],
+        "locTerminalCancel": ["en": "Stop command", "ru": "Остановить", "es": "Detener", "fr": "Arrêter", "de": "Stoppen", "zh": "停止", "ja": "停止", "ko": "중지", "pt": "Parar", "ar": "إيقاف"],
         "locTerminal": ["en": "Terminal", "ru": "Терминал", "es": "Terminal", "fr": "Terminal", "de": "Terminal", "zh": "终端", "ja": "ターミナル", "ko": "터미널", "pt": "Terminal", "ar": "طرفية"],
         "locCopyChat": ["en": "Copy entire chat", "ru": "Копировать весь чат", "es": "Copiar chat completo", "fr": "Copier le chat entier", "de": "Gespräch kopieren", "zh": "复制整个对话", "ja": "チャット全体을 コピー", "ko": "전체 채팅 복사", "pt": "Copiar chat completo", "ar": "نسخ المحادثة بالكامل"],
         "locPickElement": ["en": "Pick an element on the page to use as model selector", "ru": "Выберите элемент на странице для использования как селектор моделей", "es": "Elige un elemento en la página para usar como selector de modelos", "fr": "Choisissez un élément sur la page à utiliser comme sélecteur de modèles", "de": "Element auf der Seite als Modellauswahl auswählen", "zh": "在页面上选择一个元素用作模型选择器", "ja": "ページ上の要素を選択してモデルセレクターとして使用", "ko": "모델 선택기로 사용할 페이지 요소 선택", "pt": "Escolha um elemento na página para usar como seletor de modelos", "ar": "اختر عنصراً في الصفحة لاستخدامه كمحدد للنماذج"],

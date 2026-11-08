@@ -13,6 +13,10 @@ struct RightPanelView: View {
             
             Divider()
             
+            TerminalSection()
+            
+            Divider()
+            
             ProgressSection()
             
             Divider()

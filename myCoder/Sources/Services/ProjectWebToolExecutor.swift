@@ -207,8 +207,13 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             // shell process rooted at the project directory, returning stdout +
             // stderr + exit code. At any lower level the gate above already
             // returned the approval message and nothing executed.
+            //
+            // Фоновый запуск (директива 2026-11-09): команда выполняется
+            // отдельным процессом через BackgroundCommandCenter — она не
+            // прерывается новой отправкой сообщений, видна в правом
+            // сайдбаре, а результат возвращается модели после завершения.
             let cmd = call.arguments["command"] ?? ""
-            return ProjectShellRunner.run(command: cmd, workingDirectory: projectRoot).output
+            return await runCommandInBackground(cmd, workingDirectory: projectRoot)
         // Git operations
         case .gitStatus:
             return ProjectShellRunner.run(command: "git status", workingDirectory: projectRoot).output
@@ -936,6 +941,17 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     /// a real sub-agent chat (child session in the database, listed in the
     /// right panel). nil keeps the legacy browser-session path.
     var subagentLauncher: ((String, String) async -> String)?
+
+    /// Запуск команды через фоновый терминал: процесс самостоятелен, UI и
+    /// отправка новых сообщений не блокируются; тут только ждём итог.
+    private func runCommandInBackground(_ command: String, workingDirectory: String) async -> String {
+        let id = await BackgroundCommandCenter.shared.start(
+            command: command,
+            workingDirectory: workingDirectory
+        )
+        let task = await BackgroundCommandCenter.shared.awaitCompletion(id: id)
+        return BackgroundCommandLogic.renderResult(output: task.output, exitCode: task.exitCode ?? -1)
+    }
 
     private func executeTask(call: WebToolCall) async -> String {
         guard let description = call.arguments["description"],
