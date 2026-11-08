@@ -9,6 +9,13 @@ private let apiLog = OSLog(subsystem: "com.mycoder.app", category: "api")
 final class MyCoderAPIServer {
     static let shared = MyCoderAPIServer()
     static let fixedPort: UInt16 = 8766
+    /// Deadline for `POST /api/context-preview`. The preview runs the real
+    /// pipeline: planner (20 s budget) + impact (20 s budget) + board build on
+    /// a 1000-file project. A 60 s hardcode was smaller than the worst-case
+    /// honest sum and reproduced "preview timed out" on real projects. This
+    /// constant covers the internal budgets with headroom.
+    static let contextPreviewDeadline: TimeInterval =
+        InternalContextPlanner.defaultBudget + ImpactBudget.defaultBudget + 60
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "mycoder.api.server")
     private(set) var port: Int = 0
@@ -269,9 +276,20 @@ final class MyCoderAPIServer {
                 isPlanMode: appState.agentMode == .plan
             )
             payload = await ContextPreviewService.run(request)
+            // Expose the resolved context window for the selected model so a
+            // live curl proves which window myCoder actually applies (e.g.
+            // Mercury = 1M from opencode.json, not the 200k default).
+            // An optional `modelId` in the request body overrides the model
+            // used for this read-only window calculation (for live checks
+            // when the provider list is empty).
+            let windowModel = (object["modelId"] as? String)?.isEmpty == false
+                ? object["modelId"] as! String
+                : appState.effectiveSelectedModel()
+            payload["contextWindow"] = ContextWindowCatalog.limit(for: windowModel)
+            payload["selectedModel"] = windowModel
             semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 60)
+        _ = semaphore.wait(timeout: .now() + Self.contextPreviewDeadline)
         return jsonResponse(payload)
     }
 

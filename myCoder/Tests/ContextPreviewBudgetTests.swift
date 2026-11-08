@@ -28,4 +28,21 @@ struct ContextPreviewBudgetTests {
         #expect(source.contains("ImpactBudget.runSync("))
         #expect(source.contains("ImpactAnalyzer.report("))
     }
+
+    /// The preview handler's own deadline must not be a hardcoded 60 s that
+    /// can be smaller than the sum of the pipeline's honest internal budgets
+    /// (planner 20 s + impact 20 s + board build on a 1000-file project). A
+    /// deadline smaller than the sum reproduces "preview timed out" on real
+    /// projects even though the pipeline itself is bounded and correct.
+    @Test("Дедлайн предпросмотра не меньше суммы внутренних бюджетов")
+    func previewDeadlineCoversInternalBudgets() throws {
+        let source = try RepoRoot.sourceText("myCoder/Sources/Services/MyCoderAPIServer.swift")
+        // The deadline must be a named constant, not an inline literal.
+        #expect(source.contains("contextPreviewDeadline"))
+        #expect(!source.contains("semaphore.wait(timeout: .now() + 60)")
+                || source.contains("semaphore.wait(timeout: .now() + Self.contextPreviewDeadline)"))
+        // The constant must cover planner + impact worst case with headroom.
+        let floor = InternalContextPlanner.defaultBudget + ImpactBudget.defaultBudget
+        #expect(MyCoderAPIServer.contextPreviewDeadline >= floor + 30)
+    }
 }

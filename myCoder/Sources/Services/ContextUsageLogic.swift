@@ -111,9 +111,224 @@ enum ContextWindowCatalog {
     /// Default output limit when nothing is known about the model.
     static let fallbackOutputLimit = 32_000
 
+    /// Per-model context windows imported from the user's `opencode.json`
+    /// (`provider.<id>.models.<model>.limit.context`). Exact id match only, so
+    /// a model not listed keeps the family/default behaviour. Mercury (the
+    /// user's example) is pinned to 1M rather than the 200k fallback.
+    static let opencodeContextWindows: [String: Int] = [
+        "claude-fable-5": 1000000,
+        "claude-fable-5.1": 1000000,
+        "claude-haiku-4.5": 200000,
+        "claude-opus-4.5": 200000,
+        "claude-opus-4.6": 1000000,
+        "claude-opus-4.7": 1000000,
+        "claude-opus-4.8": 1000000,
+        "claude-opus-5": 1000000,
+        "claude-opus-5.5": 1000000,
+        "claude-opus-latest": 1000000,
+        "claude-sonnet-4.5": 200000,
+        "claude-sonnet-4.6": 1000000,
+        "claude-sonnet-5": 1000000,
+        "claude-sonnet-latest": 1000000,
+        "deepseek-v4-flash": 1048576,
+        "deepseek-v4-flash-0731": 1310720,
+        "deepseek-v4-flash-vision-exp": 1048576,
+        "deepseek-v4-pro": 1048576,
+        "deepseek-v4.1-flash": 1048576,
+        "fugu-max": 1000000,
+        "fugu-ultra-v2": 1000000,
+        "gemini-3-pro-image": 131072,
+        "gemini-3.1-flash-image": 131072,
+        "gemini-3.1-flash-lite": 1048576,
+        "gemini-3.1-flash-lite-image": 65536,
+        "gemini-3.5-flash": 1048576,
+        "gemini-3.5-flash-lite": 1048576,
+        "gemini-3.6-flash": 1048576,
+        "gemini-3.7-flash": 1048576,
+        "gemini-3.8-flash": 1048576,
+        "glm-5": 204800,
+        "glm-5-turbo": 202752,
+        "glm-5.1": 204800,
+        "glm-5.2": 1048576,
+        "glm-5.3": 1048576,
+        "glm-5v-turbo": 202752,
+        "gpt-4-turbo": 128000,
+        "gpt-4.1": 1047576,
+        "gpt-4.1-mini": 1047576,
+        "gpt-4.1-nano": 1047576,
+        "gpt-4o": 128000,
+        "gpt-4o-mini": 128000,
+        "gpt-5": 400000,
+        "gpt-5-mini": 400000,
+        "gpt-5-nano": 400000,
+        "gpt-5.1": 400000,
+        "gpt-5.2": 400000,
+        "gpt-5.4": 1050000,
+        "gpt-5.4-mini": 400000,
+        "gpt-5.4-nano": 400000,
+        "gpt-5.5": 1050000,
+        "gpt-5.5-pro": 1050000,
+        "gpt-5.6-luna": 1050000,
+        "gpt-5.6-luna-pro": 1050000,
+        "gpt-5.6-sol": 1050000,
+        "gpt-5.6-terra": 1050000,
+        "gpt-6-astra": 1050000,
+        "gpt-6-luna": 1050000,
+        "gpt-6-sol": 1050000,
+        "gpt-chat-latest": 400000,
+        "grok-4.6": 500000,
+        "grok-4.7": 500000,
+        "hy4-preview": 1048576,
+        "inkling": 1048576,
+        "inkling-small": 1048576,
+        "kimi-k2.5": 262144,
+        "kimi-k2.6": 262144,
+        "kimi-k2.7-code": 262144,
+        "ling-3.0-flash-fin": 262144,
+        "mercury": 1000000,
+        "mercury-2": 1000000,
+        "mercury-3": 1000000,
+        "muse-spark-1.1": 1048576,
+        "muse-spark-1.2": 1048576,
+        "muse-spark-1.2-contributor": 1048576,
+        "muse-spark-1.3": 1048576,
+        "muse-spark-1.3-contributor": 1048576,
+        "nemotron-3-nano-30b-a3b": 262144,
+        "nemotron-3-super-120b-a12b": 1000000,
+        "nemotron-3.5-lightning": 262144,
+        "nova-2-lite-v1": 1000000,
+        "o3": 200000,
+        "o3-mini": 200000,
+        "o4-mini": 200000,
+        "qwen3-omni-30b-a3b-thinking": 65536,
+        "qwen3.5-9b": 262144,
+        "qwen3.6-27b": 262144,
+        "qwen3.7-flash": 1000000,
+        "qwen3.7-max": 1000000,
+        "qwen3.7-plus": 1000000,
+        "qwen3.8-2.4t-a95b": 1048576,
+        "qwen3.8-27b": 1000000,
+        "qwen3.8-max": 1000000,
+        "qwen3.8-max-0902": 1000000,
+        "seed-2-1-turbo": 262144,
+        "seed-2.0-code": 262144,
+        "solar-pro4": 524288,
+        "space-bunny-alpha": 1000000,
+    ]
+
+    /// Per-model output limits imported from the user's `opencode.json`.
+    static let opencodeOutputWindows: [String: Int] = [
+        "claude-fable-5": 128000,
+        "claude-fable-5.1": 128000,
+        "claude-haiku-4.5": 64000,
+        "claude-opus-4.5": 64000,
+        "claude-opus-4.6": 128000,
+        "claude-opus-4.7": 128000,
+        "claude-opus-4.8": 128000,
+        "claude-opus-5": 128000,
+        "claude-opus-5.5": 128000,
+        "claude-opus-latest": 128000,
+        "claude-sonnet-4.5": 64000,
+        "claude-sonnet-4.6": 128000,
+        "claude-sonnet-5": 128000,
+        "claude-sonnet-latest": 128000,
+        "deepseek-v4-flash": 384000,
+        "deepseek-v4-flash-0731": 393216,
+        "deepseek-v4-flash-vision-exp": 1048576,
+        "deepseek-v4-pro": 393216,
+        "deepseek-v4.1-flash": 393216,
+        "fugu-max": 128000,
+        "fugu-ultra-v2": 128000,
+        "gemini-3-pro-image": 32768,
+        "gemini-3.1-flash-image": 32768,
+        "gemini-3.1-flash-lite": 65536,
+        "gemini-3.1-flash-lite-image": 65536,
+        "gemini-3.5-flash": 65536,
+        "gemini-3.5-flash-lite": 65536,
+        "gemini-3.6-flash": 65536,
+        "gemini-3.7-flash": 65536,
+        "gemini-3.8-flash": 65536,
+        "glm-5": 128000,
+        "glm-5-turbo": 131072,
+        "glm-5.1": 128000,
+        "glm-5.2": 131072,
+        "glm-5.3": 131072,
+        "glm-5v-turbo": 131072,
+        "gpt-4-turbo": 4096,
+        "gpt-4.1": 32768,
+        "gpt-4.1-mini": 32768,
+        "gpt-4.1-nano": 32768,
+        "gpt-4o": 16384,
+        "gpt-4o-mini": 16384,
+        "gpt-5": 128000,
+        "gpt-5-mini": 128000,
+        "gpt-5-nano": 128000,
+        "gpt-5.1": 128000,
+        "gpt-5.2": 128000,
+        "gpt-5.4": 128000,
+        "gpt-5.4-mini": 128000,
+        "gpt-5.4-nano": 128000,
+        "gpt-5.5": 128000,
+        "gpt-5.5-pro": 128000,
+        "gpt-5.6-luna": 128000,
+        "gpt-5.6-luna-pro": 128000,
+        "gpt-5.6-sol": 128000,
+        "gpt-5.6-terra": 128000,
+        "gpt-6-astra": 128000,
+        "gpt-6-luna": 128000,
+        "gpt-6-sol": 128000,
+        "gpt-chat-latest": 128000,
+        "grok-4.6": 500000,
+        "grok-4.7": 450000,
+        "hy4-preview": 64000,
+        "inkling": 262144,
+        "inkling-small": 65536,
+        "kimi-k2.5": 262144,
+        "kimi-k2.6": 262144,
+        "kimi-k2.7-code": 262144,
+        "ling-3.0-flash-fin": 235929,
+        "muse-spark-1.1": 16384,
+        "muse-spark-1.2": 16384,
+        "muse-spark-1.2-contributor": 16384,
+        "muse-spark-1.3": 16384,
+        "muse-spark-1.3-contributor": 16384,
+        "nemotron-3-nano-30b-a3b": 262144,
+        "nemotron-3-super-120b-a12b": 16384,
+        "nemotron-3.5-lightning": 131072,
+        "nova-2-lite-v1": 65535,
+        "o3": 100000,
+        "o3-mini": 100000,
+        "o4-mini": 100000,
+        "qwen3-omni-30b-a3b-thinking": 16384,
+        "qwen3.5-9b": 262144,
+        "qwen3.6-27b": 65536,
+        "qwen3.7-flash": 65536,
+        "qwen3.7-max": 131072,
+        "qwen3.7-plus": 131072,
+        "qwen3.8-2.4t-a95b": 262144,
+        "qwen3.8-27b": 131072,
+        "qwen3.8-max": 131072,
+        "qwen3.8-max-0902": 131072,
+        "seed-2-1-turbo": 262144,
+        "seed-2.0-code": 131072,
+        "solar-pro4": 131072,
+        "space-bunny-alpha": 524288,
+    ]
+
     static func limit(for modelID: String, reported: Int? = nil) -> Int {
         if let reported, reported > 0 { return reported }
         let id = modelID.lowercased()
+
+        // Exact id match from the user's opencode.json reference dictionary
+        // (loaded automatically by model name) wins over the static map and
+        // the generic suffix/family rules, but still yields to `reported`.
+        if let window = opencodeWindows[id], let context = window.context {
+            return context
+        }
+
+        // Exact id match from the embedded opencode snapshot (fallback when the
+        // live reference dictionary is unavailable).
+        if let opencodeWindow = opencodeContextWindows[id] { return opencodeWindow }
 
         if let suffix = explicitWindow(in: id) { return suffix }
 
@@ -129,8 +344,31 @@ enum ContextWindowCatalog {
     static func outputLimit(for modelID: String, reported: Int? = nil) -> Int {
         if let reported, reported > 0 { return reported }
         let id = modelID.lowercased()
+        if let window = opencodeWindows[id], let output = window.output {
+            return output
+        }
+        if let opencodeWindow = opencodeOutputWindows[id] { return opencodeWindow }
         if let suffix = explicitOutputWindow(in: id) { return suffix }
         return fallbackOutputLimit
+    }
+
+    // MARK: - OpenCode reference dictionary
+
+    /// Path to the user's `opencode.json` reference dictionary. Tests can point
+    /// this at a fixture; the production default is the standard location.
+    static let defaultOpencodePath = OpenCodeModelWindows.defaultPath
+    static var opencodeReferencePath: String = defaultOpencodePath
+
+    /// Lazily parsed reference dictionary, invalidated when the path changes.
+    private static var cachedOpencodePath: String?
+    private static var cachedOpencodeWindows: [String: ModelWindow]?
+
+    private static var opencodeWindows: [String: ModelWindow] {
+        if cachedOpencodePath != opencodeReferencePath {
+            cachedOpencodePath = opencodeReferencePath
+            cachedOpencodeWindows = OpenCodeModelWindows.load(from: opencodeReferencePath)
+        }
+        return cachedOpencodeWindows ?? [:]
     }
 
     /// Matches suffixes like `:32k`, `-128k`, `_1m`. Must run before family
