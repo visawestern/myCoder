@@ -564,6 +564,9 @@ final class AppActionRouter {
         case "goal.delete":
             let index = int(params["index"])
             return try applyGoal(.delete(index: index), appState: appState)
+        case "goal.edit":
+            let title = try requireString("title", params)
+            return try applyGoal(.edit(title: title), appState: appState)
         case "goal.verify":
             let answer = params["answer"] as? String ?? ""
             return try await verifyGoal(answer: answer, appState: appState)

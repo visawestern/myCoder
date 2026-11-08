@@ -64,4 +64,17 @@ enum GoalStore {
         try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
         return true
     }
+
+    /// Change a goal's title. An empty title or an unknown goal changes
+    /// nothing — the caller gets `false` instead of a silent success.
+    @discardableResult
+    static func updateTitle(id: UUID, title: String, homeDirectory: URL, fileManager: FileManager = .default) throws -> Bool {
+        guard let normalized = GoalEditingLogic.normalizedTitle(title) else { return false }
+        var goals = load(homeDirectory: homeDirectory, fileManager: fileManager)
+        guard let idx = goals.firstIndex(where: { $0.id == id }) else { return false }
+        goals[idx].title = normalized
+        goals[idx].updatedAt = Date()
+        try save(goals, homeDirectory: homeDirectory, fileManager: fileManager)
+        return true
+    }
 }

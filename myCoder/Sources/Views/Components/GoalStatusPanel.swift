@@ -19,6 +19,11 @@ struct GoalStatusPanel: View {
                     if isExpanded {
                         Divider()
                         planList(for: goal)
+                        Divider()
+                        GoalPromptView(text: GoalPromptBuilder.fullPrompt(goal: goal, language: language),
+                                       language: language)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
                     }
                 }
                 .background(Color.mimo.backgroundAlt)
@@ -28,6 +33,10 @@ struct GoalStatusPanel: View {
             }
         }
         .onAppear(perform: reload)
+    }
+
+    private var language: AppLanguage {
+        LocalizationRuntime.currentLanguage
     }
 
     private func reload() {

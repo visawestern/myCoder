@@ -64,6 +64,18 @@ enum GoalService {
             notifyChanged()
             return (GoalStore.load(homeDirectory: homeDirectory), "Цель удалена: \(target.title)")
 
+        case .edit(let title):
+            let goals = GoalStore.load(homeDirectory: homeDirectory)
+            guard let goal = goals.last else {
+                return (goals, "Нет цели для редактирования.")
+            }
+            guard let normalized = GoalEditingLogic.normalizedTitle(title) else {
+                return (goals, "Пустое название цели.")
+            }
+            try GoalStore.updateTitle(id: goal.id, title: normalized, homeDirectory: homeDirectory)
+            notifyChanged()
+            return (GoalStore.load(homeDirectory: homeDirectory), "Цель обновлена: \(normalized)")
+
         case .list:
             let goals = GoalStore.load(homeDirectory: homeDirectory)
             if goals.isEmpty {

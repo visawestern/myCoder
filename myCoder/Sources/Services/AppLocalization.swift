@@ -739,6 +739,11 @@ enum AppLocalizationKey: String, CaseIterable {
     case locGoalDelete
     case locGoalCancel
     case locGoalDeleteHint
+    case locGoalEdit
+    case locGoalEditTitle
+    case locGoalSave
+    case locGoalFullPrompt
+    case locGoalTitlePlaceholder
     case locTerminal
     case locCopyChat
     case locPickElement
@@ -1716,6 +1721,11 @@ enum AppLocalization {
         "locGoalDelete": ["en": "Delete", "ru": "Удалить", "es": "Eliminar", "fr": "Supprimer", "de": "Löschen", "zh": "删除", "ja": "削除", "ko": "삭제", "pt": "Excluir", "ar": "حذف"],
         "locGoalCancel": ["en": "Cancel", "ru": "Отмена", "es": "Cancelar", "fr": "Annuler", "de": "Abbrechen", "zh": "取消", "ja": "キャンセル", "ko": "취소", "pt": "Cancelar", "ar": "إلغاء"],
         "locGoalDeleteHint": ["en": "Delete goal", "ru": "Удалить цель", "es": "Eliminar objetivo", "fr": "Supprimer l'objectif", "de": "Ziel löschen", "zh": "删除目标", "ja": "目標を削除", "ko": "목표 삭제", "pt": "Excluir objetivo", "ar": "حذف الهدف"],
+        "locGoalEdit": ["en": "Edit", "ru": "Изменить", "es": "Editar", "fr": "Modifier", "de": "Bearbeiten", "zh": "编辑", "ja": "編集", "ko": "편집", "pt": "Editar", "ar": "تعديل"],
+        "locGoalEditTitle": ["en": "Edit goal", "ru": "Изменить цель", "es": "Editar objetivo", "fr": "Modifier l'objectif", "de": "Ziel bearbeiten", "zh": "编辑目标", "ja": "目標を編集", "ko": "목표 편집", "pt": "Editar objetivo", "ar": "تعديل الهدف"],
+        "locGoalSave": ["en": "Save", "ru": "Сохранить", "es": "Guardar", "fr": "Enregistrer", "de": "Speichern", "zh": "保存", "ja": "保存", "ko": "저장", "pt": "Guardar", "ar": "حفظ"],
+        "locGoalFullPrompt": ["en": "Full prompt", "ru": "Полный промпт", "es": "Prompt completo", "fr": "Prompt complet", "de": "Vollständiger Prompt", "zh": "完整提示", "ja": "完全なプロンプト", "ko": "전체 프롬프트", "pt": "Prompt completo", "ar": "المطالبة الكاملة"],
+        "locGoalTitlePlaceholder": ["en": "Goal title", "ru": "Название цели", "es": "Título del objetivo", "fr": "Titre de l'objectif", "de": "Zieltitel", "zh": "目标标题", "ja": "目標のタイトル", "ko": "목표 제목", "pt": "Título do objetivo", "ar": "عنوان الهدف"],
         "locTerminal": ["en": "Terminal", "ru": "Терминал", "es": "Terminal", "fr": "Terminal", "de": "Terminal", "zh": "终端", "ja": "ターミナル", "ko": "터미널", "pt": "Terminal", "ar": "طرفية"],
         "locCopyChat": ["en": "Copy entire chat", "ru": "Копировать весь чат", "es": "Copiar chat completo", "fr": "Copier le chat entier", "de": "Gespräch kopieren", "zh": "复制整个对话", "ja": "チャット全体을 コピー", "ko": "전체 채팅 복사", "pt": "Copiar chat completo", "ar": "نسخ المحادثة بالكامل"],
         "locPickElement": ["en": "Pick an element on the page to use as model selector", "ru": "Выберите элемент на странице для использования как селектор моделей", "es": "Elige un elemento en la página para usar como selector de modelos", "fr": "Choisissez un élément sur la page à utiliser comme sélecteur de modèles", "de": "Element auf der Seite als Modellauswahl auswählen", "zh": "在页面上选择一个元素用作模型选择器", "ja": "ページ上の要素を選択してモデルセレクターとして使用", "ko": "모델 선택기로 사용할 페이지 요소 선택", "pt": "Escolha um elemento na página para usar como seletor de modelos", "ar": "اختر عنصراً في الصفحة لاستخدامه كمحدد للنماذج"],

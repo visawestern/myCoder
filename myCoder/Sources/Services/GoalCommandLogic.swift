@@ -13,6 +13,8 @@ enum GoalCommand: Equatable, Sendable {
     case resume
     /// `/goal delete [index]` — delete a goal (defaults to the latest).
     case delete(index: Int?)
+    /// `/goal edit <text>` — change the title of the latest goal.
+    case edit(title: String)
     /// `/goal list` — list goals.
     case list
     /// Not a goal command.
@@ -56,6 +58,11 @@ enum GoalCommandLogic {
                 .trimmingCharacters(in: .whitespaces)
             if title.isEmpty { return .list }
             return .create(title: title)
+        case "edit":
+            let title = words.dropFirst().joined(separator: " ")
+                .trimmingCharacters(in: .whitespaces)
+            if title.isEmpty { return .list }
+            return .edit(title: title)
         default:
             // No subcommand → the whole line is the goal title.
             return .create(title: rest)
