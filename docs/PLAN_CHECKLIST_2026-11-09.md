@@ -87,15 +87,26 @@
   </tool_call>` не обработался. Аудит: все тулы из системного промпта должны
   парситься и исполняться (`WebToolProtocolEmulator.parseToolCalls`, parity-
   тесты `WebToolAllToolsParityTests`).
+  Прогресс (раунд 4): парсинг JSON-внутри-`<tool_call>` подтверждён тестами
+  (`toolCallXmlWrapperWithJsonParses`, `fencedJsonWithMultilineArgsParses`) —
+  восстанавливается через `parseUnfencedJSONToolCalls`; `read_symbol` есть в
+  диспетчере (`ProjectWebToolExecutor.run`, case `.readSymbol`) с поддержкой
+  `path`+`name`; `PlanModeToolPolicy` пропускает read-only тулы. Осталось:
+  живой прогон в приложении, чтобы увидеть фактическую ошибку (вероятно,
+  `CodeIndexService.readSymbol` — индекс/символ), и при необходимости —
+  улучшить сообщение об ошибке.
 - [ ] **U4. Чат прыгает вверх/вниз** при стирании большого текста и замене его
   тулзой; остаётся пустое пространство. При автопрокрутке держать последний
   текст по центру экрана. Зацепки: автопрокрутка (`ChatScrollLogic`).
 - [ ] **U5. Todo-панель не обновляется.** После «план добавлен» (из буфера
   Clipboard_Screenshot.png) справа план не появляется/не обновляется.
   Зацепки: `todos.json` ↔ `PlanTodoBridge` ↔ UI сайдбара.
-- [ ] **U6. Ошибка «invalid JSON — expected a JSON array of todo objects»**
+- [x] **U6. Ошибка «invalid JSON — expected a JSON array of todo objects»**
   должна выводить пример корректного форматирования.
-  Зацепки: `ProjectWebToolExecutor.swift:478`.
+  Сделано (раунд 3, коммит `4f0e9d7`): `todoWrite` возвращает пример
+  `[{"id":"1","content":"…","status":"pending"}]` в обеих ветках ошибки;
+  тесты `todoWriteInvalidJSON`/`todoWriteWrongShapeExample` (TDD: сначала
+  красные, после правки зелёные).
 - [ ] **U7. Пагинатор (≥23 сообщений)** должен центрировать текущее сообщение
   (или хотя бы не прятать его под нижнюю кнопку). Зацепки: пагинатор,
   `ChatPaginationLogic`, `ChatPaginationLogicTests`.

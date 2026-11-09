@@ -79,6 +79,39 @@ struct WebToolAllToolsParityTests {
         #expect(call?.name == "read_symbol")
     }
 
+    @Test("JSON внутри <tool_call> разбирается (live-дефект U3)")
+    func toolCallXmlWrapperWithJsonParses() {
+        let text = """
+        <tool_call>
+        {"name": "read_symbol", "args": {"path": "Sources/A.swift", "name": "parseToolCalls"}}
+        </tool_call>
+        """
+        let calls = WebToolProtocolEmulator.parseToolCalls(from: text)
+        #expect(calls.count == 1, "должен быть ровно один вызов, got: \(calls)")
+        #expect(calls.first?.name == "read_symbol")
+        #expect(calls.first?.arguments["name"] == "parseToolCalls")
+        #expect(calls.first?.arguments["path"] == "Sources/A.swift")
+    }
+
+    @Test("JSON внутри ```tool-блока с многострочными аргументами разбирается")
+    func fencedJsonWithMultilineArgsParses() {
+        let text = """
+        ```tool
+        {
+          "name": "read_symbol",
+          "args": {
+            "path": "myCoder/Sources/Services/WebToolProtocolEmulator.swift",
+            "name": "parseToolCalls"
+          }
+        }
+        ```
+        """
+        let calls = WebToolProtocolEmulator.parseToolCalls(from: text)
+        #expect(calls.count == 1)
+        #expect(calls.first?.name == "read_symbol")
+        #expect(calls.first?.arguments["name"] == "parseToolCalls")
+    }
+
     /// Безопасный детерминированный набор: файловые, читающие и планировочные
     /// тулы исполняются в пустом временном проекте и ни один не отвечает
     /// «unknown tool». Сетевые (web_fetch/browser_fetch), шелл (run_command),
