@@ -1,0 +1,95 @@
+import Foundation
+
+/// Детерминированное планирование отката диалога к целевому запросу.
+/// Чистая функция: не трогает ни файлы, ни хранилища — только решает,
+/// что и до какого момента можно безопасно откатить.
+///
+/// Правила (директива 2026-11-09):
+/// - Откатываем всё, что произошло ПОСЛЕ целевого запроса.
+/// - Файловые изменения откатываются из снапшотов undo-стека.
+/// - Необратимые действия (run_command и т.п.) образуют барьер: если такой
+///   барьер есть, откат становится частичным, видимая часть диалога
+///   урезается до сообщения перед барьером, а причина честно сообщается.
+/// - Если целевой запрос — последний в чате и откат полный, его текст
+///   возвращается в окно ввода промпта, а сам он исчезает из чата.
+enum RollbackPlanLogic {
+
+    static func makePlan(
+        targetMessageID: String,
+        messages: [RollbackMessageRef],
+        undoEntries: [RollbackUndoEntryRef],
+        irreversibleActions: [IrreversibleAgentAction]
+    ) -> RollbackPlan {
+        guard let targetIndex = messages.firstIndex(where: { $0.id == targetMessageID }) else {
+            return RollbackPlan(
+                targetMessageID: targetMessageID,
+                full: false,
+                steps: [],
+                visibilityCutMessageID: nil,
+                stopReason: "Целевой запрос не найден в диалоге.",
+                promptRestore: nil
+            )
+        }
+        let target = messages[targetIndex]
+
+        // 1. Шаги отката файлов: undo-записи после целевого запроса.
+        let steps = undoEntries
+            .filter { $0.createdAt > target.createdAt }
+            .map { entry -> RollbackStep in
+                if entry.canUndo, entry.snapshotID != nil {
+                    return RollbackStep(entryID: entry.id, snapshotID: entry.snapshotID,
+                                        path: entry.path, actionType: entry.actionType,
+                                        status: .done, reason: nil)
+                }
+                let reason = entry.canUndo
+                    ? "Снапшот файла отсутствует — восстановление невозможно."
+                    : "Это изменение уже было откачено ранее."
+                return RollbackStep(entryID: entry.id, snapshotID: entry.snapshotID,
+                                    path: entry.path, actionType: entry.actionType,
+                                    status: .blocked, reason: reason)
+            }
+
+        // 2. Необратимые действия после целевого запроса, по порядку.
+        let actionsAfter = irreversibleActions.filter { action in
+            guard let idx = messages.firstIndex(where: { $0.id == action.messageID }) else {
+                return false
+            }
+            return idx > targetIndex
+        }
+        let orderedActions = actionsAfter.sorted { lhs, rhs in
+            let a = messages.firstIndex(where: { $0.id == lhs.messageID }) ?? Int.max
+            let b = messages.firstIndex(where: { $0.id == rhs.messageID }) ?? Int.max
+            return a < b
+        }
+
+        // 3. Полный откат: барьеров нет.
+        if orderedActions.isEmpty {
+            let isLastRequest = targetIndex == messages.count - 1
+            return RollbackPlan(
+                targetMessageID: targetMessageID,
+                full: true,
+                steps: steps,
+                visibilityCutMessageID: targetMessageID,
+                stopReason: nil,
+                promptRestore: isLastRequest ? target.content : nil
+            )
+        }
+
+        // 4. Частичный откат: граница — сообщение перед самым ранним барьером,
+        //    безопасные undo-шаги всё равно выполняются.
+        let earliest = orderedActions[0]
+        let barrierIndex = messages.firstIndex(where: { $0.id == earliest.messageID }) ?? targetIndex
+        let cutIndex = max(targetIndex, barrierIndex - 1)
+        let reasons = orderedActions
+            .map { "\($0.toolName) (после «\($0.messageID)»)" }
+            .joined(separator: "; ")
+        return RollbackPlan(
+            targetMessageID: targetMessageID,
+            full: false,
+            steps: steps,
+            visibilityCutMessageID: messages[cutIndex].id,
+            stopReason: "Дальше откатить нельзя: необратимые действия — \(reasons).",
+            promptRestore: nil
+        )
+    }
+}

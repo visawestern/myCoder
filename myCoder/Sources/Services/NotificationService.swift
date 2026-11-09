@@ -2,6 +2,8 @@ import Foundation
 
 extension Notification.Name {
     static let apiSendRequested = Notification.Name("apiSendRequested")
+    /// Запрос отката диалога к сообщению: userInfo["messageId"] = id запроса.
+    static let rollbackRequested = Notification.Name("rollbackRequested")
     /// Control of the model-switch compaction from outside the app: the
     /// banner's stop / roll back / compact again must be reachable over HTTP
     /// too (the accessibility tree is not always available).

@@ -265,18 +265,23 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var formattedContent: some View {
-        ForEach(contentSegments) { segment in
-            switch segment {
-            case .part(let part):
-                partView(part)
-            case .reasoning(let blocks):
-                ThinkingSpoilerView(
-                    reasoning: blocks.joined(separator: "\n\n"),
-                    duration: message.reasoningDuration,
-                    isThinking: isThinkingInProgress
-                )
-            case .toolCalls(let calls):
-                if calls.contains(where: isPendingQuestion) {
+        // Системное сообщение с чипом отката рендерится как оранжевый чип,
+        // а не как сырой текст маркера.
+        if message.role == .system, message.content.hasPrefix(RollbackChipCodec.marker) {
+            RollbackChipMessageView(content: message.content)
+        } else {
+            ForEach(contentSegments) { segment in
+                switch segment {
+                case .part(let part):
+                    partView(part)
+                case .reasoning(let blocks):
+                    ThinkingSpoilerView(
+                        reasoning: blocks.joined(separator: "\n\n"),
+                        duration: message.reasoningDuration,
+                        isThinking: isThinkingInProgress
+                    )
+                case .toolCalls(let calls):
+                    if calls.contains(where: isPendingQuestion) {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(calls) { call in
                             toolCallPartView(call)
@@ -293,6 +298,7 @@ struct MessageRow: View {
             case .approval(let approval):
                 approvalCard(approval)
             }
+        }
         }
 
         if let approvalID = message.pendingApprovalID,
