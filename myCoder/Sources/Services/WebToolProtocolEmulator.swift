@@ -979,6 +979,16 @@ enum WebToolProtocolEmulator {
     /// fixing its output. The returned text goes back to the model so it can
     /// re-emit a complete block; nil when every fenced block parsed.
     static func malformedToolBlockFeedback(from responseText: String) -> String? {
+        guard let malformed = malformedToolCall(from: responseText) else { return nil }
+        return """
+        Your previous tool call was NOT executed: \(malformed.problem). Re-emit the COMPLETE tool call block with valid arguments, then stop and wait for its result.
+        """
+    }
+
+    /// Имя инструмента и причина, по которой ```tool блок не стал вызовом.
+    /// Нужно, чтобы даже нераспознанный вызов попал под спойлер с причиной,
+    /// а не исчез из чата молча.
+    static func malformedToolCall(from responseText: String) -> (name: String, problem: String)? {
         let scanner = responseText as NSString
         let pattern = "```tool\\s*\\n(.*?)\\s*```"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
@@ -989,11 +999,38 @@ enum WebToolProtocolEmulator {
             let block = scanner.substring(with: match.range(at: 1))
                 .replacingOccurrences(of: "\u{00A0}", with: " ")
             if parseSingleCall(block) != nil { continue }
-            return """
-            Your previous tool call was NOT executed: \(describeJSONProblem(block)). Re-emit the COMPLETE ```tool block with valid JSON (close every string and brace), then stop and wait for its result.
-            """
+            return (recoveredToolName(from: block) ?? "tool", describeJSONProblem(block))
+        }
+
+        // DSML/Anthropic: блок вызова присутствует, но не закрыт (поток
+        // оборвался) — парсер его не принял, и вызов раньше исчезал молча.
+        // Это тоже «прописанный, но не исполненный» вызов.
+        let normalized = responseText.replacingOccurrences(of: "\u{FF5C}", with: "|")
+        if normalized.contains("DSML| invoke") || normalized.contains("DSML invoke"),
+           DSMLToolCallParser.parseCalls(from: responseText).isEmpty {
+            return (firstAttributeValue("name", in: normalized) ?? "tool",
+                    "incomplete or unclosed DSML invoke block")
+        }
+        if normalized.contains("<function_calls"), !normalized.contains("</function_calls"),
+           ExtraToolCallFormatParsers.parseAll(from: responseText).isEmpty {
+            return ("tool", "unclosed function_calls block")
+        }
+        if normalized.contains("<tool_use"), !normalized.contains("</tool_use"),
+           ExtraToolCallFormatParsers.parseAll(from: responseText).isEmpty {
+            return ("tool", "unclosed tool_use block")
         }
         return nil
+    }
+
+    /// Первое значение атрибута `name="…"` в тексте (для имени инструмента
+    /// из нераспознанного блока).
+    private static func firstAttributeValue(_ attribute: String, in text: String) -> String? {
+        let pattern = "\(NSRegularExpression.escapedPattern(for: attribute))\\s*=\\s*\"([^\"]*)\""
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text,
+                                           range: NSRange(location: 0, length: (text as NSString).length)),
+              match.numberOfRanges >= 2 else { return nil }
+        return (text as NSString).substring(with: match.range(at: 1))
     }
 
     private static func describeJSONProblem(_ block: String) -> String {

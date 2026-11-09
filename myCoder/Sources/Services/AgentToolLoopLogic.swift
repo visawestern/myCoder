@@ -52,6 +52,13 @@ enum AgentToolLoopLogic {
             }
 
             if iteration == maxIterations - 1 {
+                // Модель могла прописать новые вызовы в последнем ответе —
+                // они уже не исполнятся, но обязаны попасть под спойлер с
+                // причиной, а не исчезнуть.
+                let pending = WebToolProtocolEmulator.parseToolCalls(from: text)
+                for call in pending {
+                    await emitToolCall(call, ToolCallSkipReason.iterationLimit(maxIterations).text)
+                }
                 return Result(finalText: text, iterationLimitReached: true)
             }
         }

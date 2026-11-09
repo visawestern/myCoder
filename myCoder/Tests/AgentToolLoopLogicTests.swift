@@ -88,6 +88,27 @@ struct AgentToolLoopLogicTests {
         #expect(result.iterationLimitReached)
     }
 
+    @Test("На лимите итераций прописанные вызовы всё равно дают спойлер с причиной")
+    func limitEmitsUnexecutedCalls() async {
+        var emitted: [(String, String)] = []
+        let result = await AgentToolLoopLogic.run(
+            initialText: "```tool\n{\"name\": \"grep\", \"args\": {\"pattern\": \"x\"}}\n```",
+            maxIterations: 1,
+            execute: { _ in "ok" },
+            emitToolCall: { call, text in emitted.append((call.name, text)) },
+            sendBack: { _ in
+                // Последний ответ модели содержит новый вызов, который уже
+                // не будет исполнен.
+                "```tool\n{\"name\": \"read_file\", \"args\": {\"path\": \"a\"}}\n```"
+            }
+        )
+        #expect(result.iterationLimitReached)
+        #expect(emitted.count == 2)
+        #expect(emitted[0].0 == "grep")
+        #expect(emitted[1].0 == "read_file")
+        #expect(emitted[1].1.contains("iteration limit (1)"))
+    }
+
     @Test("emitToolCall вызывается для каждого вызова с результатом")
     func emitsToolCalls() async {
         let executor = FakeExecutor()

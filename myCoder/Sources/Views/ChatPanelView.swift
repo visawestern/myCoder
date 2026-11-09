@@ -2835,14 +2835,56 @@ struct ChatPanelView: View {
                             iteration: iteration, maxIterations: maxIterations, lastResponse: response
                         ) {
                             if calls.isEmpty, let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
+                                // Битый блок — тоже «прописанный» вызов: он
+                                // обязан попасть под спойлер с причиной, а не
+                                // исчезнуть из чата.
+                                if let malformed = WebToolProtocolEmulator.malformedToolCall(from: response) {
+                                    timelineParts.append(UnexecutedToolCallLogic.part(
+                                        name: malformed.name,
+                                        arguments: [:],
+                                        callID: UUID().uuidString,
+                                        reason: .malformedBlock(malformed.problem)
+                                    ))
+                                    publishToolParts(
+                                        AssistantTurnPartsLogic.directTimelineParts(
+                                            timeline: timelineParts,
+                                            answer: ""
+                                        ),
+                                        assistantID: assistantID
+                                    )
+                                }
                                 conversation.append(DirectChatMessage(role: "assistant", content: response))
                                 conversation.append(DirectChatMessage(role: "user", content: feedback))
                                 continue
                             }
-                        // Финальный текст не должен содержать сырой протокол
-                        // вызова, даже если модель так и не дала ответ.
-                        finalText = ToolProtocolStripping.visibleText(from: response)
-                        break
+                            // Лимит итераций: вызовы прописаны, но уже не
+                            // будут исполнены. Показываем их спойлерами с
+                            // конкретной причиной — как ошибки валидации.
+                            if !calls.isEmpty {
+                                let prose = ToolProtocolStripping.visibleText(from: response)
+                                if !prose.isEmpty {
+                                    timelineParts.append(.text(prose))
+                                }
+                                timelineParts.append(contentsOf: UnexecutedToolCallLogic.parts(
+                                    for: calls,
+                                    reason: .iterationLimit(maxIterations)
+                                ))
+                                publishToolParts(
+                                    AssistantTurnPartsLogic.directTimelineParts(
+                                        timeline: timelineParts,
+                                        answer: ""
+                                    ),
+                                    assistantID: assistantID
+                                )
+                                // Проза уже в таймлайне — не дублируем её
+                                // финальным ответом.
+                                finalText = ""
+                                break
+                            }
+                            // Финальный текст не должен содержать сырой протокол
+                            // вызова, даже если модель так и не дала ответ.
+                            finalText = ToolProtocolStripping.visibleText(from: response)
+                            break
                         }
                         // Fix the model's prose for this iteration BEFORE its
                         // tool calls so no server response is lost: the order is
@@ -2982,6 +3024,37 @@ struct ChatPanelView: View {
                                 settingResult: toolResult,
                                 callID: item.callID
                             )
+                            publishToolParts(
+                                AssistantTurnPartsLogic.directTimelineParts(
+                                    timeline: timelineParts,
+                                    answer: ""
+                                ),
+                                assistantID: assistantID
+                            )
+                        }
+                        // Всё, что осталось без результата (отмена, не
+                        // дождались approve), всё равно должно быть видно
+                        // под спойлером с конкретной причиной.
+                        let unfinishedReason: ToolCallSkipReason =
+                            Task.isCancelled ? .cancelled : .awaitingApproval
+                        var markedUnexecuted = false
+                        for item in prepared {
+                            let handled = timelineParts.contains { part in
+                                if case .toolCall(_, _, let result, let id) = part, id == item.callID {
+                                    return result != nil
+                                }
+                                return false
+                            }
+                            if !handled {
+                                timelineParts = localToolParts(
+                                    timelineParts,
+                                    settingResult: unfinishedReason.text,
+                                    callID: item.callID
+                                )
+                                markedUnexecuted = true
+                            }
+                        }
+                        if markedUnexecuted {
                             publishToolParts(
                                 AssistantTurnPartsLogic.directTimelineParts(
                                     timeline: timelineParts,
