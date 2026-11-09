@@ -65,6 +65,16 @@ struct CodeBlockSpoilerView: View {
         max(1, code.components(separatedBy: "\n").count)
     }
 
+    /// Свой gutter нужен только когда в коде нет встроенных номеров строк
+    /// (`42 | код` от ContextMaterializer). Иначе получался двойной столбец
+    /// номеров (C4, жалоба владельца 2026-11-09).
+    private var showsGutter: Bool {
+        CodeLineNumberingLogic.shouldShowGutter(
+            code: code,
+            showLineNumbers: settings.showLineNumbers
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -130,7 +140,7 @@ struct CodeBlockSpoilerView: View {
 
     @ViewBuilder
     private var codeBody: some View {
-        if settings.showLineNumbers {
+        if showsGutter {
             // Line numbers only line up with logical lines, so a numbered
             // block scrolls horizontally instead of soft-wrapping.
             // The scroll view is pinned to its content height: a chat row can
