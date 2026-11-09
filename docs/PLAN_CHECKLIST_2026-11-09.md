@@ -57,10 +57,12 @@
   Зацепки: событие сборки должно нести `chatId`; `ContextStageLogLogic`.
 - [ ] **C2. Цель (goal) не привязана к чату** в строке состояния и под ней.
   Зацепки: `goals.json`, статус цели в строке состояния.
-- [ ] **C3. Read-only тулы (list_dir и т.п.) не исполняются в plan mode.**
-  `PlanModeToolPolicy` блокирует их; добавить read-only тулы в allow-list.
-  Зацепки: `PlanModeToolPolicy`, тест `PlanModeToolPolicy`, классификация
-  `list_dir`.
+- [x] **C3. Read-only тулы (list_dir и т.п.) не исполняются в plan mode.**
+  Проверено 2026-11-09: `PlanModeToolPolicy.decision` уже возвращает
+  `.execute` для всех read-only тулов (default-ветка: read_file/list_dir/
+  grep/glob/git_*/todo_read/code_search/read_symbol/web_fetch/browser_fetch/
+  skill/task_list), мутации отклоняются. `PlanModeToolPolicyTests`
+  подтверждают. Пункт закрыт; если живой прогон покажет иное — вернуть.
 - [ ] **C4. Двойной набор номера строки** (по скриншоту). Материализатор
   нумерует строки (`N | код`), а вьюер, возможно, добавляет ещё свою нумерацию.
   Нужно: один источник номеров. Зацепки: `ContextMaterializer.renderBody`,
@@ -110,6 +112,10 @@
 - [ ] **U7. Пагинатор (≥23 сообщений)** должен центрировать текущее сообщение
   (или хотя бы не прятать его под нижнюю кнопку). Зацепки: пагинатор,
   `ChatPaginationLogic`, `ChatPaginationLogicTests`.
+  Прогресс: в `UserMessageNavigator` уже есть `scrollTo(id, anchor: .center)`
+  по `onChange(currentMessageID)`/`onAppear`; подозрение — кейс «текущее —
+  последнее сообщение» при 23+ и высоте контейнера 280pt. Нужна живая
+  проверка в приложении, затем тест на логику центрирования.
 
 ---
 
