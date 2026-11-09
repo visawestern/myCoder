@@ -433,6 +433,9 @@ struct ChatPanelView: View {
             guard let messageID = notification.userInfo?["messageId"] as? String else { return }
             retryAssistantMessage(messageID: messageID)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .rollbackRequested)) { notification in
+            handleRollbackRequest(notification)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .stopGeneration)) { _ in
             stopGeneration()
         }
@@ -936,6 +939,68 @@ struct ChatPanelView: View {
         guard let messageID = notification.userInfo?["messageId"] as? String,
               let message = messageStore.messages.first(where: { $0.id == messageID }) else { return }
         loadMessageIntoComposer(message)
+    }
+
+    /// Полноценный откат диалога к запросу пользователя: план → аудитор →
+    /// безопасное исполнение (корзина+снапшоты) → урезание чата → чип.
+    @MainActor
+    private func handleRollbackRequest(_ notification: Notification) {
+        guard let messageID = notification.userInfo?["messageId"] as? String,
+              let sessionID = appState.selectedSession?.id else { return }
+        Task {
+            await performRollback(targetMessageID: messageID, sessionID: sessionID)
+        }
+    }
+
+    @MainActor
+    private func performRollback(targetMessageID: String, sessionID: String) async {
+        let messages = messageStore.messages(in: sessionID)
+        guard !messages.isEmpty else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let projectPath = appState.selectedWorkspace?.path
+
+        let input = RollbackContextBuilder.build(from: messages)
+        let entries = RollbackUndoLoader.load(
+            sessionID: sessionID, projectPath: projectPath, homeDirectory: home)
+
+        let context = RollbackCoordinatorContext(
+            targetMessageID: targetMessageID,
+            messages: input.messages,
+            undoEntries: entries,
+            irreversibleActions: input.irreversibleActions,
+            snapshotRestoring: RollbackSnapshotRestorer(projectPath: projectPath),
+            trashStoring: RollbackTrashStore(homeDirectory: home),
+            undoMarking: RollbackUndoMarker(projectPath: projectPath)
+        )
+
+        let chip = await RollbackCoordinator.run(context: context, auditor: internalAuditor)
+
+        let deps = RollbackChatApplier.Dependencies(
+            messages: messages,
+            sessionID: sessionID,
+            homeDirectory: home,
+            removeMessage: { id in
+                self.messageStore.remove(id: id)
+            },
+            appendMessage: { msg in
+                self.messageStore.append(msg, to: sessionID)
+            },
+            restorePrompt: { text in
+                self.messageText = text
+            }
+        )
+        try? RollbackChatApplier.apply(chip: chip, dependencies: deps)
+    }
+
+    /// Аудитор отката: внутренняя модель (если доступна). При недоступности
+    /// координатор честно переходит на детерминированный план.
+    private var internalAuditor: RollbackCoordinator.Auditor {
+        { system, user in
+            try await InternalModelRunner.complete(messages: [
+                DirectChatMessage(role: "system", content: system),
+                DirectChatMessage(role: "user", content: user),
+            ])
+        }
     }
 
     private func resendMessageFromNotification(_ notification: Notification) {
@@ -3102,14 +3167,71 @@ struct ChatPanelView: View {
                 sseClient.connect(url: url)
             }
             
-            let responseMessages = try await appState.mimoClient.sendMessage(
+            var responseMessages = try await appState.mimoClient.sendMessage(
                 sessionID: sessionID,
                 parts: parts,
                 options: sendOptions,
                 parameters: ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel())
             )
             appState.scheduleGitRefresh(sessionID: sessionID)
-            
+
+            // Локальный агентский цикл для текстовых протоколов вызовов
+            // (DSML / ```tool / Anthropic function_calls и т.п.): если сервер
+            // вернул текст с вызовами без структурированных tool-инвокаций,
+            // выполняем их ПОСЛЕДОВАТЕЛЬНО и отправляем результаты одним
+            // ответом обратно модели.
+            if let firstResponse = SessionSendLogic.assistantResponse(from: responseMessages),
+               !(firstResponse.parts?.contains { part in
+                   if case .toolInvocation = part { return true }
+                   return false
+               } ?? false) {
+                var timelineParts: [MessagePartContent] = []
+                let loopExecutor = ProjectWebToolExecutor.bridged(
+                    projectRoot: appState.toolWorkingDirectory,
+                    accessLevel: appState.accessLevel,
+                    sessionId: sessionID
+                )
+                let loopResult = await AgentToolLoopLogic.run(
+                    initialText: firstResponse.textContent,
+                    execute: { call in
+                        await loopExecutor.execute(call)
+                    },
+                    emitToolCall: { call, result in
+                        let argsText = call.arguments
+                            .map { "\($0.key)=\($0.value)" }
+                            .joined(separator: ", ")
+                        timelineParts.append(.toolCall(
+                            name: call.name, args: argsText,
+                            result: result, callID: nil
+                        ))
+                        await MainActor.run {
+                            self.publishToolParts(
+                                AssistantTurnPartsLogic.directTimelineParts(
+                                    timeline: timelineParts, answer: ""
+                                ),
+                                assistantID: assistantID
+                            )
+                        }
+                    },
+                    sendBack: { block in
+                        let msgs = try await appState.mimoClient.sendMessage(
+                            sessionID: sessionID,
+                            parts: [["type": "text", "text": block]],
+                            options: sendOptions,
+                            parameters: ModelCallParametersStore.parameters(for: appState.effectiveSelectedModel())
+                        )
+                        return SessionSendLogic.assistantResponse(from: msgs)?.textContent ?? ""
+                    }
+                )
+                if loopResult.finalText != firstResponse.textContent || loopResult.iterationLimitReached {
+                    let info = MimoMessageInfo(
+                        id: nil, role: "assistant", agent: nil,
+                        modelID: nil, providerID: nil, variant: nil, model: nil
+                    )
+                    responseMessages = [MimoMessageResponse(info: info, parts: [.text(loopResult.finalText)])]
+                }
+            }
+
             let firstResponse = SessionSendLogic.assistantResponse(from: responseMessages)
             let reasoningText = firstResponse?.parts?.compactMap { part -> String? in
                 if case .reasoning(let value) = part { return value }

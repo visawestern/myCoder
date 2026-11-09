@@ -425,6 +425,18 @@ struct MessageRow: View {
                     }
                 }
             }
+
+            // Откат диалога к этому запросу пользователя: возвращает состояние
+            // чата и файлов к моменту запроса (через RollbackCoordinator).
+            if message.role == .user && !message.isStreaming {
+                MessageActionButton(icon: "arrow.uturn.backward", tooltip: "Откатить к этому запросу") {
+                    NotificationCenter.default.post(
+                        name: .rollbackRequested,
+                        object: nil,
+                        userInfo: ["messageId": message.id]
+                    )
+                }
+            }
         }
         .padding(4)
         .background(Color.mimo.surface)
