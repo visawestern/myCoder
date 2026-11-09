@@ -59,13 +59,29 @@ struct ProjectWebToolTodoTests {
         #expect(!readResult.contains("First"), "should NOT contain the replaced todo")
     }
 
-    @Test("todo_write with invalid JSON returns error")
+    @Test("todo_write with invalid JSON returns error with a formatting example")
     func todoWriteInvalidJSON() async throws {
         let root = try makeRoot()
         let exec = makeExecutor(root: root)
 
         let result = await exec.execute(WebToolCall(name: "todo_write", arguments: ["todos": "not valid json"]))
         #expect(result.contains("error") || result.contains("invalid"), "invalid JSON should error, got: \(result)")
+        // U6: ошибка должна показывать пример корректного форматирования,
+        // чтобы модель могла сразу исправить запрос.
+        #expect(result.contains("пример"), "ошибка должна содержать пример форматирования, got: \(result)")
+        #expect(result.contains("\"id\""), "пример должен показывать поле id, got: \(result)")
+        #expect(result.contains("\"content\""), "пример должен показывать поле content, got: \(result)")
+    }
+
+    @Test("todo_write с валидным JSON неверной формы пишет пример")
+    func todoWriteWrongShapeExample() async throws {
+        let root = try makeRoot()
+        let exec = makeExecutor(root: root)
+
+        let result = await exec.execute(WebToolCall(name: "todo_write",
+                                                    arguments: ["todos": "{\"foo\": \"bar\"}"]))
+        #expect(result.contains("пример"), "ошибка формы JSON должна содержать пример, got: \(result)")
+        #expect(result.contains("\"todos\""), "пример должен упоминать обёртку todos, got: \(result)")
     }
 
     // MARK: - P1: Wrapper format round-trip

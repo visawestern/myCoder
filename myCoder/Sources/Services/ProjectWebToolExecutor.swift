@@ -471,11 +471,21 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         return []
     }
 
+    /// Пример корректного JSON для `todo_write`. Подставляется в сообщения об
+    /// ошибках (U6), чтобы модель могла сразу исправить запрос.
+    /// Вход: нет. Выход: строка-пример без перевода строки. Зависимости: нет.
+    private static let todoWriteExample =
+        "[{\"id\": \"1\", \"content\": \"сделать X\", \"status\": \"pending\"}]"
+
     /// Replace the todo list with the provided JSON array and persist it.
+    /// Вход: `todosJson` — строка JSON (массив или {"todos": [...]}).
+    /// Выход: "ok" или сообщение об ошибке с примером форматирования.
+    /// Зависимости: `todoFileURL`, `JSONSerialization`, `saveTodoItems`.
     private func todoWrite(todosJson: String) -> String {
         guard let data = todosJson.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) else {
-            return "error: invalid JSON — expected a JSON array of todo objects"
+            return "error: invalid JSON — expected a JSON array of todo objects, например:\n"
+                + Self.todoWriteExample
         }
         // Accept both a bare array and {"todos": [...]} wrapper.
         let todos: [[String: Any]]
@@ -485,7 +495,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
                   let array = dict["todos"] as? [[String: Any]] {
             todos = array
         } else {
-            return "error: expected a JSON array or {\"todos\": [...]} object"
+            return "error: expected a JSON array or {\"todos\": [...]} object, например:\n"
+                + Self.todoWriteExample
         }
         // Validate each todo has required fields.
         for item in todos {
