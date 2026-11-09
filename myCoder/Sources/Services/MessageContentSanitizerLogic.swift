@@ -12,9 +12,10 @@ enum MessageContentSanitizerLogic {
         let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
         // Inline <think> blocks belong in the thinking spoiler, not the answer.
         let thinkCleaned = ThinkTagLogic.extract(from: stripped).cleaned
-        return thinkCleaned
-            .replacingOccurrences(of: "\n\n\n", with: "\n\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Сырые блоки вызовов (DSML/Anthropic/```tool) и служебные статусы
+        // не должны попадать в пузырь: вызовы живут в tool-call частях.
+        // Это же чистит уже сохранённые сообщения при отображении.
+        return ToolProtocolStripping.visibleText(from: thinkCleaned)
     }
 
     static func sanitizedTextPart(_ text: String) -> String? {

@@ -31,14 +31,17 @@ enum AgentToolLoopLogic {
                 return Result(finalText: text, iterationLimitReached: false)
             }
 
-            var resultsBlock = ""
+            // Считаем вызовы одного ответа и собираем их результаты в ОДИН
+            // блок: модель получает один ответ со всеми tool_result, а не
+            // отдельный запрос на каждый вызов.
+            var results: [(name: String, result: String)] = []
+            results.reserveCapacity(calls.count)
             for call in calls {
                 let result = await execute(call)
                 await emitToolCall(call, result)
-                resultsBlock += WebToolProtocolEmulator.formatToolResult(
-                    name: call.name, result: result
-                ) + "\n"
+                results.append((name: call.name, result: result))
             }
+            let resultsBlock = WebToolProtocolEmulator.formatToolResults(results)
 
             do {
                 text = try await sendBack(resultsBlock)

@@ -164,6 +164,17 @@ struct Message: Identifiable {
     /// "Контекст" button always opens with this.
     var contextSummary: String?
 
+    /// Сколько вызовов инструментов содержит это сообщение. Нужен, чтобы
+    /// понимать, что один ответ модели запросил несколько вызовов: они
+    /// исполняются последовательно и отправляются назад ОДНИМ блоком
+    /// результатов, а не по одному запросу на вызов.
+    var toolCallCount: Int {
+        parts.reduce(0) { count, part in
+            if case .toolCall = part { return count + 1 }
+            return count
+        }
+    }
+
     /// Elapsed reasoning time. While reasoning is in progress (no end
     /// timestamp yet) this measures from start to now so a live UI can show
     /// a running count; once `reasoningEndedAt` is set the value freezes at

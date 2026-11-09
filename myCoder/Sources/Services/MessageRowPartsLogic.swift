@@ -19,10 +19,11 @@ enum MessageRowPartsLogic {
                 return parts
             }
         }
-        guard !content.isEmpty,
-              MessageContentSanitizerLogic.sanitizedTextPart(content) != nil else {
+        // Важно класть в поток ОЧИЩЕННЫЙ текст: сырой `content` может
+        // содержать блок вызова (DSML/```tool) и статус-строку.
+        guard let text = MessageContentSanitizerLogic.sanitizedTextPart(content) else {
             return parts
         }
-        return parts + [.text(content)]
+        return parts + [.text(text)]
     }
 }

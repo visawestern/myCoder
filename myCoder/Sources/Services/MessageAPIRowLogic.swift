@@ -22,6 +22,12 @@ enum MessageAPIRowLogic {
             "isStreaming": msg.isStreaming
         ]
 
+        // Сколько вызовов было в этом ответе — видно и в API, чтобы можно
+        // было проверить, что несколько вызовов собраны в одно сообщение.
+        if msg.toolCallCount > 0 {
+            row["toolCallCount"] = msg.toolCallCount
+        }
+
         if let summary = msg.contextSummary, !summary.isEmpty {
             row["contextSummary"] = summary
         }

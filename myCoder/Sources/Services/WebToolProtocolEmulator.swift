@@ -1106,6 +1106,13 @@ enum WebToolProtocolEmulator {
         return parseToolCalls(from: responseText).isEmpty
     }
 
+    /// Собрать результаты НЕСКОЛЬКИХ вызовов одного ответа модели в один блок:
+    /// модель получает их одним сообщением, а не отдельным запросом на вызов.
+    static func formatToolResults(_ results: [(name: String, result: String)]) -> String {
+        results.map { formatToolResult(name: $0.name, result: $0.result) }
+            .joined(separator: "\n")
+    }
+
     /// Format a tool result to send back to the web chat as the next message
     /// (plan Блок 2 п.14).
     static func formatToolResult(name: String, result: String) -> String {

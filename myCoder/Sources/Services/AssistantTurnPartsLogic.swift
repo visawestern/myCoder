@@ -63,15 +63,11 @@ enum AssistantTurnPartsLogic {
         // text part (or an interrupted turn is resumed).
         if case .text(let last)? = parts.last, last == answer { return }
         var display = answer
-        // Tool calls are already represented as their own parts (spoilers);
-        // strip the raw ```tool fences so the answer text does not show them a
-        // second time (user directive 2026-10-29).
-        if parts.contains(where: {
-            if case .toolCall = $0 { return true }
-            return false
-        }) {
-            display = WebToolProtocolEmulator.strippingToolFences(from: display)
-        }
+        // Tool calls are already represented as their own parts (spoilers).
+        // Чистим ВСЕ протоколы (```tool, DSML, Anthropic, function_call) и
+        // служебные статусы: иначе сырой блок вызова дублирует спойлер в
+        // тексте ответа (живой дефект 2026-11-09: DSML + «⏳ Running tools...»).
+        display = ToolProtocolStripping.visibleText(from: display)
         guard !display.isEmpty else { return }
         parts.append(.text(display))
     }

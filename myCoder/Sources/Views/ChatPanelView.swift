@@ -2839,14 +2839,18 @@ struct ChatPanelView: View {
                                 conversation.append(DirectChatMessage(role: "user", content: feedback))
                                 continue
                             }
-                            finalText = response
-                            break
+                        // Финальный текст не должен содержать сырой протокол
+                        // вызова, даже если модель так и не дала ответ.
+                        finalText = ToolProtocolStripping.visibleText(from: response)
+                        break
                         }
                         // Fix the model's prose for this iteration BEFORE its
                         // tool calls so no server response is lost: the order is
                         // reasoning → prose → calls → results → next iteration.
-                        let iterationProse = WebToolProtocolEmulator.strippingToolFences(from: response)
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Все протоколы вызовов (DSML/```tool/Anthropic) и
+                        // статус-строки уходят из текста: вызовы уже
+                        // отрисованы отдельными tool-call частями.
+                        let iterationProse = ToolProtocolStripping.visibleText(from: response)
                         if !iterationProse.isEmpty {
                             timelineParts.append(.text(iterationProse))
                         }
@@ -2988,11 +2992,16 @@ struct ChatPanelView: View {
                         }
                         conversation.append(DirectChatMessage(role: "assistant", content: response))
                         conversation.append(DirectChatMessage(role: "user", content: resultsBlock))
-                        finalText = response
+                        // Если цикл закончится на этом шаге (лимит/отмена),
+                        // видимым текстом останется чистая проза, а не сырой
+                        // протокол вызова.
+                        finalText = iterationProse
                         await MainActor.run {
                             let reasoning = DirectChatClient.mergedReasoning(reasoningChunks)
                             self.messageStore.update(id: assistantID) { msg in
-                                msg.content = response + "\n\n⏳ Running tools..."
+                                // Никаких «⏳ Running tools...»: статус не
+                                // должен застревать в сохранённом сообщении.
+                                msg.content = iterationProse
                                 msg.parts = AssistantTurnPartsLogic.directTimelineParts(
                                     timeline: timelineParts,
                                     answer: ""
@@ -3009,7 +3018,7 @@ struct ChatPanelView: View {
                         self.appState.isStreaming = false
                         self.streamingText = ""
                         self.messageStore.update(id: assistantID) { msg in
-                            msg.content = finalText
+                            msg.content = ToolProtocolStripping.visibleText(from: finalText)
                             msg.usage = finalUsage
                             msg.rawResponses = allRawEvents.isEmpty ? nil : allRawEvents
                             msg.parts = AssistantTurnPartsLogic.directTimelineParts(
@@ -3034,6 +3043,9 @@ struct ChatPanelView: View {
                             self.messageStore.update(id: assistantID) { msg in
                                 msg.isFinished = true
                                 msg.isStreaming = false
+                                // Отмена могла оставить в тексте сырой блок
+                                // вызова и статус-строку — чистим.
+                                msg.content = ToolProtocolStripping.visibleText(from: msg.content)
                                 if msg.content.isEmpty {
                                     msg.content = L.t(AppLocalizationKey.locGenerationStopped)
                                 }
