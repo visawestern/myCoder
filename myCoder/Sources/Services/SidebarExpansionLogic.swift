@@ -7,7 +7,13 @@ enum SidebarExpansionLogic {
         isAlreadySelected ? !isExpanded : true
     }
 
-    static func stateAfterSelection(workspaceID: String, selectedID: String?) -> Bool {
-        workspaceID == selectedID
+    /// Переключение на чат в другом проекте раскрывает этот проект, но НЕ
+    /// схлопывает остальные: раскрытие — пользовательское состояние, а не
+    /// «аккордеон с одним открытым». Иначе при каждом переходе между
+    /// проектами предыдущий список чатов исчезал.
+    static func stateAfterSelection(workspaceID: String,
+                                    selectedID: String?,
+                                    isExpanded: Bool) -> Bool {
+        workspaceID == selectedID ? true : isExpanded
     }
 }

@@ -952,7 +952,8 @@ struct WorkspaceSidebarSection: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 isExpanded = SidebarExpansionLogic.stateAfterSelection(
                     workspaceID: workspace.id,
-                    selectedID: newSelectionID
+                    selectedID: newSelectionID,
+                    isExpanded: isExpanded
                 )
             }
         }

@@ -16,9 +16,16 @@ struct SidebarExpansionLogicTests {
         #expect(!SidebarExpansionLogic.nextState(isAlreadySelected: true, isExpanded: true))
     }
 
-    @Test("selection change makes exactly the selected section active")
+    @Test("Выбор проекта раскрывает его, но не схлопывает остальные")
     func selectionChangeState() {
-        #expect(SidebarExpansionLogic.stateAfterSelection(workspaceID: "b", selectedID: "b"))
-        #expect(!SidebarExpansionLogic.stateAfterSelection(workspaceID: "a", selectedID: "b"))
+        // Новый проект раскрывается, даже если был свёрнут.
+        #expect(SidebarExpansionLogic.stateAfterSelection(
+            workspaceID: "b", selectedID: "b", isExpanded: false))
+        // Раскрытый ранее проект остаётся раскрытым.
+        #expect(SidebarExpansionLogic.stateAfterSelection(
+            workspaceID: "a", selectedID: "b", isExpanded: true))
+        // Свёрнутый ранее проект не раскрывается принудительно.
+        #expect(!SidebarExpansionLogic.stateAfterSelection(
+            workspaceID: "a", selectedID: "b", isExpanded: false))
     }
 }
