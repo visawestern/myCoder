@@ -4,27 +4,10 @@ import Foundation
 /// from the compact web preamble so its existing paste budgets stay unchanged.
 enum ToolInstructionGuide {
     static func build() -> String {
-        let protocolGuide = """
-        Tool mini guide:
-        These are emulated tools implemented by the host. Resource availability and permissions are checked at execution time; a listed tool can return an error or request approval.
-        Invoke a tool with a JSON object in a tool fence, then wait for the host's tool_result before deciding the next action:
-        ```tool
-        {"name": "read_file", "args": {"path": "Sources/Store.swift", "offset": "1", "limit": "80"}}
-        ```
-        Never report success before receiving the corresponding tool_result. Read errors, approval requests and truncation notices as execution outcomes; do not invent missing output or retry a mutating call blindly.
-        Schemas below describe parameter names and meanings; angle-bracket values are placeholders. Omit optional parameters rather than sending placeholder text. Paths are relative to the configured working directory unless an absolute path is supplied; host validation still applies.
-        Host permissions: at askBeforeChanges, file writes, checklist mutations, Git mutations and sub-agent requests require approval. Read-only tools and recognized read-only shell commands are allowed by the current gate. Other run_command calls require approval below fullAccess. Permission does not guarantee that a provider, browser session, skill, repository or external service is configured.
-        """
-        let contracts = WebEmulatedTool.allCases.map { tool in
-            "### \(tool.rawValue)\n\(tool.description)\nArguments: \(tool.argumentSchema)\n\(notes(for: tool))"
-        }
-        // The plan/checklist workflow is transport-independent: a web or
-        // OpenAI-compatible model gets the same rules as the native route,
-        // not just the argument schemas of todo_read/task_update.
-        return ([protocolGuide, HarnessPromptQuality.todoWorkflow] + contracts).joined(separator: "\n\n")
+        build(tools: WebEmulatedTool.allCases, agentMode: .build)
     }
 
-    private static func notes(for tool: WebEmulatedTool) -> String {
+    static func notes(for tool: WebEmulatedTool) -> String {
         switch tool {
         case .readFile:
             return "path selects the file; offset is 1-based and limit counts lines. Page long files using successive windows. Image files return an ATTACHED_IMAGE marker instead of text."

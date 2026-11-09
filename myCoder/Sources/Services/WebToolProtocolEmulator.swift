@@ -263,7 +263,13 @@ enum WebToolProtocolEmulator {
         lines.append("Paths outside the project are not yours to judge: emit the tool call with the absolute path and let the host decide. It asks the user for access and then runs the call, or returns a validation error — never refuse a task because a path is outside the working directory.")
         let listedNames2 = Set(listed.map(\.rawValue))
         let inspectors = ["read_file", "list_dir", "grep", "glob"].filter { listedNames2.contains($0) }
-        var policy = "Policy: inspect first (\(inspectors.joined(separator: "/"))); write via write_file/edit_file; run_command only at full access (read-only prints like cat/grep/sed -n/git log run without approval)"
+        var policy = "Policy: inspect first (\(inspectors.joined(separator: "/")))"
+        if listedNames2.contains("write_file") || listedNames2.contains("edit_file") {
+            policy += "; write via write_file/edit_file"
+        }
+        if listedNames2.contains("run_command") {
+            policy += "; run_command only at full access (read-only prints like cat/grep/sed -n/git log run without approval)"
+        }
         if listedNames2.contains("git_status") {
             policy += "; git_* for VCS"
         }

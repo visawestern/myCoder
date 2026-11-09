@@ -36,8 +36,8 @@ enum PlanModePromptBuilder {
         """
     }
 
-    /// Добавляет описание режима: plan/compose получают напоминание,
-    /// build остаётся неизменным.
+    /// Adds the mode contract. Plan/Compose reminders are appended after the
+    /// transport-specific catalog, so the latest read-only rules take priority.
     static func resolve(agentMode: AgentMode, baseSystemPrompt: String) -> String {
         let reminder: String?
         switch agentMode {
