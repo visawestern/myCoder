@@ -945,8 +945,10 @@ struct ChatPanelView: View {
     /// безопасное исполнение (корзина+снапшоты) → урезание чата → чип.
     @MainActor
     private func handleRollbackRequest(_ notification: Notification) {
-        guard let messageID = notification.userInfo?["messageId"] as? String,
-              let sessionID = appState.selectedSession?.id else { return }
+        guard let messageID = notification.userInfo?["messageId"] as? String else { return }
+        let sessionID = (notification.userInfo?["chatId"] as? String)
+            ?? appState.selectedSession?.id
+        guard let sessionID else { return }
         Task {
             await performRollback(targetMessageID: messageID, sessionID: sessionID)
         }
