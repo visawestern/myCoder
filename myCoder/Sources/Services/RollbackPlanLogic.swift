@@ -64,7 +64,13 @@ enum RollbackPlanLogic {
 
         // 3. Полный откат: барьеров нет.
         if orderedActions.isEmpty {
-            let isLastRequest = targetIndex == messages.count - 1
+            // «Последний запрос» — последнее USER-сообщение, а не последняя
+            // строка фида. Ответ модели и системный чип после запроса будут
+            // удалены урезанием диалога, поэтому они не должны мешать вернуть
+            // текст запроса в поле ввода (иначе возврат промпта недостижим
+            // в обычном чате, где на каждый запрос есть ответ).
+            let later = messages.suffix(from: targetIndex + 1)
+            let isLastRequest = target.role == "user" && !later.contains { $0.role == "user" }
             return RollbackPlan(
                 targetMessageID: targetMessageID,
                 full: true,

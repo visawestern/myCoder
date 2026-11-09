@@ -69,6 +69,10 @@ class MessageStore: ObservableObject {
     /// feed); cancelling the previous task avoids piling up work on refreshes.
     private var markdownPrewarmTask: Task<Void, Never>?
 
+    /// Стриминговые обновления пишутся в БД через троттлер, а не на каждый
+    /// чанк (подробности — в `StreamingMessageWriter`). Инъекция нужна тестам.
+    private var streamingWriter: StreamingMessageWriter!
+
     /// Kept in sync with the chat's bottom anchor. While the user reads old
     /// history, pruning is deferred so rows never disappear under the cursor;
     /// the deferred prune runs as soon as the feed is pinned to the bottom again.
@@ -80,9 +84,14 @@ class MessageStore: ObservableObject {
         }
     }
 
-    init(maxVisible: Int = 100, pruneBuffer: Int = 30) {
+    init(maxVisible: Int = 100,
+         pruneBuffer: Int = 30,
+         streamingWriter: StreamingMessageWriter? = nil) {
         self.maxVisible = maxVisible
         self.pruneBuffer = pruneBuffer
+        self.streamingWriter = streamingWriter ?? StreamingMessageWriter { [weak self] message, sessionID in
+            self?.dbBridge.saveMessage(message, sessionId: sessionID)
+        }
     }
 
     // MARK: - Visible feed accessors
@@ -188,7 +197,9 @@ class MessageStore: ObservableObject {
         mutate(&feeds[key]!.messages[index])
         let message = feeds[key]!.messages[index]
         if !key.isEmpty {
-            dbBridge.saveMessage(message, sessionId: key)
+            // Раньше здесь был прямой saveMessage на каждый чанк ответа —
+            // десятки тяжёлых SQLite-транзакций в секунду и дёрганье чата.
+            streamingWriter.note(message, sessionID: key)
         }
         refreshStreamingSessions()
     }
@@ -208,6 +219,8 @@ class MessageStore: ObservableObject {
               let index = feeds[key]?.messages.firstIndex(where: { $0.id == id }) else { return false }
         objectWillChange.send()
         feeds[key]?.messages.remove(at: index)
+        // Не даём отложенной записи воскресить удалённое сообщение.
+        streamingWriter.cancel(id: id)
         if !key.isEmpty {
             dbBridge.deleteMessage(id: id)
         }
@@ -235,6 +248,7 @@ class MessageStore: ObservableObject {
     /// panel itself calls `detach()` when no chat is selected so background
     /// turns keep their feeds.
     func clear() {
+        streamingWriter.flushAll()
         objectWillChange.send()
         feeds.removeAll()
         currentSessionID = nil
@@ -246,6 +260,7 @@ class MessageStore: ObservableObject {
     /// Stop showing a chat without discarding any feed. A turn that is still
     /// streaming into one of those feeds keeps running.
     func detach() {
+        streamingWriter.flushAll()
         currentSessionID = nil
         loadingSessionID = nil
         loadedSessionID = nil
@@ -332,6 +347,9 @@ class MessageStore: ObservableObject {
     /// сообщения, как только сессия перерастает страницу.
     @MainActor
     func loadFromDatabase(sessionId: String, limit: Int? = nil) {
+        // История читается из БД — сначала сбросим отложенные записи, иначе
+        // БД может оказаться старше уже показанного в памяти ответа.
+        streamingWriter.flushAll()
         self.currentSessionID = sessionId
         let loadedMessages = dbBridge.loadMessageTail(sessionId: sessionId, take: limit)
 

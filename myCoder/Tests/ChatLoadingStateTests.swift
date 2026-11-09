@@ -35,8 +35,10 @@ struct ChatLoadingStateTests {
 
     @Test("API state пробрасывает активную загрузку истории")
     func snapshotExposesLoadingFlag() throws {
+        // После разбивки роутера на модули snapshot() живёт в +Snapshots.swift.
         let router = try sourceText("myCoder/Sources/Services/AppActionRouter.swift")
-        #expect(router.contains("\"isLoadingMessages\""))
+        let snapshots = try sourceText("myCoder/Sources/Services/AppActionRouter+Snapshots.swift")
+        #expect(router.contains("\"isLoadingMessages\"") || snapshots.contains("\"isLoadingMessages\""))
         let app = try sourceText("myCoder/Sources/App/MyCoderApp.swift")
         #expect(app.contains("loadingChatSessionID"))
         let panel = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")

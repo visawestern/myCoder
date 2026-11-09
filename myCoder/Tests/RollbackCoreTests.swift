@@ -137,10 +137,51 @@ struct RollbackCoreTests {
 
     @Test("Откат к не-последнему запросу не возвращает промпт")
     func noPromptRestoreForMiddleRequest() {
+        // q2 — не последний ЗАПРОС: после него есть ещё q3.
+        let messages = [message("q1", at: 1), message("a1", at: 2, role: "assistant"),
+                        message("q2", at: 3, content: "сделай X"), message("a2", at: 4, role: "assistant"),
+                        message("q3", at: 5), message("a3", at: 6, role: "assistant")]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q2",
+            messages: messages,
+            undoEntries: [],
+            irreversibleActions: [])
+        #expect(plan.promptRestore == nil)
+    }
+
+    @Test("Последний запрос с ответом модели: промпт всё равно возвращается")
+    func promptRestoreForLastRequestWithAssistantAnswer() {
+        // Ответ ассистента не делает запрос «не последним»: он будет удалён
+        // урезанием диалога, а текст запроса должен вернуться в composer.
         let messages = [message("q1", at: 1), message("a1", at: 2, role: "assistant"),
                         message("q2", at: 3, content: "сделай X"), message("a2", at: 4, role: "assistant")]
         let plan = RollbackPlanLogic.makePlan(
             targetMessageID: "q2",
+            messages: messages,
+            undoEntries: [],
+            irreversibleActions: [])
+        #expect(plan.full)
+        #expect(plan.promptRestore == "сделай X")
+    }
+
+    @Test("Системный чип после запроса не мешает возврату промпта")
+    func promptRestoreIgnoresSystemMessages() {
+        let messages = [message("q1", at: 1), message("a1", at: 2, role: "assistant"),
+                        message("q2", at: 3, content: "сделай X"),
+                        message("chip", at: 4, role: "system")]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q2",
+            messages: messages,
+            undoEntries: [],
+            irreversibleActions: [])
+        #expect(plan.promptRestore == "сделай X")
+    }
+
+    @Test("Откат к сообщению модели не возвращает промпт")
+    func noPromptRestoreForAssistantTarget() {
+        let messages = [message("q1", at: 1), message("a1", at: 2, role: "assistant")]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "a1",
             messages: messages,
             undoEntries: [],
             irreversibleActions: [])

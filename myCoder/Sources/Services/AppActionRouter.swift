@@ -432,11 +432,21 @@ final class AppActionRouter {
     }
 
     /// Чистый разбор параметров `chat.rollback` (покрыт юнит-тестами).
-    static func rollbackRequest(params: [String: Any], defaultChatID: String? = nil) throws -> RollbackRequest {
-        guard let messageID = params["messageId"] as? String, !messageID.isEmpty else {
+    ///
+    /// `nonisolated`: парсер не трогает AppState/UI, поэтому не должен
+    /// наследовать `@MainActor` роутера — иначе его нельзя вызвать из
+    /// синхронного юнит-теста (это ломало сборку тестового таргета).
+    nonisolated static func rollbackRequest(params: [String: Any], defaultChatID: String? = nil) throws -> RollbackRequest {
+        // Пробельный идентификатор — это отсутствующий идентификатор: API
+        // клиенты часто шлют " " вместо пустой строки.
+        let trimmedMessageID = (params["messageId"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedMessageID.isEmpty else {
             throw AppActionError.missingParameter("messageId")
         }
-        let chatID = (params["chatId"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? defaultChatID
-        return RollbackRequest(messageID: messageID, chatID: chatID)
+        let trimmedChatID = (params["chatId"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let chatID = (trimmedChatID?.isEmpty == false ? trimmedChatID : nil) ?? defaultChatID
+        return RollbackRequest(messageID: trimmedMessageID, chatID: chatID)
     }
 }
