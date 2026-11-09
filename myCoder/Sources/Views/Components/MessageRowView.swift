@@ -265,9 +265,14 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var formattedContent: some View {
+        // Вердикт проверки цели — чип со спойлером, а не сырой JSON
+        // (жалоба владельца 2026-11-09).
+        if message.role == .assistant,
+           let verdict = GoalVerdictPresentationLogic.presentation(in: messageText) {
+            GoalVerdictCard(presentation: verdict)
         // Системное сообщение с чипом отката рендерится как оранжевый чип,
         // а не как сырой текст маркера.
-        if message.role == .system, message.content.hasPrefix(RollbackChipCodec.marker) {
+        } else if message.role == .system, message.content.hasPrefix(RollbackChipCodec.marker) {
             RollbackChipMessageView(content: message.content)
         } else {
             ForEach(contentSegments) { segment in

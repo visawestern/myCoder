@@ -177,6 +177,10 @@ enum TurnContextCompiler {
                                                lastModified: entry.lastModified, estimatedBytes: entry.size,
                                                matchedSymbols: entry.symbols.filter { plan.symbols.contains($0.name) }), at: 0)
         }
+        // Один файл — один кандидат. Доска может прийти с повторами путей
+        // (несколько источников), и без этого файл занимал два слота.
+        var seenCandidatePaths = Set<String>()
+        candidates = candidates.filter { seenCandidatePaths.insert($0.path).inserted }
         candidates = Array(candidates.prefix(max(1, maxFiles)))
         // A path the user typed explicitly always comes first.
         let explicit = Set(plan.files)
@@ -231,7 +235,10 @@ enum TurnContextCompiler {
         if let tags = localPlan?.plan?.memoryTags, !tags.isEmpty {
             memoryQuery += " " + tags.joined(separator: " ")
         }
+        // Одинаковые факты памяти не должны повторяться в пакете.
+        var seenMemoryTexts = Set<String>()
         let relevantMemories = ProjectMemoryRanker.rank(memories, query: memoryQuery, limit: 5)
+            .filter { seenMemoryTexts.insert(ContextDeduplication.normalize($0.text)).inserted }
         let memoryIDs = relevantMemories.map(\.id)
         if !relevantMemories.isEmpty {
             let lines = relevantMemories.map { chunk -> String in
@@ -385,6 +392,17 @@ enum TurnContextCompiler {
                 }
             }
         }
+
+        // Финальная дедупликация: одинаковые файлы (кандидат + зависимость),
+        // точные повторы и смысловые дубли из истории/памяти. Бюджет уже
+        // применён, поэтому дедуп только уменьшает пакет.
+        let deduped = ContextDeduplication.deduplicate(sections)
+        sections = deduped.sections
+        dropped.append(contentsOf: deduped.dropped)
+        let keptPaths = Set(sections.compactMap { ContextDeduplication.filePath(in: $0) })
+        var seenIncluded = Set<String>()
+        included = included.filter { keptPaths.contains($0) && seenIncluded.insert($0).inserted }
+        citations = citations.filter { keptPaths.contains($0.path) }
 
         // Never trim the request to fit the evidence budget: losing the user's
         // words is worse than exceeding it. If the request alone is bigger,
