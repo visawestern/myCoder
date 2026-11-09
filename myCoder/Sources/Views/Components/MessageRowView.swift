@@ -120,6 +120,16 @@ struct MessageRow: View {
         displayTexts.joined(separator: "\n\n")
     }
 
+    /// Картинки сообщения для коллажа (C5): `.image`-части или legacy
+    /// вложения. Пустые картинки отбрасываются.
+    ///
+    /// Вход: `message`.
+    /// Выход: массив `ClipboardImage` в порядке частей.
+    /// Зависимости: `MessageDisplayLogic.imagesForDisplay`.
+    private var messageImages: [ClipboardImage] {
+        MessageDisplayLogic.imagesForDisplay(message)
+    }
+
     private var reasoningText: String {
         let base = MessageResponseMergeLogic.reasoningForDisplay(message)
         if !base.isEmpty { return base }
@@ -274,36 +284,12 @@ struct MessageRow: View {
         // а не как сырой текст маркера.
         } else if message.role == .system, message.content.hasPrefix(RollbackChipCodec.marker) {
             RollbackChipMessageView(content: message.content)
-        } else {
+        } else if messageImages.isEmpty {
             ForEach(contentSegments) { segment in
-                switch segment {
-                case .part(let part):
-                    partView(part)
-                case .reasoning(let blocks):
-                    ThinkingSpoilerView(
-                        reasoning: blocks.joined(separator: "\n\n"),
-                        duration: message.reasoningDuration,
-                        isThinking: isThinkingInProgress
-                    )
-                case .toolCalls(let calls):
-                    if calls.contains(where: isPendingQuestion) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(calls) { call in
-                            toolCallPartView(call)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    SplitToolInspectorView(
-                        steps: calls,
-                        messageID: message.id,
-                        isMessageStreaming: message.isStreaming
-                    )
-                }
-            case .approval(let approval):
-                approvalCard(approval)
+                segmentView(segment)
             }
-        }
+        } else {
+            contentWithImages
         }
 
         if let approvalID = message.pendingApprovalID,
@@ -329,20 +315,77 @@ struct MessageRow: View {
             contextSummaryButton(summary)
         }
 
-        let legacyImages = MessageDisplayLogic.attachedImagesForDisplay(message)
-        if !legacyImages.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(legacyImages) { img in
-                        TappableChatImage(image: img, fillThumbnail: true)
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-        }
-
         if let info = message.sendInfo {
             MessageSendInfoFooter(info: info)
+        }
+    }
+
+    /// Контент сообщения вместе с коллажем картинок (C5).
+    ///
+    /// У пользовательского сообщения коллаж стоит СЛЕВА от текста — так
+    /// вложение не отрывается от вопроса. У остальных ролей коллаж идёт под
+    /// контентом. `.image`-части исключены из вертикального потока, иначе они
+    /// дублировались бы под текстом.
+    ///
+    /// Вход: `contentSegments`, `messageImages`, `isTrailing`.
+    /// Выход: HStack/VStack с коллажем и сегментами сообщения.
+    /// Зависимости: `MessageImageCollageView`, `segmentView`.
+    @ViewBuilder
+    private var contentWithImages: some View {
+        let segments = contentSegments
+        if isTrailing {
+            HStack(alignment: .top, spacing: 8) {
+                MessageImageCollageView(images: messageImages)
+                VStack(alignment: .trailing, spacing: 8) {
+                    ForEach(segments) { segment in
+                        segmentView(segment)
+                    }
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(segments) { segment in
+                    segmentView(segment)
+                }
+            }
+            MessageImageCollageView(images: messageImages)
+        }
+    }
+
+    /// Один сегмент содержимого сообщения.
+    ///
+    /// Вход: `segment` — часть текста, reasoning, tool-call или approval.
+    /// Выход: соответствующее представление.
+    /// Зависимости: `partView`, `ThinkingSpoilerView`,
+    /// `SplitToolInspectorView`, `approvalCard`.
+    @ViewBuilder
+    private func segmentView(_ segment: MessageContentSegment) -> some View {
+        switch segment {
+        case .part(let part):
+            partView(part)
+        case .reasoning(let blocks):
+            ThinkingSpoilerView(
+                reasoning: blocks.joined(separator: "\n\n"),
+                duration: message.reasoningDuration,
+                isThinking: isThinkingInProgress
+            )
+        case .toolCalls(let calls):
+            if calls.contains(where: isPendingQuestion) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(calls) { call in
+                        toolCallPartView(call)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                SplitToolInspectorView(
+                    steps: calls,
+                    messageID: message.id,
+                    isMessageStreaming: message.isStreaming
+                )
+            }
+        case .approval(let approval):
+            approvalCard(approval)
         }
     }
 
@@ -563,7 +606,9 @@ struct MessageRow: View {
     private var contentSegments: [MessageContentSegment] {
         MessageContentSegment.build(
             from: MessageRowPartsLogic.displayParts(
-                parts: MessageDisplayLogic.chatDisplayParts(message.parts),
+                parts: MessageDisplayLogic.withoutImageParts(
+                    MessageDisplayLogic.chatDisplayParts(message.parts)
+                ),
                 content: message.content
             ),
             approvals: message.pendingApprovals

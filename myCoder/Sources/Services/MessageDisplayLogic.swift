@@ -254,6 +254,37 @@ enum MessageDisplayLogic {
         return attached
     }
 
+    /// Все картинки, которые должно показать сообщение (C5).
+    ///
+    /// Вход: `message` — сообщение с `.image`-частями или legacy
+    /// `attachedImages`.
+    /// Выход: непустые картинки в порядке частей; если частей нет — legacy
+    /// вложения.
+    /// Зависимости: `MessagePartContent`, `ClipboardImage`.
+    static func imagesForDisplay(_ message: Message) -> [ClipboardImage] {
+        let fromParts: [ClipboardImage] = message.parts.compactMap { part in
+            guard case .image(let base64, let mimeType) = part, !base64.isEmpty else {
+                return nil
+            }
+            return ClipboardImage(base64: base64, mimeType: mimeType)
+        }
+        if !fromParts.isEmpty { return fromParts }
+        return (message.attachedImages ?? []).filter { !$0.base64.isEmpty }
+    }
+
+    /// Части сообщения без картинок — их рисует коллаж, а не вертикальный
+    /// текстовый поток (C5).
+    ///
+    /// Вход: `parts` — части сообщения.
+    /// Выход: тот же порядок без `.image`.
+    /// Зависимости: `MessagePartContent`.
+    static func withoutImageParts(_ parts: [MessagePartContent]) -> [MessagePartContent] {
+        parts.filter { part in
+            if case .image = part { return false }
+            return true
+        }
+    }
+
     static func isEmptyAssistantShell(_ message: Message) -> Bool {
         guard message.role == .assistant else { return false }
         if message.isStreaming { return false }

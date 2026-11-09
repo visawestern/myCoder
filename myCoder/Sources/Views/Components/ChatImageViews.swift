@@ -7,6 +7,9 @@ struct TappableChatImage: View {
     var maxHeight: CGFloat = 200
     var fillThumbnail: Bool = false
     var thumbnailSize: CGFloat = 80
+    /// Точный размер плитки коллажа (C5). Когда задан, картинка заполняет
+    /// его целиком (`scaledToFill` + `clipped`), а не вписывается по максимуму.
+    var fixedSize: CGSize? = nil
 
     @State private var previewImage: ClipboardImage?
 
@@ -21,10 +24,13 @@ struct TappableChatImage: View {
                         .resizable()
                         .scaledToFill()
                         .frame(
-                            width: fillThumbnail ? thumbnailSize : nil,
-                            height: fillThumbnail ? thumbnailSize : nil
+                            width: fixedSize?.width ?? (fillThumbnail ? thumbnailSize : nil),
+                            height: fixedSize?.height ?? (fillThumbnail ? thumbnailSize : nil)
                         )
-                        .frame(maxWidth: fillThumbnail ? thumbnailSize : maxWidth, maxHeight: fillThumbnail ? thumbnailSize : maxHeight)
+                        .frame(
+                            maxWidth: fixedSize?.width ?? (fillThumbnail ? thumbnailSize : maxWidth),
+                            maxHeight: fixedSize?.height ?? (fillThumbnail ? thumbnailSize : maxHeight)
+                        )
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay(
