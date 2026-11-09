@@ -58,6 +58,27 @@ struct HarnessPromptQualityTests {
         #expect(lower.contains("compile and test each unit"), "проверка должна идти по мере написания модулей")
     }
 
+    @Test func nativeSystemTeachesCanonicalTodoWorkflow() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        // Реальные имена инструментов, а не выдуманные todo_add/todo_update.
+        for name in ["todo_read", "todo_write", "task_create", "task_list", "task_update"] {
+            #expect(native.contains(name), "промпт должен называть реальный инструмент \(name)")
+        }
+        #expect(!native.contains("todo_add"))
+        #expect(!native.contains("todo_update"))
+        #expect(!native.contains("todo_list"))
+        // Сам workflow: атомарные шаги, точные статусы, причина блокировки,
+        // проверка плана перед объявлением готовности.
+        let lower = native.lowercased()
+        #expect(lower.contains("atomic"))
+        #expect(lower.contains("in_progress"))
+        #expect(lower.contains("completed"))
+        #expect(lower.contains("blocked"))
+        #expect(lower.contains("before declaring"))
+    }
+
     @Test func nativeSystemCarriesGitSafetyRule() {
         let native = TurnDelivery.systemInstruction(
             route: .mimoServe, userRules: "", projectRoot: "/project",

@@ -18,7 +18,10 @@ enum ToolInstructionGuide {
         let contracts = WebEmulatedTool.allCases.map { tool in
             "### \(tool.rawValue)\n\(tool.description)\nArguments: \(tool.argumentSchema)\n\(notes(for: tool))"
         }
-        return ([protocolGuide] + contracts).joined(separator: "\n\n")
+        // The plan/checklist workflow is transport-independent: a web or
+        // OpenAI-compatible model gets the same rules as the native route,
+        // not just the argument schemas of todo_read/task_update.
+        return ([protocolGuide, HarnessPromptQuality.todoWorkflow] + contracts).joined(separator: "\n\n")
     }
 
     private static func notes(for tool: WebEmulatedTool) -> String {

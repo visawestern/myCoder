@@ -33,7 +33,9 @@ enum GoalRunner {
                 if copy.status == .todo {
                     copy.status = .inProgress
                 }
-            } else if copy.status != .done {
+            } else if copy.status == .todo || copy.status == .inProgress {
+                // Blocked is NOT "done": a model that omits a blocked step
+                // from notDone must not make the step disappear as completed.
                 copy.status = .done
             }
             return copy

@@ -13,6 +13,21 @@ enum HarnessPromptQuality {
 
     // MARK: - OpenCode-style collaboration core
 
+    /// Order of work with the plan/checklist, shared by EVERY transport:
+    /// the native route receives it inside `collaborationCore`, the emulated
+    /// web/OpenAI-compatible route receives it inside `ToolInstructionGuide`.
+    /// The names are the real host tools (`todo_read`, `todo_write`,
+    /// `task_create`, `task_list`, `task_update`) — the earlier core named
+    /// `todo_add`/`todo_update`/`todo_list`, which do not exist.
+    static let todoWorkflow = """
+    # Plan/todo tools (goals)
+    - When a goal is set, FIRST break it into concrete, atomic plan steps and record them with the todo tools. Canonical names: `todo_read` / `todo_write` for the whole checklist, or `task_create` / `task_list` / `task_update` for one item at a time.
+    - Keep every step atomic and its status exact: pending | in_progress | completed. For a goal plan also use blocked when a step cannot be finished.
+    - Update the status the moment work on a step changes; do not batch status updates at the end.
+    - If a step cannot be finished, keep it open and state the concrete reason — never silently skip or delete it.
+    - Before declaring the goal complete, call `todo_read` (or `task_list`) and confirm every step is completed; report any remaining step explicitly.
+    """
+
     /// The collaboration/communication/codebase core, modeled on OpenCode's
     /// real system prompt. This is what a native runtime should carry so the
     /// agent is predictable about rendering, parallelism, file references, and
@@ -40,11 +55,7 @@ enum HarnessPromptQuality {
     - When a bug appears, isolate it to the smallest module, fix it at that level, and run that module's tests before moving on. Do not debug inside a finished program when a unit test can pinpoint the fault.
     - Prefer many small, pure, composable functions over a few large ones; separation makes each piece testable in isolation.
 
-    # Plan/todo tools (ЦЕЛЬ)
-    - When a goal is set, first break it into concrete, atomic plan steps and record them with the todo tools: `todo_add`, `todo_update`, `todo_list`.
-    - Keep every step atomic and each item's status accurate (`todo` | `in_progress` | `done` | `blocked`); update the status the moment work on a step changes.
-    - If a step cannot be finished, mark it `blocked` with the concrete reason rather than silently skipping it.
-    - Before declaring work complete, re-check the plan: every step must be `done`, and a blocked step must have a stated reason.
+    \(todoWorkflow)
 
     # Git safety (non-read-only commands)
     - Commands that write, roll back, or change HEAD or history — commit, push (especially `--force`), reset, checkout, rebase, cherry-pick, revert, `clean -f`, `branch -D`, stash-drop, etc. — are destructive and irreversible if the working tree is not safe.

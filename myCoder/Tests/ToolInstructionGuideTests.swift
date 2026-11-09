@@ -37,6 +37,21 @@ struct ToolInstructionGuideTests {
         #expect(guide.contains("http/https"))
     }
 
+    @Test func teachesCanonicalTodoWorkflowForEveryModel() {
+        let guide = ToolInstructionGuide.build()
+        // Любая модель (web/OpenAI-совместимая) получает не только схемы
+        // аргументов, но и порядок работы с планом.
+        for name in ["todo_read", "todo_write", "task_create", "task_list", "task_update"] {
+            #expect(guide.contains(name), "руководство должно называть \(name)")
+        }
+        let lower = guide.lowercased()
+        #expect(lower.contains("atomic"))
+        #expect(lower.contains("in_progress"))
+        #expect(lower.contains("completed"))
+        #expect(lower.contains("blocked"))
+        #expect(lower.contains("before declaring"))
+    }
+
     @Test func teachesExactEditsLineWindowsAndGraphFollowup() {
         let guide = ToolInstructionGuide.build()
         #expect(guide.contains("offset is 1-based"))

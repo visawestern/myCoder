@@ -63,6 +63,17 @@ struct GoalRunnerLogicTests {
         #expect(updated[0].status == .blocked)
     }
 
+    @Test("blocked вне notDone остаётся blocked, а не становится done")
+    func blockedNotInNotDoneStaysBlocked() {
+        // Контракт updatedPlan: blocked — это не «готово»; модель могла
+        // забыть перечислить шаг в notDone, и он не должен молча закрыться.
+        let plan = [item("Шаг 1", .blocked), item("Шаг 2", .todo)]
+        let updated = GoalRunner.updatedPlan(plan, verdict: GoalVerdict(complete: false, notDone: ["Шаг 2"], reason: "Шаг 2 не готов", valid: true))
+        let byTitle = Dictionary(uniqueKeysWithValues: updated.map { ($0.title, $0.status) })
+        #expect(byTitle["Шаг 1"] == .blocked)
+        #expect(byTitle["Шаг 2"] == .inProgress)
+    }
+
     // MARK: - Продолжение цикла
 
     @Test("continue неполном вердикте цикл продолжается, при complete — завершается")
