@@ -73,6 +73,13 @@ struct ChatPanelView: View {
     /// the old scroll-space frames that changed every tick and made the view
     /// re-evaluate per frame).
     @State private var userRowFrames: [String: CGRect] = [:]
+    /// Latest assistant row bottom in content coordinates. Unlike a document
+    /// maximum this anchor remains valid when streamed text is replaced by a
+    /// much shorter tool card.
+    @State private var latestContentBottom: CGFloat = 0
+    /// Viewport measured once by the existing AppKit bridge; used only to size
+    /// the streaming follow tail, not for per-frame SwiftUI preferences.
+    @State private var chatViewportHeight: CGFloat = 0
     /// Anchor captured before a history page is prepended. When the anchor row
     /// reports its new content-relative frame, the scroll offset is shifted by
     /// the same delta — the viewport stays visually still (messenger behaviour).
@@ -215,7 +222,11 @@ struct ChatPanelView: View {
                                         isHighlighted: message.id == highlightedMessageID
                                     )
                                         .id(message.id)
-                                        .chatRowFrameReporter(id: message.id, isUser: message.role == .user)
+                                        .chatRowFrameReporter(
+                                            id: message.id,
+                                            isUser: message.role == .user,
+                                            isLatest: message.id == displayMessages.last?.id
+                                        )
                                 }
 
                                 Color.clear
@@ -233,7 +244,11 @@ struct ChatPanelView: View {
                                     .frame(width: 0, height: 0)
                             }
                             .padding(.top, 16)
-                            .padding(.bottom, 16 + ChatScrollLogic.bottomContentInset)
+                            .padding(.bottom, 16 + ChatScrollLogic.bottomContentInset
+                                + ChatScrollLogic.followTailHeight(
+                                    viewportHeight: chatViewportHeight,
+                                    isStreaming: displayMessages.last?.isStreaming == true
+                                ))
                             // Кадры строк считаются в content-пространстве:
                             // они не меняются при скролле, поэтому preference
                             // не дёргает вью на каждом кадре.
@@ -681,10 +696,22 @@ struct ChatPanelView: View {
                 guard isChatBottomVisible else { return }
             }
             lastAutoScrollAt = Date()
-            // Прямая установка offset вместо `ScrollViewProxy.scrollTo`:
-            // не перестраивает дерево вью на каждый чанк стриминга.
-            ChatScrollBridge.shared.pinToBottom()
+            followLatestContent()
         }
+    }
+
+    /// Applies the current latest-message anchor to the real AppKit scroll
+    /// view. Input is measured view state; output is a clamped centered offset.
+    /// Depends on ChatScrollBridge and the latest-row frame preference.
+    private func followLatestContent() {
+        let snapshot = ChatScrollBridge.shared.currentSnapshot()
+        guard snapshot.viewportHeight > 0, latestContentBottom > 0 else { return }
+        let target = ChatScrollMath.followedOffset(
+            latestContentBottom: latestContentBottom,
+            viewportHeight: snapshot.viewportHeight,
+            maxOffset: snapshot.maxOffsetY
+        )
+        ChatScrollBridge.shared.setOffset(target)
     }
 
     /// Позиция скролла приходит одним AppKit-наблюдателем. В состоянии
@@ -694,8 +721,13 @@ struct ChatPanelView: View {
     private func applyScrollSnapshot(_ snapshot: ChatScrollBridge.Snapshot,
                                      proxy: ScrollViewProxy) {
         guard snapshot.viewportHeight > 0 else { return }
+        chatViewportHeight = snapshot.viewportHeight
         let wasAtBottom = isChatBottomVisible
-        let contentGrew = snapshot.maxOffsetY > lastKnownMaxOffset + 1
+        let heightChanged = ChatScrollMath.shouldReanchorFollowedContent(
+            wasPinned: wasAtBottom,
+            oldMaxOffset: lastKnownMaxOffset,
+            newMaxOffset: snapshot.maxOffsetY
+        )
         if abs(snapshot.maxOffsetY - lastKnownMaxOffset) > 1 {
             lastKnownMaxOffset = snapshot.maxOffsetY
         }
@@ -703,14 +735,15 @@ struct ChatPanelView: View {
             isChatBottomVisible = snapshot.isAtBottom
             messageStore.isPinnedToBottom = snapshot.isAtBottom
         }
-        // Ленивая раскладка догрузила высоты, пока читатель был внизу:
-        // держим низ приклеенным. Прямой offset — без перестройки вью.
-        if contentGrew, wasAtBottom,
+        // Ленивая раскладка или замена streamed-текста тулзой изменили высоту:
+        // в обоих направлениях пересчитываем позицию от последнего текста,
+        // иначе после сокращения остаётся пустой хвост и резкий скачок.
+        if heightChanged, wasAtBottom,
            !ChatScrollLogic.shouldSuppressAutoScroll(
                lastWheelAt: lastUserScrollAt,
                lastWheelDirection: lastUserWheelDirection
            ) {
-            ChatScrollBridge.shared.pinToBottom()
+            followLatestContent()
         }
         updateCurrentVisibleUserMessage(snapshot: snapshot)
         // Подгрузка начинается заранее, за экран до верха: к моменту, когда
@@ -731,6 +764,16 @@ struct ChatPanelView: View {
     private func handleUserRowFrames(_ value: [String: CGRect]) {
         if value != userRowFrames {
             userRowFrames = value
+        }
+        if let latestID = displayMessages.last?.id, let frame = value[latestID] {
+            latestContentBottom = frame.maxY
+            if isChatBottomVisible, pendingPaginationAnchor == nil,
+               !ChatScrollLogic.shouldSuppressAutoScroll(
+                   lastWheelAt: lastUserScrollAt,
+                   lastWheelDirection: lastUserWheelDirection
+               ) {
+                followLatestContent()
+            }
         }
         if let pending = pendingPaginationAnchor,
            let newFrame = value[pending.messageID],
@@ -4238,12 +4281,20 @@ struct ChatPanelView: View {
     func loadOlderMessages(proxy: ScrollViewProxy) {
         guard let sessionID = messageStore.currentSessionID else { return }
         guard !messageStore.isLoadingOlder else { return }  // Prevent cascade
-        let anchorMessageID = currentUserMessageID ?? displayMessages.last(where: { $0.role == .user })?.id
+        let before = ChatScrollBridge.shared.currentSnapshot()
+        let anchorMessageID = ChatPaginationLogic.visibleAnchor(
+            frames: userRowFrames,
+            offsetY: before.offsetY
+        )
+            ?? currentUserMessageID
+            ?? displayMessages.last(where: { $0.role == .user })?.id
+        // Первый реально видимый user-row сохраняет позицию. Если на экране
+        // только длинный ответ, используем ближайший известный user-row;
+        // latest-row всё равно измеряется для следящей прокрутки.
         let countBefore = messageStore.messages.count
         // Запоминаем точку привязки ДО вставки. После подгрузки та же строка
         // уедет вниз ровно на высоту страницы — компенсируем это смещением
         // скролла в том же layout-проходе, без отдельного `scrollTo`.
-        let before = ChatScrollBridge.shared.currentSnapshot()
         if let anchorMessageID, let frame = userRowFrames[anchorMessageID] {
             pendingPaginationAnchor = PaginationAnchor(
                 messageID: anchorMessageID,
@@ -5394,9 +5445,10 @@ struct ScrollToBottomButton: View {
 struct ChatRowFrameReporter: ViewModifier {
     let rowID: String
     let isUser: Bool
+    let isLatest: Bool
 
     func body(content: Content) -> some View {
-        if isUser {
+        if isUser || isLatest {
             content.background(
                 GeometryReader { geo in
                     Color.clear.preference(
@@ -5414,8 +5466,8 @@ struct ChatRowFrameReporter: ViewModifier {
 }
 
 extension View {
-    func chatRowFrameReporter(id: String, isUser: Bool) -> some View {
-        modifier(ChatRowFrameReporter(rowID: id, isUser: isUser))
+    func chatRowFrameReporter(id: String, isUser: Bool, isLatest: Bool = false) -> some View {
+        modifier(ChatRowFrameReporter(rowID: id, isUser: isUser, isLatest: isLatest))
     }
 }
 

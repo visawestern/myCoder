@@ -26,6 +26,14 @@ enum ChatPaginationLogic {
         return offsetY > 0 && offsetY <= threshold
     }
 
+    /// Выбирает первую строку, пересекающую верх вьюпорта, для компенсации
+    /// prepend. Вход: стабильные content-relative кадры и offset; выход: id
+    /// ближайшей видимой строки. Без UI/БД, чтобы правило проверялось тестом.
+    static func visibleAnchor(frames: [String: CGRect], offsetY: CGFloat) -> String? {
+        frames.filter { $0.value.maxY > offsetY }
+            .min { $0.value.minY < $1.value.minY }?.key
+    }
+
     /// Новое смещение, при котором вьюпорт остаётся визуально на месте после
     /// вставки контента над ним. `anchorShift` — на сколько точек вниз
     /// сдвинулась опорная строка (равно высоте вставленного блока).

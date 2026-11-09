@@ -73,6 +73,22 @@ struct WebToolAllToolsParityTests {
         }
     }
 
+    @Test("Исходный U3 read_symbol исполняется на реальном файле проекта")
+    func reportedReadSymbolCallExecutes() async throws {
+        let source = """
+        <tool_call>{"name": "read_symbol", "args": {"path": "myCoder/Sources/Services/WebToolProtocolEmulator.swift", "name": "parseToolCalls"}}</tool_call>
+        """
+        let calls = WebToolProtocolEmulator.parseToolCalls(from: source)
+        let call = try #require(calls.first)
+        let executor = ProjectWebToolExecutor(
+            projectRoot: RepoRoot.url.path,
+            accessLevel: .fullAccess
+        )
+        let result = await executor.execute(call)
+        #expect(result.contains("hash verified"), "\(result)")
+        #expect(result.contains("static func parseToolCalls"), "\(result)")
+    }
+
     @Test("read_symbol парсится из блока и сохраняет имя")
     func readSymbolRoundTripsThroughParser() {
         let call = WebToolProtocolEmulator.parseToolCalls(from: fencedBlock(.readSymbol)).first

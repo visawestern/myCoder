@@ -12,6 +12,51 @@ struct ChatScrollMathTests {
         #expect(ChatScrollMath.maxOffset(contentHeight: 300, viewportHeight: 200) == 100)
     }
 
+    @Test("Следящая прокрутка держит последний текст в центре, если это возможно")
+    func followedOffsetCentersLatestContent() {
+        // Низ текста на 900, вьюпорт 600: центрируем конец, а не уходим
+        // к старому нижнему краю всего документа на 1400.
+        #expect(ChatScrollMath.followedOffset(
+            latestContentBottom: 900,
+            viewportHeight: 600,
+            maxOffset: 1400
+        ) == 600)
+        // При непрерывном стриминге низ текста остаётся в центре; свободное
+        // место ниже появляется из отдельного управляемого spacer-а.
+        #expect(ChatScrollMath.followedOffset(
+            latestContentBottom: 1800,
+            viewportHeight: 600,
+            maxOffset: 2000
+        ) == 1500)
+        // Пустое место после замены текста тулзой не должно оставаться внизу.
+        #expect(ChatScrollMath.followedOffset(
+            latestContentBottom: 500,
+            viewportHeight: 600,
+            maxOffset: 1400
+        ) == 200)
+        #expect(ChatScrollMath.followedOffset(
+            latestContentBottom: 500,
+            viewportHeight: 600,
+            maxOffset: 0
+        ) == 0)
+    }
+
+    @Test("Уменьшение высоты — повод пересчитать следящий offset")
+    func contentShrinkRequiresReanchor() {
+        #expect(ChatScrollMath.shouldReanchorFollowedContent(
+            wasPinned: true, oldMaxOffset: 1400, newMaxOffset: 700
+        ))
+        #expect(ChatScrollMath.shouldReanchorFollowedContent(
+            wasPinned: true, oldMaxOffset: 700, newMaxOffset: 1400
+        ))
+        #expect(!ChatScrollMath.shouldReanchorFollowedContent(
+            wasPinned: false, oldMaxOffset: 1400, newMaxOffset: 700
+        ))
+        #expect(!ChatScrollMath.shouldReanchorFollowedContent(
+            wasPinned: true, oldMaxOffset: 700, newMaxOffset: 700.5
+        ))
+    }
+
     @Test("targetOffset зажимается в диапазон 0…maxOffset")
     func targetOffsetClamps() {
         // Вниз от верха.

@@ -16,6 +16,15 @@ enum ChatScrollLogic {
     /// bubble never sits flush against the input panel (user directive).
     static let bottomContentInset: CGFloat = 20
 
+    /// Extra trailing space while the last answer is streaming. Input is the
+    /// viewport height and streaming flag; output allows `followedOffset` to
+    /// keep the growing answer's bottom near the centre without affecting a
+    /// completed conversation. No AppKit/SwiftUI dependency.
+    static func followTailHeight(viewportHeight: CGFloat, isStreaming: Bool) -> CGFloat {
+        guard isStreaming, viewportHeight > 0 else { return 0 }
+        return viewportHeight / 2
+    }
+
     /// The bottom sentinel counts as visible when it reaches the viewport's
     /// bottom edge (inside it, intersecting it, or within `tolerance` just
     /// below it). Unknown frames report `nil` so callers keep their previous

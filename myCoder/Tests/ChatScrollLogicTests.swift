@@ -5,6 +5,13 @@ import Testing
 @Suite("ChatScrollLogic — нижняя видимость и отступ")
 struct ChatScrollLogicTests {
 
+    @Test("Во время ответа есть место для центрирования, после него оно убирается")
+    func streamingTailExistsOnlyWhileFollowing() {
+        #expect(ChatScrollLogic.followTailHeight(viewportHeight: 600, isStreaming: true) == 300)
+        #expect(ChatScrollLogic.followTailHeight(viewportHeight: 600, isStreaming: false) == 0)
+        #expect(ChatScrollLogic.followTailHeight(viewportHeight: 0, isStreaming: true) == 0)
+    }
+
     @Test("bottomContentInset равен 20 pt (зазор под композером)")
     func bottomInsetIsTwenty() {
         #expect(ChatScrollLogic.bottomContentInset == 20)

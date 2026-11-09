@@ -25,6 +25,18 @@ struct ChatPaginationLogicTests {
         #expect(ChatPaginationLogic.preservedOffset(oldOffset: 10, anchorShift: -50, maxOffset: 2000) == 0)
     }
 
+    @Test("Якорь — первая видимая строка, а не последнее user-сообщение чата")
+    func visibleAnchorSelection() {
+        let frames = [
+            "above": CGRect(x: 0, y: 0, width: 600, height: 100),
+            "reading": CGRect(x: 0, y: 400, width: 600, height: 300),
+            "below": CGRect(x: 0, y: 800, width: 600, height: 100),
+        ]
+        #expect(ChatPaginationLogic.visibleAnchor(frames: frames, offsetY: 450) == "reading")
+        #expect(ChatPaginationLogic.visibleAnchor(frames: frames, offsetY: 0) == "above")
+        #expect(ChatPaginationLogic.visibleAnchor(frames: [:], offsetY: 450) == nil)
+    }
+
     @Test("Content-пространство строк отделено от scroll-пространства")
     func contentSpaceIsDistinct() {
         #expect(ChatScrollSpace.content != ChatScrollSpace.name)

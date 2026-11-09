@@ -26,6 +26,26 @@ enum ChatScrollMath {
     static func isAtTop(offset: CGFloat, slack: CGFloat = 1) -> Bool {
         offset <= slack
     }
+
+    /// Offset for following the latest answer. Input is the latest message's
+    /// bottom in content coordinates, viewport size and the real scroll range;
+    /// output keeps that bottom at viewport centre whenever enough following
+    /// space exists, otherwise clamps to the document. Depends on no UI state.
+    static func followedOffset(latestContentBottom: CGFloat,
+                               viewportHeight: CGFloat,
+                               maxOffset: CGFloat) -> CGFloat {
+        let centered = latestContentBottom - viewportHeight / 2
+        return min(max(0, centered), max(0, maxOffset))
+    }
+
+    /// Whether a changed document height needs a fresh follow offset. Input is
+    /// the previous pin and old/new range; output is true for both growth and
+    /// replacement/shrink, but never while the reader browses older content.
+    static func shouldReanchorFollowedContent(wasPinned: Bool,
+                                               oldMaxOffset: CGFloat,
+                                               newMaxOffset: CGFloat) -> Bool {
+        wasPinned && abs(newMaxOffset - oldMaxOffset) > 1
+    }
 }
 
 /// One observed scroll position (recorded on every clip-view bounds change).
