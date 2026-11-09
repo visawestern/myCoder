@@ -360,6 +360,12 @@ enum WebToolProtocolEmulator {
         // model emits exactly this, the verbose parser ignores it, and the
         // turn dies with raw tool text as the "answer").
         calls.append(contentsOf: parseShortTaggedCalls(from: responseText))
+        // Then the XML-подобные форматы других модельных семей:
+        // DSML <｜DSML｜ invoke name> (DeepSeek V4.1 Flash / MiMo-style),
+        // Anthropic <function_calls><invoke><parameter>, <tool_use><input>,
+        // <function_call name arguments="{json}"> (live 2026-11-09).
+        calls.append(contentsOf: DSMLToolCallParser.parseCalls(from: responseText))
+        calls.append(contentsOf: ExtraToolCallFormatParsers.parseAll(from: responseText))
 
         // Audit 2026-09-08 (Qwen live): reasoning streams can BREAK the fence
         // itself — the answer arrives as `tool\n1\n{"name":\u{00A0}"list_dir", ...}`
@@ -383,7 +389,26 @@ enum WebToolProtocolEmulator {
         if calls.isEmpty && issues.isEmpty {
             calls.append(contentsOf: parseTruncatedToolCallStub(from: responseText))
         }
-        return (calls, issues)
+        // Один и тот же вызов, представленный в нескольких форматах (например,
+        // DSML блок, который заодно содержит валидный JSON — оба парсера его
+        // увидят), не должен исполняться дважды.
+        return (deduplicated(calls), issues)
+    }
+
+    /// Убрать дубликаты вызовов: одинаковые (имя + аргументы) оставляем один раз.
+    private static func deduplicated(_ calls: [WebToolCall]) -> [WebToolCall] {
+        var seen = Set<String>()
+        var unique: [WebToolCall] = []
+        for call in calls {
+            let argsKey = call.arguments.keys.sorted()
+                .map { "\($0)=\(call.arguments[$0] ?? "")" }
+                .joined(separator: "&")
+            let key = call.name + "|" + argsKey
+            if seen.insert(key).inserted {
+                unique.append(call)
+            }
+        }
+        return unique
     }
 
     /// The tool name written inside a broken block, so the error result names
@@ -866,6 +891,15 @@ enum WebToolProtocolEmulator {
             for (k, v) in rawArgs {
                 args[k] = jsonScalarString(v)
             }
+        } else if let rawArgs = obj["arguments"] as? String {
+            // Llama 3.1 / OpenAI verbose: arguments приходят JSON-СТРОКОЙ —
+            // {"name": "grep", "arguments": "{\"pattern\": \"x\"}"}.
+            if let data = rawArgs.data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                for (k, v) in dict {
+                    args[k] = jsonScalarString(v)
+                }
+            }
         }
         return WebToolCall(name: name, arguments: args)
     }
@@ -1037,8 +1071,8 @@ enum WebToolProtocolEmulator {
         return calls
     }
 
-    /// Extract the first balanced `{ … }` object starting at `start`, returning
-    /// its text and the index right after it. Returns nil when unbalanced.
+    /// Извлечь первый сбалансированный `{ … }` объект, начиная с `start`,
+    /// вернуть его текст и индекс сразу после него (nil при разбалансировке).
     private static func balancedJSONObject(in text: String, from start: String.Index) -> (String, String.Index)? {
         var depth = 0
         var inString = false
