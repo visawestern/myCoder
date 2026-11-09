@@ -120,6 +120,9 @@ class AppState: ObservableObject {
         if let observer = providersObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = modelMetadataObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         MyCoderAPIServer.appendLog("💀 AppState.deinit: id=\(instanceID)")
     }
     /// The UserDefaults instance used for persistence.  Public so tests can
@@ -229,6 +232,10 @@ class AppState: ObservableObject {
     /// this SwiftUI would not re-render the chat model menu after a Settings
     /// refresh (plan Раздел 1 п.3).
     @Published private(set) var providerCatalogRevision = 0
+    /// Bumped whenever a manual model-metadata override changes. The context
+    /// badge reads `ModelMetadataStore` directly, so SwiftUI needs a published
+    /// signal to recalculate the window right after a Settings edit (C6).
+    @Published private(set) var modelMetadataRevision = 0
 
     @Published var workspaces: [Workspace] = []
     /// Lightweight registry snapshot used to reconcile sidebar visibility with
@@ -397,6 +404,7 @@ class AppState: ObservableObject {
     @Published var shellActionNoticeTone: UndoActionFeedbackTone = .success
     private var providersObserver: NSObjectProtocol? = nil
     private var subagentObserver: NSObjectProtocol? = nil
+    private var modelMetadataObserver: NSObjectProtocol? = nil
     
     var displayedWorkspaces: [Workspace] {
         let visible = WorkspaceArchiveVisibilityLogic.visible(
@@ -613,6 +621,14 @@ class AppState: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             self?.refreshSubagentSessions()
+        }
+
+        modelMetadataObserver = NotificationCenter.default.addObserver(
+            forName: .modelMetadataChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.modelMetadataRevision &+= 1
         }
 
         guard !Self.isRunningTests else { return }

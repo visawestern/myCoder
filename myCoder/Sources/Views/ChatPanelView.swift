@@ -1713,19 +1713,24 @@ struct ChatPanelView: View {
     /// auto-compaction threshold must use the SAME number as the model-switch
     /// decision — otherwise the chat compacts at the wrong moment.
     private var selectedContextLimit: Int {
-        ModelCapabilityLogic.effectiveContextWindow(
-            for: appState.effectiveSelectedModel(),
-            in: appState.serverProviders,
-            providerID: appState.selectedProviderID
+        // Читаем ревизию метаданных, чтобы SwiftUI пересчитал окно сразу
+        // после правки параметров модели в настройках (C6).
+        _ = appState.modelMetadataRevision
+        return ContextBudgetLogic.effectiveContextLimit(
+            modelID: appState.effectiveSelectedModel(),
+            providerID: appState.selectedProviderID,
+            serverProviders: appState.serverProviders
         )
     }
 
     /// Measured over the MODEL-BOUND history so the badge drops right after a
-    /// compaction instead of showing the whole visible feed.
+    /// compaction instead of showing the whole visible feed. `ContextBudgetLogic`
+    /// counts the latest compiled payload once — each payload already contains
+    /// the prior history (C6).
     private var currentContextUsage: ContextUsage? {
         let history = ConversationCompactionLogic.historyForModel(messageStore.messages)
         guard !history.isEmpty else { return nil }
-        return ContextUsageLogic.usage(messages: history, limitTokens: selectedContextLimit)
+        return ContextBudgetLogic.usage(messages: history, limitTokens: selectedContextLimit)
     }
 
     private func currentRoute() -> SendRoute {
@@ -1790,7 +1795,7 @@ struct ChatPanelView: View {
         isCompacting = true
         defer { isCompacting = false }
 
-        let beforeTokens = ContextUsageLogic.usedTokens(messages: history)
+        let beforeTokens = ContextBudgetLogic.usedTokens(messages: history)
         let summarizer = ConversationSummarizer(transport: summaryTransport(for: route))
         do {
             // The summary request goes to the model that will continue the
@@ -1875,7 +1880,7 @@ struct ChatPanelView: View {
             messageStore.messages(in: sessionID)
         )
         guard !history.isEmpty else { return }
-        let usage = ContextUsageLogic.usage(messages: history, limitTokens: selectedContextLimit)
+        let usage = ContextBudgetLogic.usage(messages: history, limitTokens: selectedContextLimit)
         guard ContextUsageLogic.shouldCompact(usage) else { return }
         await compactConversation(reason: "auto at \(usage.percent)%", sessionID: sessionID)
     }
@@ -1896,11 +1901,11 @@ struct ChatPanelView: View {
         let history = ConversationCompactionLogic.historyForModel(
             messageStore.messages(in: sessionID)
         )
-        let usedTokens = ContextUsageLogic.usedTokens(messages: history)
-        let limitTokens = ModelCapabilityLogic.effectiveContextWindow(
-            for: newModel,
-            in: appState.serverProviders,
-            providerID: appState.selectedProviderID
+        let usedTokens = ContextBudgetLogic.usedTokens(messages: history)
+        let limitTokens = ContextBudgetLogic.effectiveContextLimit(
+            modelID: newModel,
+            providerID: appState.selectedProviderID,
+            serverProviders: appState.serverProviders
         )
         // The candidates are collected only when a compaction is really
         // needed: the scan walks every provider and every model.

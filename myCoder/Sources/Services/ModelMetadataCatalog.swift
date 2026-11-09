@@ -197,6 +197,9 @@ enum ModelMetadataStore {
         if let data = try? JSONEncoder().encode(map) {
             defaults.set(data, forKey: storageKey)
         }
+        // C6: бейдж контекста читает store напрямую — будим чат, чтобы
+        // лимит/процент пересчитались сразу после правки параметров.
+        NotificationCenter.default.post(name: .modelMetadataChanged, object: nil)
     }
 
     static func clear(providerID: String, modelID: String, defaults: UserDefaults = .standard) {
@@ -207,6 +210,7 @@ enum ModelMetadataStore {
         } else if let data = try? JSONEncoder().encode(map) {
             defaults.set(data, forKey: storageKey)
         }
+        NotificationCenter.default.post(name: .modelMetadataChanged, object: nil)
     }
 }
 

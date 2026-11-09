@@ -14,6 +14,11 @@ extension Notification.Name {
     /// unified provider list refreshes even when the store is not an
     /// ObservableObject.
     static let providersChanged = Notification.Name("com.mycoder.providersChanged")
+    /// Fired after a manual model-metadata override changes (context/output/
+    /// capabilities). The chat's context badge reads the store directly, so
+    /// without this signal a Settings edit would not recalculate the size
+    /// until some unrelated event (C6, user report 2026-11-09).
+    static let modelMetadataChanged = Notification.Name("com.mycoder.modelMetadataChanged")
 }
 
 // MARK: - Notification Model

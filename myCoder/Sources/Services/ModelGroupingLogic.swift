@@ -190,30 +190,44 @@ enum ModelCapabilityLogic {
         )?.limit?.context
     }
 
-    /// Effective context window of a model: the provider metadata when it
-    /// exists, otherwise the configured default (200k).
+    /// Effective context window of a model: manual metadata override first,
+    /// then the provider metadata, then the bundled catalog/default.
+    ///
+    /// Вход: `modelID`, каталог провайдеров, `providerID`, карта overrides.
+    /// Выход: окно в токенах.
+    /// Зависимости: `ContextBudgetLogic.effectiveContextLimit`.
     static func effectiveContextWindow(
         for modelID: String,
         in providers: [MimoProviderResponse],
-        providerID: String? = nil
+        providerID: String? = nil,
+        overrides: [String: ModelMetadataOverride] = ModelMetadataStore.loadAll()
     ) -> Int {
-        let reported = contextWindow(for: modelID, in: providers, providerID: providerID)
-        return ContextWindowCatalog.limit(for: modelID, reported: reported)
+        ContextBudgetLogic.effectiveContextLimit(
+            modelID: modelID,
+            providerID: providerID,
+            serverProviders: providers,
+            overrides: overrides
+        )
     }
 
-    /// Effective output limit of a model: the provider metadata when it
-    /// exists, otherwise the configured default (32k).
+    /// Effective output limit of a model: manual metadata override first,
+    /// then the provider metadata, then the configured default (32k).
+    ///
+    /// Вход: `modelID`, каталог провайдеров, `providerID`, карта overrides.
+    /// Выход: лимит выхода в токенах.
+    /// Зависимости: `ContextBudgetLogic.effectiveOutputLimit`.
     static func effectiveOutputLimit(
         for modelID: String,
         in providers: [MimoProviderResponse],
-        providerID: String? = nil
+        providerID: String? = nil,
+        overrides: [String: ModelMetadataOverride] = ModelMetadataStore.loadAll()
     ) -> Int {
-        let reported = ProviderSettingsLogic.model(
-            for: modelID,
-            in: providers,
-            providerID: providerID
-        )?.limit?.output
-        return ContextWindowCatalog.outputLimit(for: modelID, reported: reported)
+        ContextBudgetLogic.effectiveOutputLimit(
+            modelID: modelID,
+            providerID: providerID,
+            serverProviders: providers,
+            overrides: overrides
+        )
     }
 
     static func contextLabel(for tokens: Int) -> String {
