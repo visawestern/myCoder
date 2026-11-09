@@ -63,10 +63,11 @@ struct FeedMemoryTests {
     @Test("Chat panel keeps the store's bottom-pin state in sync")
     func chatPanelSyncsPinState() throws {
         let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
-        // The current contract: the bottom sentinel reports its real frame and
-        // the visibility result is pushed into the store's pin state.
-        #expect(source.contains("updateChatBottomVisibility"))
-        #expect(source.contains("isPinnedToBottom = visible"))
+        // Current contract: the NSScrollView bridge reports the real offset
+        // (one AppKit observer, not per-frame geometry preferences), and the
+        // at-bottom result is pushed into the store's pin state.
+        #expect(source.contains("applyScrollSnapshot"))
+        #expect(source.contains("messageStore.isPinnedToBottom = snapshot.isAtBottom"))
     }
 
     private func sourceText(_ relativePath: String) throws -> String {

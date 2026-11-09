@@ -113,6 +113,10 @@ extension UserMessageNavigatorLogic {
 /// navigator can resolve the currently visible user message.
 enum ChatScrollSpace {
     static let name = "chat-scroll-space"
+    /// Content-relative space for row frames: they change only when content
+    /// is added/removed, NOT on every scroll tick. Visibility is derived from
+    /// the NSScrollView offset instead of per-frame preferences.
+    static let content = "chat-content-space"
 }
 
 struct ChatRowFrameKey: PreferenceKey {

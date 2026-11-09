@@ -56,6 +56,11 @@ final class ChatScrollBridge {
     private var monitoringSource: String?
     private var boundsObserver: NSObjectProtocol?
     private var anchorJumper: ((String, UnitPoint) -> Void)?
+    /// Called on every real offset/content change. This is the cheap
+    /// replacement for per-frame SwiftUI geometry preferences: one AppKit
+    /// bounds notification, and the view only mutates state when a derived
+    /// value (at-bottom flag, current message id) actually changes.
+    var onScroll: ((Snapshot) -> Void)?
 
     /// Ring buffer of the last clip-view positions. `GET /api/scroll?samples=1`
     /// returns it, which makes a "stopped and then jumped" symptom visible as a
@@ -237,6 +242,50 @@ final class ChatScrollBridge {
         return snapshot(for: scrollView)
     }
 
+    /// Текущая позиция скролла (для расчёта видимой строки и компенсации
+    /// высоты при подгрузке истории).
+    func currentSnapshot() -> Snapshot {
+        if let scrollView, scrollView.window != nil {
+            return snapshot(for: scrollView)
+        }
+        guard let resolved = resolvedScrollView() else { return .empty }
+        return snapshot(for: resolved)
+    }
+
+    /// Поставить смещение напрямую, без SwiftUI-анимации и без записи в лог.
+    /// Используется для компенсации вставки старых сообщений: контент
+    /// добавляется сверху, а вьюпорт должен остаться на том же тексте.
+    func setOffset(_ offset: CGFloat) {
+        // Prefer the already-bound view: this runs inside a layout pass, and a
+        // window-tree scan on every prepend would itself cost frames.
+        guard let scrollView = (self.scrollView?.window != nil ? self.scrollView : resolvedScrollView()) else {
+            return
+        }
+        let clip = scrollView.contentView
+        let maxY = snapshot(for: scrollView).maxOffsetY
+        let target = min(max(0, offset), maxY)
+        guard abs(clip.bounds.origin.y - target) > 0.01 else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: target))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
+    /// Прижать ленту к низу, если она уже не там. Прямая установка offset
+    /// дешевле `ScrollViewProxy.scrollTo` и не вызывает перестройку дерева
+    /// вью на каждый чанк стриминга.
+    func pinToBottom() {
+        guard let scrollView = (self.scrollView?.window != nil ? self.scrollView : resolvedScrollView()) else {
+            return
+        }
+        let snap = snapshot(for: scrollView)
+        guard snap.maxOffsetY > 0 else { return }
+        guard !ChatScrollMath.isAtBottom(offset: snap.offsetY, maxOffset: snap.maxOffsetY, slack: 2) else {
+            return
+        }
+        let clip = scrollView.contentView
+        clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: snap.maxOffsetY))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
     // MARK: - Window fallback
 
     /// When no probe has attached (e.g. the lazy stack has not materialized
@@ -329,6 +378,7 @@ final class ChatScrollBridge {
         if samples.count > sampleLimit {
             samples.removeFirst(samples.count - sampleLimit)
         }
+        onScroll?(current)
     }
 
     /// JSON state for `/api/scroll` (GET) and the `chat.scrollState` action.

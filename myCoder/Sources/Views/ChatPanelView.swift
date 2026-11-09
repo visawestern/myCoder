@@ -28,6 +28,15 @@ private struct ComposerDraftSnapshot {
     }
 }
 
+/// Точка привязки для подгрузки истории: строка, которая была на экране до
+/// вставки страницы, её прежняя content-relative позиция и прежний offset.
+/// После вставки компенсируем сдвиг строки тем же смещением скролла.
+private struct PaginationAnchor {
+    let messageID: String
+    let oldMinY: CGFloat
+    let oldOffset: CGFloat
+}
+
 private struct PreparedLocalToolCall {
     let call: WebToolCall
     let callID: String
@@ -57,11 +66,17 @@ struct ChatPanelView: View {
     @State private var currentTask: Task<Void, Never>?
     @State private var previousSessionID: String?
     @State private var isChatBottomVisible = true
+    /// Последняя известная высота контента: рост при ленивой раскладке
+    /// отличается от пользовательского скролла (offset не меняется, maxY растёт).
+    @State private var lastKnownMaxOffset: CGFloat = 0
+    /// Content-relative frames of user rows. Stable during scrolling (unlike
+    /// the old scroll-space frames that changed every tick and made the view
+    /// re-evaluate per frame).
     @State private var userRowFrames: [String: CGRect] = [:]
-    @State private var chatViewportFrame: CGRect = .zero
-    /// Last measured frame of the bottom sentinel (used to decide whether a
-    /// scroll is actually needed).
-    @State private var lastBottomFrame: CGRect = .zero
+    /// Anchor captured before a history page is prepended. When the anchor row
+    /// reports its new content-relative frame, the scroll offset is shifted by
+    /// the same delta — the viewport stays visually still (messenger behaviour).
+    @State private var pendingPaginationAnchor: PaginationAnchor?
     /// Timestamp of the user's last wheel scroll: auto-scroll is suppressed
     /// right after, so reading older messages is never yanked back.
     @State private var lastUserScrollAt = Date.distantPast
@@ -206,14 +221,6 @@ struct ChatPanelView: View {
                                 Color.clear
                                     .frame(height: 1)
                                     .id(ChatScrollLogic.bottomAnchorID)
-                                    .background(
-                                        GeometryReader { geo in
-                                            Color.clear.preference(
-                                                key: ChatBottomFrameKey.self,
-                                                value: geo.frame(in: .named(ChatScrollSpace.name))
-                                            )
-                                        }
-                                    )
 
                                 // Second attachment point for the scroll bridge:
                                 // this one lives INSIDE the lazy content near
@@ -227,6 +234,10 @@ struct ChatPanelView: View {
                             }
                             .padding(.top, 16)
                             .padding(.bottom, 16 + ChatScrollLogic.bottomContentInset)
+                            // Кадры строк считаются в content-пространстве:
+                            // они не меняются при скролле, поэтому preference
+                            // не дёргает вью на каждом кадре.
+                            .coordinateSpace(name: ChatScrollSpace.content)
                         }
                         .chatScrollSpaceReporter()
                         .background(
@@ -239,21 +250,13 @@ struct ChatPanelView: View {
                                 .frame(width: 0, height: 0)
                         )
                         .onPreferenceChange(ChatRowFrameKey.self) { value in
-                            userRowFrames = value
+                            handleUserRowFrames(value)
                         }
-                        .onPreferenceChange(ChatViewportFrameKey.self) { value in
-                            chatViewportFrame = value
-                        }
-                        .onPreferenceChange(ChatBottomFrameKey.self) { value in
-                            updateChatBottomVisibility(bottomFrame: value)
-                        }
-                        .onChange(of: userRowFrames) { _ in updateCurrentVisibleUserMessage() }
-                        .onChange(of: chatViewportFrame) { _ in updateCurrentVisibleUserMessage() }
                         .onChange(of: ChatScrollLogic.revision(messages: displayMessages)) { _ in
                             updateCurrentVisibleUserMessage()
                         }
                         .onChange(of: ChatScrollLogic.revision(messages: displayMessages)) { _ in
-                            autoScrollIfPinned(proxy: proxy)
+                            autoScrollIfPinned()
                         }
                         .onChange(of: messageStore.currentSessionID) { newID in
                             handleSessionChange(newID, proxy: proxy)
@@ -276,10 +279,17 @@ struct ChatPanelView: View {
                                     proxy.scrollTo(id, anchor: anchor)
                                 }
                             }
+                            // Один AppKit-наблюдатель вместо трёх
+                            // GeometryReader-preferences на каждый кадр.
+                            ChatScrollBridge.shared.onScroll = { snapshot in
+                                applyScrollSnapshot(snapshot, proxy: proxy)
+                            }
+                            applyScrollSnapshot(ChatScrollBridge.shared.currentSnapshot(), proxy: proxy)
                         }
                         .onDisappear {
                             pendingAutoScrollTask?.cancel()
                             removeScrollWheelMonitor()
+                            ChatScrollBridge.shared.onScroll = nil
                             ChatScrollBridge.shared.clearAnchorJumper()
                             ChatScrollBridge.shared.detach()
                         }
@@ -628,7 +638,7 @@ struct ChatPanelView: View {
     ///   (measured from layout preferences) is still catching up;
     /// - skipped entirely when the bottom anchor is already glued to the
     ///   viewport bottom (no drift → nothing to do).
-    private func autoScrollIfPinned(proxy: ScrollViewProxy) {
+    private func autoScrollIfPinned() {
         let messageCount = displayMessages.count
         let lastMessageID = displayMessages.last?.id
         let hasNewMessage = ChatScrollLogic.shouldScrollAfterNewMessage(
@@ -664,25 +674,77 @@ struct ChatPanelView: View {
                 lastWheelAt: lastUserScrollAt,
                 lastWheelDirection: lastUserWheelDirection
             ) else { return }
+            // Новое сообщение — жёсткий повод следовать за лентой (пользователь
+            // только что отправил запрос). Стриминговые чанки следуют, только
+            // если читатель уже внизу.
             if !hasNewMessage {
                 guard isChatBottomVisible else { return }
-                if ChatScrollLogic.anchorIsGlued(bottomFrame: lastBottomFrame, viewport: chatViewportFrame) {
-                    return
-                }
             }
             lastAutoScrollAt = Date()
-            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+            // Прямая установка offset вместо `ScrollViewProxy.scrollTo`:
+            // не перестраивает дерево вью на каждый чанк стриминга.
+            ChatScrollBridge.shared.pinToBottom()
         }
     }
 
-    private func updateChatBottomVisibility(bottomFrame: CGRect) {
-        lastBottomFrame = bottomFrame
-        guard let visible = ChatScrollLogic.bottomVisibility(
-            bottomFrame: bottomFrame,
-            viewport: chatViewportFrame
-        ) else { return }
-        isChatBottomVisible = visible
-        messageStore.isPinnedToBottom = visible
+    /// Позиция скролла приходит одним AppKit-наблюдателем. В состоянии
+    /// обновляем только изменившиеся производные значения — иначе каждое
+    /// колесо перестраивало бы весь чат (прежние GeometryReader-preferences
+    /// делали именно это).
+    private func applyScrollSnapshot(_ snapshot: ChatScrollBridge.Snapshot,
+                                     proxy: ScrollViewProxy) {
+        guard snapshot.viewportHeight > 0 else { return }
+        let wasAtBottom = isChatBottomVisible
+        let contentGrew = snapshot.maxOffsetY > lastKnownMaxOffset + 1
+        if abs(snapshot.maxOffsetY - lastKnownMaxOffset) > 1 {
+            lastKnownMaxOffset = snapshot.maxOffsetY
+        }
+        if isChatBottomVisible != snapshot.isAtBottom {
+            isChatBottomVisible = snapshot.isAtBottom
+            messageStore.isPinnedToBottom = snapshot.isAtBottom
+        }
+        // Ленивая раскладка догрузила высоты, пока читатель был внизу:
+        // держим низ приклеенным. Прямой offset — без перестройки вью.
+        if contentGrew, wasAtBottom,
+           !ChatScrollLogic.shouldSuppressAutoScroll(
+               lastWheelAt: lastUserScrollAt,
+               lastWheelDirection: lastUserWheelDirection
+           ) {
+            ChatScrollBridge.shared.pinToBottom()
+        }
+        updateCurrentVisibleUserMessage(snapshot: snapshot)
+        // Подгрузка начинается заранее, за экран до верха: к моменту, когда
+        // читатель дойдёт до края, страница уже в памяти.
+        if ChatPaginationLogic.shouldPrefetch(offsetY: snapshot.offsetY,
+                                              viewportHeight: snapshot.viewportHeight),
+           messageStore.hasMoreMessages,
+           canLoadOlderMessages,
+           !messageStore.isLoadingOlder,
+           pendingPaginationAnchor == nil {
+            loadOlderMessages(proxy: proxy)
+        }
+    }
+
+    /// Кадры пользовательских строк в content-пространстве. Меняются только
+    /// при изменении контента; здесь же компенсируется вставка страницы
+    /// истории, чтобы вьюпорт не прыгал.
+    private func handleUserRowFrames(_ value: [String: CGRect]) {
+        if value != userRowFrames {
+            userRowFrames = value
+        }
+        if let pending = pendingPaginationAnchor,
+           let newFrame = value[pending.messageID],
+           abs(newFrame.minY - pending.oldMinY) > 0.5 {
+            let snapshot = ChatScrollBridge.shared.currentSnapshot()
+            let target = ChatPaginationLogic.preservedOffset(
+                oldOffset: pending.oldOffset,
+                anchorShift: newFrame.minY - pending.oldMinY,
+                maxOffset: snapshot.maxOffsetY
+            )
+            ChatScrollBridge.shared.setOffset(target)
+            pendingPaginationAnchor = nil
+        }
+        updateCurrentVisibleUserMessage()
     }
 
     /// Watches the user's wheel scrolling in this window. The timestamp is
@@ -719,6 +781,7 @@ struct ChatPanelView: View {
         DispatchQueue.main.async {
             proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
         }
+        settleAtBottom()
         loadDraft(for: newID)
     }
 
@@ -742,6 +805,22 @@ struct ChatPanelView: View {
         scrolledSessionID = messageStore.currentSessionID
         DispatchQueue.main.async {
             proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+        }
+        settleAtBottom()
+    }
+
+    /// После открытия чата ленивая раскладка досчитывает высоты строк уже
+    /// ПОСЛЕ первого `scrollTo`, поэтому лента останавливается на десятки
+    /// точек выше низа. Доводим позицию прямым offset'ом несколько раз, пока
+    /// раскладка устояется, и только если пользователь ещё не читает вверх.
+    private func settleAtBottom() {
+        for delay in [0.05, 0.15, 0.35, 0.7] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard Date().timeIntervalSince(lastUserScrollAt) >= ChatScrollLogic.userScrollSuppression else {
+                    return
+                }
+                ChatScrollBridge.shared.pinToBottom()
+            }
         }
     }
 
@@ -1235,6 +1314,7 @@ struct ChatPanelView: View {
                 // callback see isLoadingMessages == true and drop the send.
                 messageStore.loadingSessionID = nil
                 messageStore.loadedSessionID = sessionID
+                settleAtBottom()
                 flushPendingSpecNodePrompt()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     guard messageStore.currentSessionID == sessionID else { return }
@@ -4066,12 +4146,22 @@ struct ChatPanelView: View {
     
     /// The user message the navigator should mark as current: resolved from
     /// the reported row frames against the visible viewport band.
-    private func updateCurrentVisibleUserMessage() {
-        currentUserMessageID = UserMessageNavigatorLogic.currentUserMessageID(
-            visibleRect: chatViewportFrame.height > 0 ? chatViewportFrame : nil,
+    private func updateCurrentVisibleUserMessage(snapshot: ChatScrollBridge.Snapshot? = nil) {
+        let current = snapshot ?? ChatScrollBridge.shared.currentSnapshot()
+        guard current.viewportHeight > 0 else { return }
+        // Кадры строк — в content-пространстве, поэтому видимая область —
+        // это просто [offsetY, offsetY + viewportHeight].
+        let visible = CGRect(x: 0, y: current.offsetY, width: 1, height: current.viewportHeight)
+        let resolved = UserMessageNavigatorLogic.currentUserMessageID(
+            visibleRect: visible,
             frames: userRowFrames,
             messages: displayMessages
         )
+        // Обновляем только при смене сообщения: иначе скролл перестраивал бы
+        // навигатор и весь чат на каждом кадре.
+        if currentUserMessageID != resolved {
+            currentUserMessageID = resolved
+        }
     }
 
     /// Loads one older page and keeps the reader's current question in place.
@@ -4081,6 +4171,20 @@ struct ChatPanelView: View {
         guard let sessionID = messageStore.currentSessionID else { return }
         guard !messageStore.isLoadingOlder else { return }  // Prevent cascade
         let anchorMessageID = currentUserMessageID ?? displayMessages.last(where: { $0.role == .user })?.id
+        let countBefore = messageStore.messages.count
+        // Запоминаем точку привязки ДО вставки. После подгрузки та же строка
+        // уедет вниз ровно на высоту страницы — компенсируем это смещением
+        // скролла в том же layout-проходе, без отдельного `scrollTo`.
+        let before = ChatScrollBridge.shared.currentSnapshot()
+        if let anchorMessageID, let frame = userRowFrames[anchorMessageID] {
+            pendingPaginationAnchor = PaginationAnchor(
+                messageID: anchorMessageID,
+                oldMinY: frame.minY,
+                oldOffset: before.offsetY
+            )
+        } else {
+            pendingPaginationAnchor = nil
+        }
 
         Task {
             canLoadOlderMessages = false
@@ -4093,11 +4197,16 @@ struct ChatPanelView: View {
             }
             await MainActor.run {
                 canLoadOlderMessages = messageStore.hasMoreMessages
-                guard let anchorMessageID else { return }
-                // The new page needs one layout pass before `scrollTo` can
-                // resolve the anchor row inside the lazy stack.
-                DispatchQueue.main.async {
-                    proxy.scrollTo(anchorMessageID, anchor: .top)
+                // Страница не добавилась — якорь не сдвинется, снимаем его,
+                // иначе он навсегда заблокирует prefetch.
+                if messageStore.messages.count == countBefore {
+                    pendingPaginationAnchor = nil
+                }
+                // Fallback: якорь не отчитался кадром (не user-строка).
+                if pendingPaginationAnchor == nil, let anchorMessageID {
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(anchorMessageID, anchor: .top)
+                    }
                 }
             }
         }
@@ -5220,7 +5329,9 @@ struct ChatRowFrameReporter: ViewModifier {
                 GeometryReader { geo in
                     Color.clear.preference(
                         key: ChatRowFrameKey.self,
-                        value: [rowID: geo.frame(in: .named(ChatScrollSpace.name))]
+                        // Content-relative: стабильно при скролле, меняется
+                        // только когда реально меняется контент.
+                        value: [rowID: geo.frame(in: .named(ChatScrollSpace.content))]
                     )
                 }
             )

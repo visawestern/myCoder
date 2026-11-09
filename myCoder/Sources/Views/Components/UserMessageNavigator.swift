@@ -30,14 +30,29 @@ struct UserMessageNavigator: View {
                 }
                 .accessibilityLabel("Previous message")
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 5) {
-                        ForEach(Array(userMessages.enumerated()), id: \.element.id) { index, message in
-                            navigatorButton(index: index, message: message)
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 5) {
+                            ForEach(Array(userMessages.enumerated()), id: \.element.id) { index, message in
+                                navigatorButton(index: index, message: message)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                    }
+                    // Держим текущий номер в поле зрения навигатора: при
+                    // длинном чате он иначе уезжает за границу 280pt и
+                    // «положение не видно».
+                    .onChange(of: currentMessageID) { id in
+                        guard let id else { return }
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            scrollProxy.scrollTo(id, anchor: .center)
                         }
                     }
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity)
+                    .onAppear {
+                        guard let id = currentMessageID else { return }
+                        scrollProxy.scrollTo(id, anchor: .center)
+                    }
                 }
 
                 stepButton(icon: "chevron.down",
@@ -126,7 +141,14 @@ struct UserMessageNavigator: View {
                     )
                 )
                 .overlay(
-                    Circle().stroke(Color.mimo.border.opacity(0.65), lineWidth: 0.5)
+                    Circle().stroke(
+                        isCurrent ? Color.mimo.brand : Color.mimo.border.opacity(0.65),
+                        lineWidth: isCurrent ? 1.5 : 0.5
+                    )
+                )
+                .shadow(
+                    color: isCurrent ? Color.mimo.brand.opacity(0.55) : .clear,
+                    radius: isCurrent ? 5 : 0
                 )
                 .contentShape(Circle())
         }
