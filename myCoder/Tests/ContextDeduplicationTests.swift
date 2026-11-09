@@ -96,4 +96,80 @@ struct ContextDeduplicationTests {
             in: ContextSection(title: "История чата", body: "текст")
         ) == nil)
     }
+
+    @Test("Нумерованные строки файла удаляются из повествования")
+    func numberedFileLinesMatchNarrative() {
+        // Материализатор нумерует строки кода («42 | let x = …»), а диалог
+        // цитирует ту же строку без номера — обе формы должны схлопываться.
+        let codeLine = "final class UserStore { private var cache: [String: Int] = [:] }"
+        let sections = [
+            file("Sources/UserStore.swift", "42 | \(codeLine)"),
+            ContextSection(title: "История чата", body: "описание\n\(codeLine)")
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.count == 2)
+        let history = result.sections.first { $0.title == "История чата" }
+        #expect(history?.body.contains(codeLine) == false)
+        #expect(history?.body.contains("описание") == true)
+    }
+
+    @Test("Повествование, целиком состоящее из строк файла, отбрасывается")
+    func fullyRedundantNarrativeDropped() {
+        let a = "let store = AppState.shared.store // единственная точка доступа ко всем данным приложения"
+        let b = "private func flushPendingWrites() throws { try database.commit() } // атомарный коммит"
+        let sections = [
+            file("Sources/A.swift", "110 | \(a)\n111 | \(b)"),
+            ContextSection(title: "История чата", body: "\(a)\n\(b)")
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.count == 1)
+        #expect(result.dropped.contains { $0.reason.contains("дубликат содержимого из файлов") })
+    }
+
+    @Test("Разные пути с идентичным содержимым — остаётся один блок")
+    func identicalBodyAcrossFilesDropped() {
+        let body = "одинаковый код " + String(repeating: "x", count: 80)
+        let sections = [
+            file("Sources/A.swift", body),
+            file("Sources/B.swift", body)
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.count == 1)
+        #expect(result.dropped.contains { $0.reason.contains("дубликат содержимого") })
+    }
+
+    @Test("Один и тот же путь дважды — второй блок отбрасывается")
+    func samePathTwice() {
+        let sections = [
+            file("Sources/A.swift", "struct A { let x = 1 }"),
+            file("Sources/A.swift", "struct A { let y = 2 }")
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.count == 1)
+        #expect(result.dropped.contains { $0.reason.contains("дубликат файла") })
+    }
+
+    @Test("Повествование-подмножество более раннего удаляется")
+    func semanticContainment() {
+        let sentence = "локальная модель должна собрать атомарную задачу строго по контракту refs без кода "
+        let sections = [
+            ContextSection(title: "Инструкции задачи", body: String(repeating: sentence, count: 8)),
+            ContextSection(title: "Память проекта", body: String(repeating: sentence, count: 4))
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.count == 1)
+        #expect(result.dropped.contains { $0.reason.contains("смысловой") })
+    }
+
+    @Test("Порядок секций после дедупликации сохраняется")
+    func orderPreserved() {
+        let sections = [
+            file("Sources/A.swift", "struct A {}"),
+            ContextSection(title: "История чата", body: "факт"),
+            file("Sources/A.swift", "struct A { let x = 1 }"),
+            ContextSection(title: "Скилл", body: "навык")
+        ]
+        let result = ContextDeduplication.deduplicate(sections)
+        #expect(result.sections.map(\.title) == ["Sources/A.swift", "История чата", "Скилл"])
+    }
 }

@@ -29,7 +29,15 @@ enum ContextDeduplication {
         for section in sections where filePath(in: section) != nil {
             for line in section.body.components(separatedBy: "\n") {
                 let normalized = normalize(line)
-                if normalized.count >= 60 { fileLines.insert(normalized) }
+                guard normalized.count >= 60 else { continue }
+                fileLines.insert(normalized)
+                // Материализатор нумерует строки кода («42 | let x = …»), а
+                // диалог цитирует ту же строку без номера. Запоминаем и
+                // форму без номера, иначе дубль «из диалога и из файлов»
+                // не находится.
+                if let stripped = stripLineNumberPrefix(from: normalized) {
+                    fileLines.insert(stripped)
+                }
             }
         }
 
@@ -112,6 +120,19 @@ enum ContextDeduplication {
         text.lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Снимает префикс «123 | » с нормализованной строки кода. Возвращает nil,
+    /// если строка не похожа на нумерованный блок материализатора — тогда
+    /// строка используется как есть.
+    static func stripLineNumberPrefix(from normalized: String) -> String? {
+        guard let space = normalized.firstIndex(of: " ") else { return nil }
+        let prefix = normalized[..<space]
+        guard !prefix.isEmpty, prefix.allSatisfy({ $0.isNumber }) else { return nil }
+        let rest = normalized[normalized.index(after: space)...]
+        guard rest.hasPrefix("| ") else { return nil }
+        let stripped = String(rest.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return stripped.isEmpty ? nil : stripped
     }
 
     /// Jaccard по 4-словным шинглам. Набор ограничен, чтобы не гонять десятки

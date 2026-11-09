@@ -402,7 +402,21 @@ enum TurnContextCompiler {
         let keptPaths = Set(sections.compactMap { ContextDeduplication.filePath(in: $0) })
         var seenIncluded = Set<String>()
         included = included.filter { keptPaths.contains($0) && seenIncluded.insert($0).inserted }
-        citations = citations.filter { keptPaths.contains($0.path) }
+        // Цитаты обязаны соответствовать блокам, которые реально остались в
+        // пакете: после дедупликации фильтр по пути недостаточен (секция
+        // «path — зависимость» могла быть выброшена, а её цитата имеет тот же
+        // путь). Сверяем диапазон цитаты с заголовком сохранённого блока.
+        let keptBlockHeaders = sections.compactMap { section -> String? in
+            guard ContextDeduplication.filePath(in: section) != nil else { return nil }
+            let lines = section.body.split(separator: "\n")
+            guard lines.count >= 2, lines[1].hasPrefix("### ") else { return nil }
+            return String(lines[1])
+        }
+        citations = citations.filter { citation in
+            keptBlockHeaders.contains { header in
+                header.hasPrefix("### \(citation.path):\(citation.startLine)-\(citation.endLine)")
+            }
+        }
 
         // Never trim the request to fit the evidence budget: losing the user's
         // words is worse than exceeding it. If the request alone is bigger,
