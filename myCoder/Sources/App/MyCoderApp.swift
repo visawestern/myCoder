@@ -169,14 +169,73 @@ class AppState: ObservableObject {
     /// shows the loading line while this is non-nil (mirrors
     /// `MessageStore.loadingSessionID`).
     @Published var loadingChatSessionID: String?
-    /// True while the host compiles the point context for the next send
+    /// Sessions with a context-assembly run in flight (C1). The composer line
+    /// and the send guard read the SELECTED session's entry only, so a run in
+    /// one chat never paints or blocks another chat.
+    @Published private(set) var contextCompilingSessionIDs: Set<String> = []
+    /// Current stage line per session (C1).
+    @Published private(set) var contextPreparationStages: [String: String] = [:]
+    /// Complete context-assembly journal per session (C1). The composer status
+    /// line is a spoiler over the selected chat's journal.
+    @Published var contextAssemblyLogs: [String: ContextAssemblyLogLogic.Log] = [:]
+
+    /// True while the SELECTED chat compiles its point context
     /// (user directive D1: the loader says "собираем точечный контекст").
-    @Published var isCompilingContext = false
-    @Published var contextPreparationStage = ""
-    /// The complete, honest log of the last context-assembly run. The composer
-    /// status line is a spoiler over this log: every action keeps what was
-    /// requested, how it was processed and what came back.
-    @Published var contextAssemblyLog: ContextAssemblyLogLogic.Log = .empty
+    var isCompilingContext: Bool {
+        ContextSessionStatusLogic.isCompiling(
+            compiling: contextCompilingSessionIDs,
+            selectedSessionID: selectedSession?.id
+        )
+    }
+
+    /// Current stage line of the SELECTED chat.
+    var contextPreparationStage: String {
+        ContextSessionStatusLogic.stage(
+            stages: contextPreparationStages,
+            selectedSessionID: selectedSession?.id
+        )
+    }
+
+    /// Context-assembly journal of the SELECTED chat.
+    var contextAssemblyLog: ContextAssemblyLogLogic.Log {
+        ContextSessionStatusLogic.log(
+            logs: contextAssemblyLogs,
+            selectedSessionID: selectedSession?.id
+        )
+    }
+
+    /// Begin a context-assembly run for one chat.
+    ///
+    /// Вход: `sessionID` — чат, которому принадлежит отправка.
+    /// Выход: нет; повторный вызов идемпотентен.
+    /// Зависимости: `ContextSessionStatusLogic.key`.
+    func beginContextCompilation(sessionID: String?) {
+        let key = ContextSessionStatusLogic.key(sessionID)
+        guard !key.isEmpty else { return }
+        contextCompilingSessionIDs.insert(key)
+    }
+
+    /// End a context-assembly run for one chat.
+    ///
+    /// Вход: `sessionID` — чат, в котором сборка завершилась.
+    /// Выход: нет.
+    /// Зависимости: `ContextSessionStatusLogic.key`.
+    func endContextCompilation(sessionID: String?) {
+        let key = ContextSessionStatusLogic.key(sessionID)
+        guard !key.isEmpty else { return }
+        contextCompilingSessionIDs.remove(key)
+    }
+
+    /// Store the current stage line for one chat.
+    ///
+    /// Вход: `line` — текст стадии; `sessionID` — чат сборки.
+    /// Выход: нет.
+    /// Зависимости: `ContextSessionStatusLogic.key`.
+    func setContextStage(_ line: String, sessionID: String?) {
+        let key = ContextSessionStatusLogic.key(sessionID)
+        guard !key.isEmpty else { return }
+        contextPreparationStages[key] = line
+    }
     /// Compaction that follows a model switch into a smaller context window.
     /// The chat compacts before it continues; the user can stop the
     /// compaction, roll it back, or pick a model with a larger window
@@ -351,7 +410,44 @@ class AppState: ObservableObject {
     @Published var showSettings = false
     @Published var showRemoteConnection = false
     @Published var settingsTab: SettingsTab = .general
-    @Published var currentSteps: [TaskStep] = []
+    /// Execution steps per chat (C2). The header badge and the right panel
+    /// read the SELECTED chat's steps, so a plan from chat A never appears in
+    /// chat B.
+    @Published private(set) var stepsBySessionID: [String: [TaskStep]] = [:]
+
+    /// Execution steps of the SELECTED chat.
+    var currentSteps: [TaskStep] {
+        get {
+            ContextSessionStatusLogic.steps(
+                stepsBySession: stepsBySessionID,
+                selectedSessionID: selectedSession?.id
+            )
+        }
+        set { setSteps(newValue, for: selectedSession?.id) }
+    }
+
+    /// Store execution steps for one chat.
+    ///
+    /// Вход: `steps` — шаги плана; `sessionID` — чат, которому они принадлежат.
+    /// Выход: нет.
+    /// Зависимости: `ContextSessionStatusLogic.key`.
+    func setSteps(_ steps: [TaskStep], for sessionID: String?) {
+        let key = ContextSessionStatusLogic.key(sessionID)
+        guard !key.isEmpty else { return }
+        stepsBySessionID[key] = steps
+    }
+
+    /// Execution steps of one chat, whether selected or not.
+    ///
+    /// Вход: `sessionID` — id чата.
+    /// Выход: шаги этого чата или пустой массив.
+    /// Зависимости: `ContextSessionStatusLogic.steps`.
+    func steps(for sessionID: String?) -> [TaskStep] {
+        ContextSessionStatusLogic.steps(
+            stepsBySession: stepsBySessionID,
+            selectedSessionID: sessionID
+        )
+    }
     @Published var pendingQuestionRequest: PendingQuestionRequest?
     @Published var vcsChanges: [MimoVcsFileDiff] = []
     @Published var sessionGitTotals = SessionGitTotals(additions: 0, deletions: 0)

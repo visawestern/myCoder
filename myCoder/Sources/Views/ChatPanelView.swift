@@ -2182,9 +2182,8 @@ struct ChatPanelView: View {
         let capturedParameters = ModelCallParametersStore.parameters(for: capturedModelID)
         // The context-assembly log opens with the user's own request; every
         // later action is recorded against it (user directive 2026-11-07).
-        await MainActor.run {
-            appState.beginContextAssembly(message: text, projectRoot: capturedProjectRoot)
-        }
+        // It belongs to the chat that started the turn (C1), so it opens only
+        // after the session id is known — see `sendSessionID` below.
         // A model switch into a smaller context window compacts the chat
         // before it continues: the turn waits for that compaction, otherwise
         // the history would be built from messages that are about to be
@@ -2211,12 +2210,6 @@ struct ChatPanelView: View {
                 ChatHistoryBuilder.Turn(role: roleString($0.role), content: $0.content, isFinished: $0.isFinished)
             }
         }
-        await MainActor.run {
-            appState.finishContextAction(
-                key: ContextAssemblyLogLogic.requestKey,
-                result: "История: \(priorTurnsForContext.count) ход(ов); проект: \(capturedProjectRoot.isEmpty ? "не открыт" : capturedProjectRoot)"
-            )
-        }
         // Every message collects context, including the first one in a chat
         // with an open project (user directive 2026-11-03). The send path
         // never scans the project here: it reads the already-built index, so
@@ -2232,6 +2225,21 @@ struct ChatPanelView: View {
             sessionID: turnSessionID
         )
         let sendSessionID = earlyPreparedSessionID ?? turnSessionID
+        // The context-assembly journal belongs to the chat that started the
+        // turn (C1): open it only now that the session id is known, then close
+        // the request stage with the real history/project facts.
+        await MainActor.run {
+            appState.beginContextAssembly(
+                message: text,
+                projectRoot: capturedProjectRoot,
+                sessionID: sendSessionID
+            )
+            appState.finishContextAction(
+                key: ContextAssemblyLogLogic.requestKey,
+                result: "История: \(priorTurnsForContext.count) ход(ов); проект: \(capturedProjectRoot.isEmpty ? "не открыт" : capturedProjectRoot)",
+                sessionID: sendSessionID
+            )
+        }
         let earlySendModelID = sendOptions.modelID ?? appState.effectiveSelectedModel()
         let earlySendInfo = MessageSendInfo(
             parameters: ModelCallParametersStore.parameters(for: earlySendModelID),
@@ -2294,14 +2302,18 @@ struct ChatPanelView: View {
         // the stages can no longer add up to more than five minutes.
         let contextCollectionStartedAt = Date()
         if appState.isPointContextEnabled && hasProjectForContext && needsContextPrep {
-            await MainActor.run { appState.isCompilingContext = true }
+            await MainActor.run { appState.beginContextCompilation(sessionID: sendSessionID) }
             await MainActor.run {
-                appState.contextPreparationStage = ContextStageLogLogic.line(for: .index)
+                appState.setContextStage(
+                    ContextStageLogLogic.line(for: .index),
+                    sessionID: sendSessionID
+                )
                 appState.startContextAction(
                     key: ContextAssemblyLogLogic.indexKey,
                     title: ContextAssemblyLogLogic.title(for: .index),
                     request: "Корень проекта: \(pointContextProjectRoot)",
-                    processing: ContextStageLogLogic.line(for: .index)
+                    processing: ContextStageLogLogic.line(for: .index),
+                    sessionID: sendSessionID
                 )
             }
             pointContextRecords = await Self.recordsForPointContext(projectPath: pointContextProjectRoot)
@@ -2311,22 +2323,27 @@ struct ChatPanelView: View {
                     result: pointContextRecords.isEmpty
                         ? "Индекс пуст: файлов в индексе 0."
                         : "Файлов в индексе: \(pointContextRecords.count).",
-                    status: pointContextRecords.isEmpty ? .warning : .done
+                    status: pointContextRecords.isEmpty ? .warning : .done,
+                    sessionID: sendSessionID
                 )
             }
             // Memory lives in the project database. A read failure must be
             // visible: sending without the facts the user saved would answer
             // from a wrong assumption.
             await MainActor.run {
-                appState.contextPreparationStage = ContextStageLogLogic.line(
-                    for: .memory,
-                    detail: pointContextRecords.isEmpty ? "" : "файлов в индексе: \(pointContextRecords.count)"
+                appState.setContextStage(
+                    ContextStageLogLogic.line(
+                        for: .memory,
+                        detail: pointContextRecords.isEmpty ? "" : "файлов в индексе: \(pointContextRecords.count)"
+                    ),
+                    sessionID: sendSessionID
                 )
                 appState.startContextAction(
                     key: ContextAssemblyLogLogic.memoryKey,
                     title: ContextAssemblyLogLogic.title(for: .memory),
                     request: "Память проекта: \(pointContextProjectRoot)",
-                    processing: ContextStageLogLogic.line(for: .memory)
+                    processing: ContextStageLogLogic.line(for: .memory),
+                    sessionID: sendSessionID
                 )
             }
             var memoryLoadFailed = false
@@ -2344,7 +2361,8 @@ struct ChatPanelView: View {
                     result: memoryLoadFailed
                         ? "Память проекта не прочитана: \(L.t(AppLocalizationKey.locMemoryLoadFailed))"
                         : "Чанков памяти: \(projectMemories.count).",
-                    status: memoryLoadFailed ? .warning : .done
+                    status: memoryLoadFailed ? .warning : .done,
+                    sessionID: sendSessionID
                 )
             }
 
@@ -2359,7 +2377,8 @@ struct ChatPanelView: View {
                         key: ContextAssemblyLogLogic.ledgerKey,
                         title: "Состояние задачи",
                         request: "Сессия: \(ledgerSessionID); цель: \(appState.currentSessionGoal ?? "не задана")",
-                        processing: "Читаю сохранённое состояние задачи и объединяю его с видимыми ходами"
+                        processing: "Читаю сохранённое состояние задачи и объединяю его с видимыми ходами",
+                        sessionID: sendSessionID
                     )
                 }
                 var persisted: TaskLedger?
@@ -2404,7 +2423,8 @@ struct ChatPanelView: View {
                                 ? "Состояние задачи пустое."
                                 : "Состояние задачи: \(summary.count) символов."
                         } ?? "Состояние задачи не найдено.",
-                        status: taskLedger == nil ? .warning : .done
+                        status: taskLedger == nil ? .warning : .done,
+                        sessionID: sendSessionID
                     )
                 }
             }
@@ -2431,17 +2451,20 @@ struct ChatPanelView: View {
                 )
             }
             preparedBoard = board
-            await MainActor.run { appState.isCompilingContext = true }
             // The local planner runs a local model and can take seconds — run
             // it off the main actor so the UI stays responsive while it works
             // (user directive 2026-10-29, §16.2).
             await MainActor.run {
-                appState.contextPreparationStage = ContextStageLogLogic.line(for: .planning)
+                appState.setContextStage(
+                    ContextStageLogLogic.line(for: .planning),
+                    sessionID: sendSessionID
+                )
                 appState.startContextAction(
                     key: ContextAssemblyLogLogic.planningKey,
                     title: ContextAssemblyLogLogic.title(for: .planning),
                     request: "Запрос: \(text)",
-                    processing: ContextStageLogLogic.line(for: .planning)
+                    processing: ContextStageLogLogic.line(for: .planning),
+                    sessionID: sendSessionID
                 )
             }
             // The planner spends from the shared budget too: its own 20 s and
@@ -2468,7 +2491,8 @@ struct ChatPanelView: View {
                 appState.finishContextAction(
                     key: ContextAssemblyLogLogic.planningKey,
                     result: planningOutcome.0,
-                    status: planningOutcome.1
+                    status: planningOutcome.1,
+                    sessionID: sendSessionID
                 )
             }
         }
@@ -2480,12 +2504,16 @@ struct ChatPanelView: View {
         var impactTimedOut = false
         if appState.isPointContextEnabled, hasProjectForContext, needsContextPrep {
             await MainActor.run {
-                appState.contextPreparationStage = ContextStageLogLogic.line(for: .impact)
+                appState.setContextStage(
+                    ContextStageLogLogic.line(for: .impact),
+                    sessionID: sendSessionID
+                )
                 appState.startContextAction(
                     key: ContextAssemblyLogLogic.impactKey,
                     title: ContextAssemblyLogLogic.title(for: .impact),
                     request: "Запрос: \(text)",
-                    processing: ContextStageLogLogic.line(for: .impact)
+                    processing: ContextStageLogLogic.line(for: .impact),
+                    sessionID: sendSessionID
                 )
             }
             let impactQuery = {
@@ -2531,7 +2559,8 @@ struct ChatPanelView: View {
                 appState.finishContextAction(
                     key: ContextAssemblyLogLogic.impactKey,
                     result: impactOutcome.0,
-                    status: impactOutcome.1
+                    status: impactOutcome.1,
+                    sessionID: sendSessionID
                 )
             }
         }
@@ -2551,7 +2580,8 @@ struct ChatPanelView: View {
                 key: ContextAssemblyLogLogic.systemKey,
                 title: "Системная инструкция",
                 request: "Модель: \(capturedModelID); проект: \(capturedProjectRoot.isEmpty ? "не открыт" : capturedProjectRoot); режим: \(agentMode.rawValue)",
-                processing: "Собираю правила проекта, режим работы и правила провайдера"
+                processing: "Собираю правила проекта, режим работы и правила провайдера",
+                sessionID: sendSessionID
             )
         }
         let sysPrompt = TurnDelivery.systemInstruction(
@@ -2567,13 +2597,17 @@ struct ChatPanelView: View {
                 result: sysPrompt.isEmpty
                     ? "Системная инструкция пуста."
                     : "Инструкция: \(sysPrompt.utf8.count) Б.",
-                status: sysPrompt.isEmpty ? .warning : .done
+                status: sysPrompt.isEmpty ? .warning : .done,
+                sessionID: sendSessionID
             )
         }
         // Prior turns already computed above (before any potentially heavy
         // project scan) — do not recompute.
         await MainActor.run {
-            appState.contextPreparationStage = ContextStageLogLogic.line(for: .files)
+            appState.setContextStage(
+                ContextStageLogLogic.line(for: .files),
+                sessionID: sendSessionID
+            )
         }
         // What the compiler is about to look at — captured once so the log can
         // name the real inputs of every stage.
@@ -2616,12 +2650,13 @@ struct ChatPanelView: View {
                     request = ""
                 }
                 DispatchQueue.main.async {
-                    appState.contextPreparationStage = line
+                    appState.setContextStage(line, sessionID: sendSessionID)
                     appState.startContextAction(
                         key: stage.rawValue,
                         title: ContextAssemblyLogLogic.title(for: stage),
                         request: request,
-                        processing: line
+                        processing: line,
+                        sessionID: sendSessionID
                     )
                 }
             }
@@ -2633,11 +2668,14 @@ struct ChatPanelView: View {
             )
         }
         await MainActor.run {
-            appState.contextPreparationStage = ContextStageLogLogic.doneLine(
-                fileCount: preparation.pack?.manifest.included.count ?? 0,
-                memoryCount: preparation.pack?.memoryIDs.count ?? 0,
-                hasGraph: preparation.pack?.sections.contains { $0.title == "Граф кода" } ?? false,
-                hasImpact: preparation.pack?.sections.contains { $0.title.contains("зависимостях") } ?? false
+            appState.setContextStage(
+                ContextStageLogLogic.doneLine(
+                    fileCount: preparation.pack?.manifest.included.count ?? 0,
+                    memoryCount: preparation.pack?.memoryIDs.count ?? 0,
+                    hasGraph: preparation.pack?.sections.contains { $0.title == "Граф кода" } ?? false,
+                    hasImpact: preparation.pack?.sections.contains { $0.title.contains("зависимостях") } ?? false
+                ),
+                sessionID: sendSessionID
             )
             // Close the journal: every action now has its real outcome, and
             // the skipped ones say why they were skipped.
@@ -2650,8 +2688,8 @@ struct ChatPanelView: View {
                 impactTimedOut: impactTimedOut,
                 systemPromptBytes: sysPrompt.utf8.count,
                 historyTurnCount: priorTurnsForContext.count
-            ))
-            appState.isCompilingContext = false
+            ), sessionID: sendSessionID)
+            appState.endContextCompilation(sessionID: sendSessionID)
         }
         let modelText: String
         switch route {
@@ -3104,7 +3142,7 @@ struct ChatPanelView: View {
                                     fromTodoItems: executor.loadTodoItems()
                                 )
                                 await MainActor.run {
-                                    self.appState.currentSteps = steps
+                                    self.appState.setSteps(steps, for: sendSessionID)
                                     if !steps.isEmpty { self.appState.showGoal = true }
                                 }
                             }
@@ -3387,7 +3425,7 @@ struct ChatPanelView: View {
                                 fromTodoItems: loopExecutor.loadTodoItems()
                             )
                             await MainActor.run {
-                                self.appState.currentSteps = steps
+                                self.appState.setSteps(steps, for: sessionID)
                                 if !steps.isEmpty { self.appState.showGoal = true }
                             }
                         }
@@ -3480,7 +3518,7 @@ struct ChatPanelView: View {
                         msg.isFinished = !waitingForQuestion
                         msg.isStreaming = waitingForQuestion
                     }
-                    self.syncExecutionSteps(from: merged.parts)
+                    self.syncExecutionSteps(from: merged.parts, sessionID: sessionID)
                 }
 
                 if waitingForQuestion {
@@ -5131,7 +5169,7 @@ struct ChatPanelView: View {
                         msg.isFinished = false
                         self.pauseForPendingQuestion()
                     }
-                    self.syncExecutionSteps(from: msg.parts)
+                    self.syncExecutionSteps(from: msg.parts, sessionID: sessionID)
                     return
                 }
 
@@ -5159,7 +5197,7 @@ struct ChatPanelView: View {
                     }
                     if toolName.lowercased() == "todowrite",
                        let steps = SessionPlanParser.steps(fromTodoWriteJSON: input) {
-                        appState.currentSteps = steps
+                        appState.setSteps(steps, for: sessionID)
                         appState.showGoal = true
                     }
                 case "step-start":
@@ -5170,7 +5208,7 @@ struct ChatPanelView: View {
                 default:
                     break
                 }
-                self.syncExecutionSteps(from: msg.parts)
+                self.syncExecutionSteps(from: msg.parts, sessionID: sessionID)
             }
             
         case "session.status":
@@ -5219,10 +5257,14 @@ struct ChatPanelView: View {
     }
 
     @MainActor
-    private func syncExecutionSteps(from parts: [MessagePartContent]) {
-        let synced = ExecutionStepSyncLogic.steps(from: parts, existing: appState.currentSteps)
+    private func syncExecutionSteps(from parts: [MessagePartContent], sessionID: String?) {
+        let existing = appState.steps(for: sessionID)
+        let synced = ExecutionStepSyncLogic.steps(from: parts, existing: existing)
         guard !synced.isEmpty else { return }
-        appState.currentSteps = ExecutionStepSyncLogic.mergedSteps(existing: appState.currentSteps, incoming: synced)
+        appState.setSteps(
+            ExecutionStepSyncLogic.mergedSteps(existing: existing, incoming: synced),
+            for: sessionID
+        )
         appState.showGoal = true
     }
 

@@ -13,7 +13,8 @@ struct SendContextWiringTests {
     func sendUsesCompiler() throws {
         let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
         #expect(source.contains("SendContextPreparationLogic.prepareAsync("))
-        #expect(source.contains("appState.isCompilingContext = true"))
+        #expect(source.contains("appState.beginContextCompilation(sessionID: sendSessionID)"))
+        #expect(source.contains("appState.endContextCompilation(sessionID: sendSessionID)"))
         #expect(source.contains("SendContextPreparationLogic.contextParts("))
         #expect(!source.contains("ProjectContextGatherLogic"))
     }
