@@ -31,13 +31,27 @@ struct GoalCyclePolicyTests {
         #expect(!GoalCyclePolicy.progressed(from: [], to: []))
     }
 
-    @Test("Лимит безрезультатных попыток: стоп после N подряд")
+    @Test("Лимит безрезультатных попыток: 5, стоп после N подряд")
     func stopsAfterConsecutiveFailures() {
+        // Директива: ограничение на 5 попыток при ОШИБКЕ ответа модели
+        // (503/401 и т.п.) — не при отсутствии прогресса плана.
+        #expect(GoalCyclePolicy.maxConsecutiveFailures == 5)
         let max = GoalCyclePolicy.maxConsecutiveFailures
         #expect(max > 0)
         #expect(!GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: max - 1))
         #expect(GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: max))
         #expect(GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: max + 1))
+    }
+
+    @Test("Ошибочный ответ модели опознаётся как безрезультатная попытка")
+    func failedTurnDetectsModelErrors() {
+        #expect(GoalCyclePolicy.isFailedTurn(answer: "Error: HTTP 503 Service Unavailable"))
+        #expect(GoalCyclePolicy.isFailedTurn(answer: "Error: HTTP 401 Unauthorized"))
+        #expect(GoalCyclePolicy.isFailedTurn(answer: "Error: transport failed"))
+        // Нормальный ответ модели — НЕ безрезультатная попытка, даже если
+        // план не изменился: цикл продолжается, пока не прозвучит complete.
+        #expect(!GoalCyclePolicy.isFailedTurn(answer: "Анализ завершён. Вот доказательства…"))
+        #expect(!GoalCyclePolicy.isFailedTurn(answer: "{\"complete\": true, \"notDone\": []}"))
     }
 
     @Test("Успех сбрасывает счётчик безрезультатных попыток")

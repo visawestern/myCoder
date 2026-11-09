@@ -3356,44 +3356,6 @@ struct ChatPanelView: View {
     /// ним; пока план движется (появляются done-шаги), счётчик сбрасывается
     /// и авто-цикл идёт до выполнения (директива 2026-11-09).
     private func runGoalVerification(sessionID: String?, noProgressCount: Int) async {
-        guard !GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: noProgressCount) else {
-            // Лимит безрезультатных попыток исчерпан: не оставляем цель
-            // «висеть» в active, будто она продолжается — честно ставим на
-            // паузу с причиной (директива 2026-11-09).
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let session = await MainActor.run { () -> ChatSession? in
-                guard let sessionID,
-                      let session = appState.sessions.first(where: { $0.id == sessionID }) else {
-                    return nil
-                }
-                return session
-            }
-            let context = await MainActor.run {
-                GoalContextLogic.context(
-                    chatID: sessionID,
-                    sessionDirectory: session?.directory,
-                    selectedWorkspacePath: appState.selectedWorkspace?.path
-                )
-            }
-            let goals = GoalContextLogic.visibleGoals(
-                GoalStore.load(homeDirectory: home),
-                context: context
-            )
-            if let goal = goals.first(where: { $0.state == .active }) {
-                _ = try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: home)
-                _ = try? GoalStore.setLastError(id: goal.id, error: GoalCyclePolicy.stallReason, homeDirectory: home)
-                await MainActor.run {
-                    if let sessionID {
-                        messageStore.append(
-                            Message(id: UUID().uuidString, role: .system,
-                                    content: "🎯 \(goal.title): \(GoalCyclePolicy.stallReason)",
-                                    isStreaming: false),
-                            to: sessionID)
-                    }
-                }
-            }
-            return
-        }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let session = await MainActor.run { () -> ChatSession? in
             guard let sessionID,
@@ -3413,21 +3375,42 @@ struct ChatPanelView: View {
             GoalStore.load(homeDirectory: home),
             context: context
         )
-        guard let goal = goals.first(where: { $0.state == .active }),
-              !GoalPlanStatusLogic.isComplete(goal.plan) else { return }
 
         // The turn must be fully finished: an unfinished turn has no final
         // answer to verify.
-        let answer = await MainActor.run { () -> String? in
+        let turn = await MainActor.run { () -> (answer: String, isError: Bool)? in
             guard !appState.isStreaming,
                   appState.pendingQuestionRequest?.sessionID != sessionID else { return nil }
             let messages = sessionID.flatMap { messageStore.messages(in: $0) } ?? []
             guard let last = messages.last(where: {
                 $0.role == .assistant && $0.isFinished && !$0.content.isEmpty
-            }), !last.content.hasPrefix("Error:") else { return nil }
-            return last.content
+            }) else { return nil }
+            return (last.content, GoalCyclePolicy.isFailedTurn(answer: last.content))
         }
-        guard let answer else { return }
+        guard let turn else { return }
+
+        // Ошибочный ответ модели (503/401 и т.п.) — единственная
+        // «безрезультатная попытка», к которой применяется лимит 5
+        // (директива 2026-11-09). Нормальный ответ модели никогда не
+        // приближает к остановке — даже если план не изменился.
+        if turn.isError {
+            let next = GoalCyclePolicy.failure(afterFailureCount: noProgressCount)
+            if GoalCyclePolicy.shouldStopAfterNoProgress(failureCount: next) {
+                await pauseGoalForStall(sessionID: sessionID, goals: goals, home: home)
+            } else {
+                await sendDirectly(
+                    text: GoalVerificationPromptBuilder.continuationMessage(language: appState.appLanguage),
+                    files: [],
+                    agentModeOverride: nil,
+                    sessionID: sessionID,
+                    goalVerifyDepth: next
+                )
+            }
+            return
+        }
+
+        guard let goal = goals.first(where: { $0.state == .active }),
+              !GoalPlanStatusLogic.isComplete(goal.plan) else { return }
 
         let service = GoalVerificationService { system, user in
             try await InternalModelRunner.complete(messages: [
@@ -3436,7 +3419,7 @@ struct ChatPanelView: View {
             ])
         }
         let outcome = await service.verify(
-            goal: goal, lastAssistantText: answer, language: appState.appLanguage)
+            goal: goal, lastAssistantText: turn.answer, language: appState.appLanguage)
 
         // Помечаем прогресс: план обновляется по вердикту (done для
         // подтверждённых шагов, in_progress для текущих).
@@ -3445,6 +3428,11 @@ struct ChatPanelView: View {
         _ = try? GoalStore.updatePlan(id: goal.id, plan: updatedPlan, homeDirectory: home)
         NotificationCenter.default.post(name: Notification.Name("myCoderGoalStoreChanged"), object: nil)
 
+        // Вердикт complete закрывает цель ВСЕГДА — независимо от счётчика
+        // безрезультатных попыток: последнее слово за моделью, а не за
+        // лимитом. Именно этот путь молча убивался старым guard'ом в начале
+        // функции (live-дефект 2026-11-09: dflash-анализ завершился вердиктом
+        // complete, но цель встала на паузу «лимит исчерпан»).
         if outcome.verdict.complete {
             _ = try? GoalStore.setState(id: goal.id, state: .done, homeDirectory: home)
             await MainActor.run {
@@ -3470,15 +3458,38 @@ struct ChatPanelView: View {
                     to: sessionID)
             }
         }
+        // Нормальный ответ модели — не «безрезультатная попытка»: счётчик
+        // сбрасывается при прогрессе, иначе остаётся как есть. Лимит НЕ
+        // растёт из-за того, что план не изменился (модель может работать
+        // напрямую, без todo_шагов).
+        let nextCount = progressed
+            ? GoalCyclePolicy.success(afterFailureCount: noProgressCount)
+            : noProgressCount
         await sendDirectly(
             text: continuation,
             files: [],
             agentModeOverride: nil,
             sessionID: sessionID,
-            goalVerifyDepth: progressed
-                ? GoalCyclePolicy.success(afterFailureCount: noProgressCount)
-                : GoalCyclePolicy.failure(afterFailureCount: noProgressCount)
+            goalVerifyDepth: nextCount
         )
+    }
+
+    /// Поставить активную цель на паузу с причиной стагнации (лимит 5
+    /// безрезультатных попыток подряд — ошибочные ответы модели — исчерпан).
+    private func pauseGoalForStall(sessionID: String?, goals: [UserGoal], home: URL) async {
+        guard let goal = goals.first(where: { $0.state == .active }) else { return }
+        _ = try? GoalStore.setState(id: goal.id, state: .paused, homeDirectory: home)
+        _ = try? GoalStore.setLastError(id: goal.id, error: GoalCyclePolicy.stallReason, homeDirectory: home)
+        let chatID = goal.chatID ?? sessionID
+        await MainActor.run {
+            if let chatID {
+                messageStore.append(
+                    Message(id: UUID().uuidString, role: .system,
+                            content: "🎯 \(goal.title): \(GoalCyclePolicy.stallReason)",
+                            isStreaming: false),
+                    to: chatID)
+            }
+        }
     }
 
     /// Direct OpenAI-compatible turn with real token streaming. The answer is
