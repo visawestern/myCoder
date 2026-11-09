@@ -3095,6 +3095,19 @@ struct ChatPanelView: View {
                             }
                             let toolResult = await executor.execute(item.call, userApproved: true)
                             guard !Task.isCancelled else { break }
+                            // U5: локальный todo_write/task_* пишет todos.json,
+                            // но панель обновлялась только по SSE. Читаем
+                            // сохранённый чеклист сразу после исполнения —
+                            // единый источник правды для всех путей.
+                            if TodoPanelSyncLogic.updatesChecklist(toolName: item.call.name) {
+                                let steps = TodoPanelSyncLogic.steps(
+                                    fromTodoItems: executor.loadTodoItems()
+                                )
+                                await MainActor.run {
+                                    self.appState.currentSteps = steps
+                                    if !steps.isEmpty { self.appState.showGoal = true }
+                                }
+                            }
                             if StreamDiagnostics.isEnabled {
                                 StreamDiagnostics.log(
                                     "[TOOL] \(item.call.name) result_bytes=\(toolResult.utf8.count)",
@@ -3366,7 +3379,19 @@ struct ChatPanelView: View {
                 let loopResult = await AgentToolLoopLogic.run(
                     initialText: firstResponse.textContent,
                     execute: { call in
-                        await loopExecutor.execute(call)
+                        let result = await loopExecutor.execute(call)
+                        // U5: тот же синхрон панели, что и в direct-цикле —
+                        // серверный путь здесь не участвует.
+                        if TodoPanelSyncLogic.updatesChecklist(toolName: call.name) {
+                            let steps = TodoPanelSyncLogic.steps(
+                                fromTodoItems: loopExecutor.loadTodoItems()
+                            )
+                            await MainActor.run {
+                                self.appState.currentSteps = steps
+                                if !steps.isEmpty { self.appState.showGoal = true }
+                            }
+                        }
+                        return result
                     },
                     emitToolCall: { call, result in
                         let argsText = call.arguments

@@ -130,9 +130,17 @@
 - [ ] **U4. Чат прыгает вверх/вниз** при стирании большого текста и замене его
   тулзой; остаётся пустое пространство. При автопрокрутке держать последний
   текст по центру экрана. Зацепки: автопрокрутка (`ChatScrollLogic`).
-- [ ] **U5. Todo-панель не обновляется.** После «план добавлен» (из буфера
+- [x] **U5. Todo-панель не обновляется.** После «план добавлен» (из буфера
   Clipboard_Screenshot.png) справа план не появляется/не обновляется.
   Зацепки: `todos.json` ↔ `PlanTodoBridge` ↔ UI сайдбара.
+  Сделано (2026-11-10, TDD: `TodoPanelSyncLogicTests`, 7 тестов).
+  Причина: `AppState.currentSteps` обновлялся только по SSE-событиям, а
+  локальный агентский цикл (`ProjectWebToolExecutor.todoWrite` /
+  `task_create` / `task_update`) писал `todos.json` и не трогал панель.
+  `TodoPanelSyncLogic.updatesChecklist` определяет меняющие инструменты,
+  `steps(fromTodoItems:)` превращает сохранённый чеклист в шаги. Оба
+  локальных цикла (direct и `AgentToolLoopLogic`) после исполнения читают
+  `todos.json` и обновляют `currentSteps` + `showGoal`.
 - [x] **U6. Ошибка «invalid JSON — expected a JSON array of todo objects»**
   должна выводить пример корректного форматирования.
   Сделано (раунд 3, коммит `4f0e9d7`): `todoWrite` возвращает пример
