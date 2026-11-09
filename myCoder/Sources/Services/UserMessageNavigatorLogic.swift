@@ -69,6 +69,26 @@ enum UserMessageNavigatorLogic {
     static func buttonTitle(index: Int, offset: Int = 0) -> String {
         "\(index + offset + 1)"
     }
+
+    // MARK: - Центрирование текущего сообщения (U7)
+
+    /// Пустое место сверху и снизу списка навигатора, чтобы первая и
+    /// последняя запись могли встать в центр вьюпорта (280pt), а не
+    /// прижимались к краю. Половина вьюпорта минус половина кнопки.
+    static let centeringPadding: CGFloat = 120
+
+    /// С какого количества записей список перерастает вьюпорт навигатора.
+    /// До этого отступ не нужен — он только добавил бы пустоты.
+    static let centeringPaddingThreshold = 12
+
+    /// Вертикальный отступ списка навигатора.
+    ///
+    /// Вход: `itemCount` — число user-сообщений.
+    /// Выход: `centeringPadding` для длинного списка (≥12), иначе 0.
+    /// Зависимости: нет (чистая функция).
+    static func verticalPadding(itemCount: Int) -> CGFloat {
+        itemCount >= centeringPaddingThreshold ? centeringPadding : 0
+    }
 }
 
 extension UserMessageNavigatorLogic {

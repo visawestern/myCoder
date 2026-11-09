@@ -103,4 +103,20 @@ struct UserMessageNavigatorLogicTests {
         #expect(preview.hasSuffix("…"))
         #expect(preview.count <= 101)
     }
+
+    // MARK: - U7: центрирование текущего сообщения
+
+    @Test("Длинный список получает отступ, чтобы первая/последняя запись центрировалась")
+    func longListGetsCenteringPadding() {
+        // 23+ сообщений — список выше вьюпорта навигатора (~280pt).
+        #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 23) == 120)
+        #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 12) == 120)
+    }
+
+    @Test("Короткий список не получает пустых полей")
+    func shortListHasNoPadding() {
+        #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 11) == 0)
+        #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 1) == 0)
+        #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 0) == 0)
+    }
 }

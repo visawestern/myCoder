@@ -37,21 +37,19 @@ struct UserMessageNavigator: View {
                                 navigatorButton(index: index, message: message)
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 6 + UserMessageNavigatorLogic.verticalPadding(
+                            itemCount: userMessages.count
+                        ))
                         .frame(maxWidth: .infinity)
                     }
                     // Держим текущий номер в поле зрения навигатора: при
                     // длинном чате он иначе уезжает за границу 280pt и
                     // «положение не видно».
-                    .onChange(of: currentMessageID) { id in
-                        guard let id else { return }
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            scrollProxy.scrollTo(id, anchor: .center)
-                        }
+                    .onChange(of: currentMessageID) { _ in
+                        centerCurrent(using: scrollProxy, animated: true)
                     }
                     .onAppear {
-                        guard let id = currentMessageID else { return }
-                        scrollProxy.scrollTo(id, anchor: .center)
+                        centerCurrent(using: scrollProxy, animated: false)
                     }
                 }
 
@@ -89,6 +87,29 @@ struct UserMessageNavigator: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Your messages")
+        }
+    }
+
+    /// Центрирует текущий номер во вьюпорте навигатора.
+    ///
+    /// Вход: `proxy` — прокрутка списка; `animated` — анимировать переход.
+    /// Выход: нет.
+    /// Зависимости: `currentMessageID`.
+    ///
+    /// `scrollTo` внутри `onAppear` выполняется до первого layout-прохода и
+    /// молча игнорируется — поэтому откладываем его на следующий цикл
+    /// runloop. Это и есть причина, по которой при 23+ сообщениях текущий
+    /// номер оставался за границей 280pt.
+    private func centerCurrent(using proxy: ScrollViewProxy, animated: Bool) {
+        guard let id = currentMessageID else { return }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            } else {
+                proxy.scrollTo(id, anchor: .center)
+            }
         }
     }
 
