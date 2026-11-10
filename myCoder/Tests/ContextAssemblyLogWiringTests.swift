@@ -38,7 +38,11 @@ struct ContextAssemblyLogWiringTests {
 
     @Test("Причина отсутствия пакета переживает перезагрузку чата")
     func contextSummaryIsPersisted() throws {
+        // The save path spans the bridge and its message-parts extension,
+        // so the contract is checked across both files.
         let source = try RepoRoot.sourceText("myCoder/Sources/Services/DatabaseBridge.swift")
+            + "\n"
+            + RepoRoot.sourceText("myCoder/Sources/Services/DatabaseBridge+MessageParts.swift")
         #expect(source.contains("MessageMetadataCodec.encode("))
         #expect(source.contains("contextSummary: metadata.contextSummary"))
     }

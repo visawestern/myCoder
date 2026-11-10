@@ -173,6 +173,9 @@ struct ModelEnablementRefreshTests {
         let providers = try String(
             contentsOf: root.appendingPathComponent("Sources/Views/Settings/ProvidersSettingsView.swift"),
             encoding: .utf8
+        ) + "\n" + String(
+            contentsOf: root.appendingPathComponent("Sources/Views/Settings/LocalProvidersSettingsView.swift"),
+            encoding: .utf8
         )
         // The local card reads the persisted config, not the captured value it
         // was created with.

@@ -83,7 +83,7 @@ struct ModelRoutingWiringTests {
 
     @Test("Deleting a chat clears its route journal and chat override")
     func deleteSessionCleansRoutingState() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/App/AppState+Database.swift")
+        let source = try RepoRoot.sourceText("myCoder/Sources/App/AppState+StorageMaintenance.swift")
         guard let range = source.range(of: "func deleteSessionInDatabaseUI") else {
             Issue.record("deleteSessionInDatabaseUI missing")
             return
