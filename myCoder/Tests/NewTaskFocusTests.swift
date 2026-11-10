@@ -18,7 +18,7 @@ struct NewTaskFocusTests {
 
     @Test("Empty-state prompt consumes the focus request")
     func promptFieldConsumesFocusRequest() throws {
-        let inputViews = try sourceText("myCoder/Sources/Views/Components/InputViews.swift")
+        let inputViews = try RepoRoot.inputViewsSourceText
         #expect(inputViews.contains("focusRequest: appState.inputFocusRequest"))
 
         let zeroInset = try sourceText("myCoder/Sources/Views/Components/ZeroInsetTextField.swift")

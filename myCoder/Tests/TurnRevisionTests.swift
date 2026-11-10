@@ -15,7 +15,7 @@ struct TurnRevisionTests {
         #expect(!source.contains("let needsContextPrep = !priorTurnsForContext.isEmpty"))
     }
     @Test func rawSpoilerIsReplaced() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/MessageRowView.swift")
+        let source = try RepoRoot.messageRowSourceText
         #expect(!source.contains("RawResponseSpoilerView(rawEvents:"))
         #expect(source.contains("TurnPresentation.rawText("))
         #expect(source.contains("TabView"))

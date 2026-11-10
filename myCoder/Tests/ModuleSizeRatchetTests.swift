@@ -14,15 +14,9 @@ struct ModuleSizeRatchetTests {
         "myCoder/Sources/Services/AppLocalization.swift",
         "myCoder/Sources/Services/DatabaseManager.swift",
         "myCoder/Sources/Services/MyCoderAPIServer.swift",
-        "myCoder/Sources/Services/ProjectDatabaseManager.swift",
-        "myCoder/Sources/Services/ProjectWebToolExecutor.swift",
         "myCoder/Sources/Services/WebChatDriver.swift",
         "myCoder/Sources/Services/WebToolProtocolEmulator.swift",
-        "myCoder/Sources/Views/Components/InputViews.swift",
-        "myCoder/Sources/Views/Components/MessageRowView.swift",
-        "myCoder/Sources/Views/Components/WebProvidersSection.swift",
         "myCoder/Sources/Views/Settings/ModelSettingsView.swift",
-        "myCoder/Sources/Views/SidebarView.swift",
         "myCoder/Sources/Views/SpecWizardView.swift",
     ]
 

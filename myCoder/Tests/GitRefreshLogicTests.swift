@@ -28,23 +28,80 @@ struct GitRefreshLogicTests {
         }
     }
 
+    /// Test double: an async gate that keeps the first refresh running until
+    /// the test has proved that the second call joined it. Without this the
+    /// old test raced the scheduler — the second call sometimes started only
+    /// after the first had already finished, which is a different (valid)
+    /// situation and made the suite flaky.
+    final class AsyncGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func open() {
+            lock.lock()
+            isOpen = true
+            let pending = waiters
+            waiters.removeAll()
+            lock.unlock()
+            for waiter in pending { waiter.resume() }
+        }
+
+        func wait() async {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                if isOpen {
+                    lock.unlock()
+                    continuation.resume()
+                } else {
+                    waiters.append(continuation)
+                    lock.unlock()
+                }
+            }
+        }
+    }
+
     @Test("Coalescer reuses in-flight refresh")
     func coalescerReusesInFlight() async {
         let coalescer = GitRefreshCoalescer()
         let counter = Counter()
+        let gate = AsyncGate()
 
-        async let first: Int = coalescer.run(key: "main") {
+        let first = Task { await coalescer.run(key: "main") { () -> Int in
             let n = counter.increment()
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            await gate.wait()
             return n
-        }
-        async let second: Int = coalescer.run(key: "main") {
-            return counter.increment()
-        }
+        } }
 
-        let results = await [first, second]
+        // Wait until the first refresh has really started.
+        for _ in 0..<100 where counter.count == 0 {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(counter.count == 1)
+
+        let second = Task { await coalescer.run(key: "main") { counter.increment() } }
+
+        // The second call must join the running refresh, not start its own.
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        #expect(counter.count == 1)
+
+        gate.open()
+        let results = await [first.value, second.value]
         #expect(results[0] == results[1])
         #expect(counter.count == 1)
+    }
+
+    @Test("Coalescer starts a fresh refresh after the previous one finished")
+    func coalescerStartsFreshAfterCompletion() async {
+        let coalescer = GitRefreshCoalescer()
+        let counter = Counter()
+
+        let first = await coalescer.run(key: "main") { counter.increment() }
+        let second = await coalescer.run(key: "main") { counter.increment() }
+
+        #expect(first == 1)
+        #expect(second == 2)
+        #expect(counter.count == 2)
     }
 
     @Test("Resolves session id for git refresh")

@@ -17,7 +17,7 @@ struct ChatLoadingStateTests {
 
     @Test("BottomInputBar показывает строку «Загружаем сообщения…»")
     func inputBarRendersLoadingStatusLine() throws {
-        let inputBar = try sourceText("myCoder/Sources/Views/Components/InputViews.swift")
+        let inputBar = try RepoRoot.inputViewsSourceText
         #expect(inputBar.contains("isLoadingMessages"))
         #expect(inputBar.contains("locLoadingMessages"))
         #expect(inputBar.contains("locCompilingPointContext"))

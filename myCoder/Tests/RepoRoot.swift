@@ -43,4 +43,63 @@ enum RepoRoot {
             }.joined(separator: "\n")
         }
     }
+
+    /// The whole input-bar source: the main `InputViews.swift` plus the
+    /// focused input-card modules extracted from it (audit B3 split).
+    /// Source-inspection tests assert on the composer as a unit, so moving
+    /// code into a sibling file must not hide it from them.
+    static var inputViewsSourceText: String {
+        get throws {
+            let dir = url.appendingPathComponent("myCoder/Sources/Views/Components")
+            let prefixes = ["InputViews", "CenteredInputCard", "BottomInputBar", "PendingMessageCard"]
+            let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+                .filter { name in
+                    name.hasSuffix(".swift") && prefixes.contains { name.hasPrefix($0) }
+                }
+                .sorted()
+            return try names.map {
+                try String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)
+            }.joined(separator: "\n")
+        }
+    }
+
+    /// Read every source file of one module family (the main file plus the
+    /// focused modules extracted from it). Source-inspection tests assert on a
+    /// component as a unit, so moving code into a sibling file must not hide
+    /// it from them.
+    static func sourceTextOfFamily(in directory: String, prefixes: [String]) throws -> String {
+        let dir = url.appendingPathComponent(directory)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { name in
+                name.hasSuffix(".swift") && prefixes.contains { name.hasPrefix($0) }
+            }
+            .sorted()
+        return try names.map {
+            try String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)
+        }.joined(separator: "\n")
+    }
+
+    /// The whole message-row source (main file + row parts + cards).
+    static var messageRowSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Views/Components",
+                                   prefixes: ["MessageRow", "MessageContentSegment"])
+        }
+    }
+
+    /// The whole sidebar source (main file + workspace/notification/sheet parts).
+    static var sidebarSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Views",
+                                   prefixes: ["Sidebar"])
+        }
+    }
+
+    /// The whole per-project database source (manager + its focused modules).
+    static var projectDatabaseSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Services",
+                                   prefixes: ["ProjectDatabase"])
+        }
+    }
 }

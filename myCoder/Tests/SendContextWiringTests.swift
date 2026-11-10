@@ -21,7 +21,7 @@ struct SendContextWiringTests {
 
     @Test("Пока контекст собирается, в поле ввода виден индикатор")
     func inputShowsLoader() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/InputViews.swift")
+        let source = try RepoRoot.inputViewsSourceText
         #expect(source.contains("var isCompilingContext: Bool"))
         #expect(source.contains("locCompilingPointContext"))
         #expect(source.contains("canSend: canSendNow"))
@@ -92,7 +92,7 @@ struct SendSystemPromptWiringTests {
 
     @Test("Вкладки контекста показывают системную инструкцию")
     func contextSheetShowsSystemInstruction() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/MessageRowView.swift")
+        let source = try RepoRoot.messageRowSourceText
         #expect(source.contains("TurnPresentation.inspectionTabs("))
     }
 }

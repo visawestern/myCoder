@@ -57,7 +57,7 @@ struct E26E27E28RebrandAndCleanupTests {
 
     @Test("workspace overview sheet is not titled 'Workspaces'")
     func overviewSheetNotTitledWorkspaces() throws {
-        let s = try RepoRoot.sourceText("myCoder/Sources/Views/SidebarView.swift")
+        let s = try RepoRoot.sidebarSourceText
         #expect(!s.contains("Text(\"Workspaces\")"),
                 "SidebarView still titles the overview sheet 'Workspaces'")
     }

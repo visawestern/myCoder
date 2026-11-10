@@ -25,7 +25,7 @@ struct MessageRowLayoutTests {
 
     @Test("MessageRow uses the layout logic for both roles")
     func messageRowWiresLayoutLogic() throws {
-        let source = try sourceText("myCoder/Sources/Views/Components/MessageRowView.swift")
+        let source = try RepoRoot.messageRowSourceText
         #expect(source.contains("MessageRowLayoutLogic.isTrailing"))
         #expect(source.contains("MessageRowLayoutLogic.userBubbleMaxWidth"))
         // Old detached action bar pattern (Spacer pushing actions to the far edge) must be gone.

@@ -250,7 +250,7 @@ struct TaskLedgerStoreTests {
 
     @Test("Схема ledger живёт в проектной БД, а не в отдельном хранилище")
     func schemaWiring() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Services/ProjectDatabaseManager.swift")
+        let source = try RepoRoot.projectDatabaseSourceText
         #expect(source.contains("func makeLedgerStore()"))
         let store = try RepoRoot.sourceText("myCoder/Sources/Services/TaskLedgerStore.swift")
         #expect(store.contains("task_ledgers"))

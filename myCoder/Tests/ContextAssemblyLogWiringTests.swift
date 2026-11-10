@@ -20,7 +20,7 @@ struct ContextAssemblyLogWiringTests {
 
     @Test("Композер показывает журнал раскрывающимся вверх спойлером")
     func composerShowsTheSpoiler() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/InputViews.swift")
+        let source = try RepoRoot.inputViewsSourceText
         #expect(source.contains("ContextAssemblyStatusPanel("))
         #expect(source.contains("appState.contextAssemblyLog"))
         #expect(source.contains("ContextAssemblyEntryRow("))
@@ -29,7 +29,7 @@ struct ContextAssemblyLogWiringTests {
 
     @Test("Окно «Контекст» берёт содержимое из сообщения, а не из @State")
     func contextSheetReadsTheMessage() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Components/MessageRowView.swift")
+        let source = try RepoRoot.messageRowSourceText
         #expect(source.contains("MessageContextSheetLogic.content(for: message)"))
         // Transient state is exactly what produced the empty window.
         #expect(!source.contains("compiledContextText"))
