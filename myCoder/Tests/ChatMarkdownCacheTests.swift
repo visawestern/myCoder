@@ -329,7 +329,7 @@ struct ChatMarkdownCacheTests {
         #expect(store.contains("markdownPrewarmIsLightInterface"))
         #expect(store.contains("markdownPrewarmTask?.cancel()"))
 
-        let panel = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("prepareMarkdownPrewarmProfile()"))
         #expect(panel.contains("InterfaceTypography.scaled("))
         #expect(panel.contains("CodeDisplaySettings(settings: appState.settings)"))

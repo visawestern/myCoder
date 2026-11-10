@@ -11,7 +11,7 @@ struct QualityGateWiringTests {
 
     @Test("Ход завершён — гейт адвоката дьявола вызывается из отправки")
     func sendRunsQualityGate() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("func performDirectSend("), "старое тело должно быть выделено")
         #expect(source.contains("await runAnswerQualityGate("))
         #expect(source.contains("NoStopOrderStore.setOrdered(sessionID:"))
@@ -23,7 +23,7 @@ struct QualityGateWiringTests {
 
     @Test("Авто-продолжение уходит в ту же сессию и ограничено по глубине")
     func autoContinueIsBounded() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("qualityGateDepth: Int = 0"))
         #expect(source.contains("qualityGateDepth: depth + 1"))
         #expect(source.contains("depth < AnswerQualityGate.maxAutoContinues"))

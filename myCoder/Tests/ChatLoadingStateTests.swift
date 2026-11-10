@@ -25,7 +25,7 @@ struct ChatLoadingStateTests {
 
     @Test("Загрузка в пустом чате и inline-индикатор используют ту же формулировку")
     func everyLoadingStateUsesSameWording() throws {
-        let panel = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         let emptyState = try sourceText("myCoder/Sources/Views/Components/EmptyChatStateView.swift")
         #expect(panel.contains("locLoadingMessages"))
         #expect(emptyState.contains("locLoadingMessages"))
@@ -41,13 +41,13 @@ struct ChatLoadingStateTests {
         #expect(router.contains("\"isLoadingMessages\"") || snapshots.contains("\"isLoadingMessages\""))
         let app = try sourceText("myCoder/Sources/App/MyCoderApp.swift")
         #expect(app.contains("loadingChatSessionID"))
-        let panel = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("appState.loadingChatSessionID = newID"))
     }
 
     @Test("ChatPanelView пробрасывает загрузку истории в строку состояния")
     func panelPassesLoadingFlag() throws {
-        let panel = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("isLoadingMessages: messageStore.isLoadingMessages"))
     }
 

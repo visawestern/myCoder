@@ -62,9 +62,12 @@ struct ContextCollectionBudgetTests {
     /// the planner has already used its own.
     @Test("Оба пути сбора тратят общий бюджет, а не каждый свой")
     func bothPathsSpendTheSharedBudget() throws {
-        for path in ["myCoder/Sources/Views/ChatPanelView.swift",
-                     "myCoder/Sources/Services/ContextPreviewService.swift"] {
-            let source = try RepoRoot.sourceText(path)
+        let sources: [(String, String)] = [
+            ("ChatPanelView (все модули)", try RepoRoot.chatPanelSourceText),
+            ("myCoder/Sources/Services/ContextPreviewService.swift",
+             try RepoRoot.sourceText("myCoder/Sources/Services/ContextPreviewService.swift")),
+        ]
+        for (path, source) in sources {
             #expect(source.contains("ContextCollectionBudget.stageBudget("),
                     "\(path): стадии должны брать бюджет из общего остатка")
             #expect(!source.contains("budget: .seconds(ImpactBudget.defaultBudget)"),

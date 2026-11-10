@@ -67,7 +67,7 @@ struct MessageFeedMergeTests {
 
     @Test("Reloading the same session must not clear the feed first")
     func sameSessionReloadDoesNotClear() throws {
-        let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("mergeLatestMessages"))
         // clear() must be conditional on session change, not run unconditionally before every load
         #expect(!source.contains("canLoadOlderMessages = false\n        messageStore.clear()"))

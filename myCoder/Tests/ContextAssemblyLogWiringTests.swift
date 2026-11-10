@@ -11,7 +11,7 @@ struct ContextAssemblyLogWiringTests {
 
     @Test("Отправка начинает журнал и закрывает его реальным результатом")
     func sendPathRecordsTheJournal() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("appState.beginContextAssembly("))
         #expect(source.contains("appState.startContextAction("))
         #expect(source.contains("appState.finishContextAction("))

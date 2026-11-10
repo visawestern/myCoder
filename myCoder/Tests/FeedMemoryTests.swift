@@ -62,7 +62,7 @@ struct FeedMemoryTests {
 
     @Test("Chat panel keeps the store's bottom-pin state in sync")
     func chatPanelSyncsPinState() throws {
-        let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         // Current contract: the NSScrollView bridge reports the real offset
         // (one AppKit observer, not per-frame geometry preferences), and the
         // at-bottom result is pushed into the store's pin state.

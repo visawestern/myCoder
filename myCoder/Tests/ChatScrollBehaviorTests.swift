@@ -59,7 +59,7 @@ struct ChatScrollBehaviorTests {
 
     @Test("Chat panel renders the floating scroll button and forces scroll on load")
     func chatPanelWiresScrollBehaviors() throws {
-        let source = try sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("showsScrollToBottomButton"))
         #expect(source.contains("shouldScrollOnSessionChange"))
         #expect(source.contains("ScrollToBottomButton"))

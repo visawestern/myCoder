@@ -18,7 +18,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Чат реагирует на смену модели и решает по чистой логике")
     func chatHandlesModelSwitch() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains(".onChange(of: appState.effectiveSelectedModel())"))
         #expect(source.contains("ModelSwitchCompactionLogic.notice("))
         // The candidates come from every provider — the panel does not build
@@ -28,7 +28,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Сжатие останавливается, откатывается и повторяется")
     func compactionCanBeControlled() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("stopModelSwitchCompaction"))
         #expect(source.contains("rollbackModelSwitchCompaction"))
         #expect(source.contains("retryModelSwitchCompaction"))
@@ -37,7 +37,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Отправка ждёт незавершённое сжатие перед тем, как продолжить")
     func sendWaitsForCompaction() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("await modelSwitchCompactionTask?.value"))
         #expect(source.contains("ModelSwitchCompactionLogic.blocksSend("))
     }
@@ -54,7 +54,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Выход с большим окном ищется во всех провайдерах, а не только в текущем")
     func alternativesAreCollectedAcrossProviders() throws {
-        let panel = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("appState.modelSwitchCompactionCandidates"))
 
         let state = try RepoRoot.sourceText("myCoder/Sources/App/AppState+ModelSwitchCandidates.swift")
@@ -65,15 +65,15 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Выбор модели с большим окном переключает провайдера вместе с моделью")
     func choosingAnAlternativeSwitchesTheProvider() throws {
-        let panel = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
-        #expect(panel.contains("private func chooseLargerModel(_ candidate: ModelSwitchCompactionLogic.Candidate)"))
+        let panel = try RepoRoot.chatPanelSourceText
+        #expect(panel.contains("func chooseLargerModel(_ candidate: ModelSwitchCompactionLogic.Candidate)"))
         #expect(panel.contains("appState.selectProvider(candidate.providerID)"))
         #expect(panel.contains("appState.selectModel(candidate.id)"))
     }
 
     @Test("Баннер вставлен над композером")
     func bannerSitsAboveTheComposer() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         let banner = try #require(source.range(of: "ModelSwitchCompactionBanner("))
         let composer = try #require(source.range(of: "BottomInputBar("))
         #expect(banner.lowerBound < composer.lowerBound)
@@ -110,7 +110,7 @@ struct ModelSwitchCompactionWiringTests {
         #expect(router.contains("context.compaction.chooseModel"))
         #expect(router.contains(".apiCompactionControlRequested"))
 
-        let panel = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains(".apiCompactionControlRequested"))
         #expect(panel.contains("handleAPICompactionControl"))
         #expect(panel.contains("case \"chooseModel\""))
@@ -120,7 +120,7 @@ struct ModelSwitchCompactionWiringTests {
     func summaryRequestHasItsOwnTimeout() throws {
         // The transcript is large: the default 120 s of the chat transport
         // killed the compaction before the model answered (verified live).
-        let panel = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("transport: URLSessionDirectChatTransport("))
         #expect(panel.contains("timeout: ConversationCompactionLogic.summaryRequestTimeout"))
         let logic = try RepoRoot.sourceText("myCoder/Sources/Services/ConversationCompactionLogic.swift")

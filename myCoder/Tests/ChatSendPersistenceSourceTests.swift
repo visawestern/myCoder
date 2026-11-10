@@ -6,7 +6,7 @@ import Testing
 struct ChatSendPersistenceSourceTests {
     @Test("session preparation precedes first user-message append")
     func preparationPrecedesAppend() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         let preparation = try #require(source.range(of: "let preparedSessionID: String?"))
         let append = try #require(source.range(of: "messageStore.append(userMessage)"))
         #expect(preparation.lowerBound < append.lowerBound)
@@ -14,8 +14,8 @@ struct ChatSendPersistenceSourceTests {
 
     @Test("rejected sends use the explicit persistence helper")
     func rejectedSendUsesHelper() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
-        #expect(source.contains("private func recordRejectedSend"))
+        let source = try RepoRoot.chatPanelSourceText
+        #expect(source.contains("func recordRejectedSend("))
         // Both rejection paths (connection and send validation) must go
         // through the helper, and a force-sent bubble must not be appended a
         // second time when the send is rejected.

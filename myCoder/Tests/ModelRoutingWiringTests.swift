@@ -17,7 +17,7 @@ struct ModelRoutingWiringTests {
 
     @Test("performDirectSend branches to the routed turn before the route guard")
     func routedBranchPrecedesGuard() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         guard let routedRange = source.range(of: "modelRoutingConfiguration.mode == .perRole"),
               let guardRange = source.range(of: "SendRouteGuard.errorMessage(for: route") else {
             Issue.record("Routed branch or route guard missing in ChatPanelView.swift")
@@ -29,7 +29,7 @@ struct ModelRoutingWiringTests {
 
     @Test("ChatPanelView keeps runRoutedTurn where the private streaming state lives")
     func runRoutedTurnInPanel() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("func runRoutedTurn"))
         // Compaction in per-role mode sends the locally collected history.
         #expect(source.contains("summaryTransport(for: route, sessionID:"))

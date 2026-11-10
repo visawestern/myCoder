@@ -4,7 +4,7 @@ import Testing
 @Suite("Turn model and retrieval integration")
 struct TurnPlannerWiringRegressionTests {
     @Test func plannerContextUsesActualTaskSources() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         let planner = try RepoRoot.sourceText("myCoder/Sources/Services/TurnContextPlanningService.swift")
         #expect(planner.contains("taskContext:"))
         #expect(planner.contains("graphContext:"))

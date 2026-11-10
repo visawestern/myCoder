@@ -27,4 +27,20 @@ enum RepoRoot {
     static func sourceText(_ relativePath: String) throws -> String {
         try String(contentsOf: url.appendingPathComponent(relativePath), encoding: .utf8)
     }
+
+    /// The whole chat panel source: the main file plus every focused
+    /// `ChatPanelView+…` extension module (audit B3 split). Source-inspection
+    /// tests assert on the panel as a unit, so moving code into an extension
+    /// must not hide it from them.
+    static var chatPanelSourceText: String {
+        get throws {
+            let views = url.appendingPathComponent("myCoder/Sources/Views")
+            let names = try FileManager.default.contentsOfDirectory(atPath: views.path)
+                .filter { $0.hasPrefix("ChatPanelView") && $0.hasSuffix(".swift") }
+                .sorted()
+            return try names.map {
+                try String(contentsOf: views.appendingPathComponent($0), encoding: .utf8)
+            }.joined(separator: "\n")
+        }
+    }
 }

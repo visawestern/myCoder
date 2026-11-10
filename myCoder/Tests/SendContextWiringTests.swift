@@ -11,7 +11,7 @@ struct SendContextWiringTests {
 
     @Test("Отправка компилирует контекст асинхронно и не использует старый блок")
     func sendUsesCompiler() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("SendContextPreparationLogic.prepareAsync("))
         #expect(source.contains("appState.beginContextCompilation(sessionID: sendSessionID)"))
         #expect(source.contains("appState.endContextCompilation(sessionID: sendSessionID)"))
@@ -43,7 +43,7 @@ struct SendContextWiringTests {
 
     @Test("Память проекта загружается перед компиляцией и передаётся в пакет")
     func sendPassesMemories() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("ProjectMemoryStore.loadChunks("))
         #expect(source.contains("memories: projectMemories"))
         #expect(source.contains("case .remember(let fact)"))
@@ -60,7 +60,7 @@ struct SendContextWiringTests {
 
     @Test("Без пакета кнопка «Контекст» показывает честную причину, а не фолбэк-часть")
     func noPackShowsHonestReasonInsteadOfFallback() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         // Части берутся напрямую из реального пакета (пусто, когда пакета нет).
         #expect(source.contains("let contextParts = SendContextPreparationLogic.contextParts(preparation)"))
         // Безусловная подстановка .compiledContext при пустом пакете должна
@@ -77,14 +77,14 @@ struct SendSystemPromptWiringTests {
 
     @Test("Системная инструкция передаётся в сборку контекста")
     func systemPromptReachesPreparation() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("systemPrompt: sysPrompt"))
         #expect(source.contains("skillsDirectory:"))
     }
 
     @Test("Пакет строится после системной инструкции, а не до неё")
     func systemPromptIsBuiltBeforePreparation() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         let sysIndex = try #require(source.range(of: "let sysPrompt = TurnDelivery.systemInstruction("))
         let prepIndex = try #require(source.range(of: "SendContextPreparationLogic.prepareAsync("))
         #expect(sysIndex.lowerBound < prepIndex.lowerBound)

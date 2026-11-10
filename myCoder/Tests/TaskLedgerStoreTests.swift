@@ -240,7 +240,7 @@ struct TaskLedgerStoreTests {
 
     @Test("Отправка строит и сохраняет ledger, а ветки провайдеров его используют")
     func sendWiring() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("TaskLedgerExtraction.build("))
         #expect(source.contains("TaskLedgerStore.load("))
         #expect(source.contains("TaskLedgerStore.save(taskLedger)"))

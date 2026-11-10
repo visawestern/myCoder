@@ -24,7 +24,7 @@ struct ContextPreviewBudgetTests {
 
     @Test("Проводка отправки тоже под бюджетом — оба пути одинаковы")
     func sendUsesTheSameBudget() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("ImpactBudget.runSync("))
         #expect(source.contains("ImpactAnalyzer.report("))
     }

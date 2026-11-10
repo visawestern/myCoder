@@ -9,7 +9,7 @@ struct TurnRevisionTests {
         #expect(payload == "## Системная инструкция\nrules\n\n## Точечный контекст\nfacts\n\n## Запрос пользователя\ndo it")
     }
     @Test func sendWiringUsesInternalPlannerAndProgress() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ChatPanelView.swift")
+        let source = try RepoRoot.chatPanelSourceText
         #expect(source.contains("TurnContextPlanningService.plan("))
         #expect(source.contains("contextPreparationStage"))
         #expect(!source.contains("let needsContextPrep = !priorTurnsForContext.isEmpty"))

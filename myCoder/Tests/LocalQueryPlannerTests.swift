@@ -338,13 +338,7 @@ struct LocalQueryPlannerTests {
         )
         #expect(settingsSource.contains("locLocalQueryPlanner"))
 
-        let chatSource = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Sources/Views/ChatPanelView.swift"),
-            encoding: .utf8
-        )
+        let chatSource = try RepoRoot.chatPanelSourceText
         #expect(chatSource.contains("isLocalQueryPlannerEnabled"))
         #expect(chatSource.contains("TurnContextPlanningService.plan("))
         let planningSource = try RepoRoot.sourceText("myCoder/Sources/Services/TurnContextPlanningService.swift")
