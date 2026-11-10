@@ -100,3 +100,25 @@ task       args: {"description", "prompt", "subagentType"}
 собирается и показывается по вкладкам; однострочный лог стадий эмитится;
 тулы с параметрами уходят в системной инструкции; вход в веб-провайдера и
 `browser_fetch` через движок работают. Гейт адвоката дьявола раунда 4: **95**.
+
+## 5. Аутентификация API (аудит A1, 2026-11-10)
+
+С 10.11.2026 локальный API требует Bearer-токен (`~/.mycoder/api-token`,
+права 0600). Примеры:
+
+```bash
+# Без токена → 403
+curl -i http://127.0.0.1:8766/api/state
+
+# С токеном → 200
+curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
+  http://127.0.0.1:8766/api/state
+
+# Токен + браузерный Origin → 403
+curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
+  -H "Origin: http://evil.example" http://127.0.0.1:8766/api/state
+
+# Токен + чужой Host (DNS-rebinding) → 403
+curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
+  -H "Host: evil.example:8766" http://127.0.0.1:8766/api/state
+```
