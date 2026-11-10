@@ -12,12 +12,8 @@ struct ModuleSizeRatchetTests {
     private static let overBudget: Set<String> = [
         "myCoder/Sources/App/MyCoderApp.swift",
         "myCoder/Sources/Services/AppLocalization.swift",
-        "myCoder/Sources/Services/DatabaseManager.swift",
-        "myCoder/Sources/Services/MyCoderAPIServer.swift",
         "myCoder/Sources/Services/WebChatDriver.swift",
-        "myCoder/Sources/Services/WebToolProtocolEmulator.swift",
         "myCoder/Sources/Views/Settings/ModelSettingsView.swift",
-        "myCoder/Sources/Views/SpecWizardView.swift",
     ]
 
     private static let moduleBudget = 600

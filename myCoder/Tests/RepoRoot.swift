@@ -102,4 +102,12 @@ enum RepoRoot {
                                    prefixes: ["ProjectDatabase"])
         }
     }
+
+    /// The whole local API server source (main file + focused route modules).
+    static var apiServerSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Services",
+                                   prefixes: ["MyCoderAPIServer"])
+        }
+    }
 }

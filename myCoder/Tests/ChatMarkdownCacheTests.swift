@@ -337,7 +337,7 @@ struct ChatMarkdownCacheTests {
 
     @Test("API отдаёт счётчики кэша для живого замера")
     func apiExposesCacheStats() throws {
-        let server = try RepoRoot.sourceText("myCoder/Sources/Services/MyCoderAPIServer.swift")
+        let server = try RepoRoot.apiServerSourceText
         #expect(server.contains("/api/markdown-perf"))
         #expect(server.contains("statsSnapshot().dictionary"))
     }

@@ -36,7 +36,7 @@ struct ContextPreviewBudgetTests {
     /// projects even though the pipeline itself is bounded and correct.
     @Test("Дедлайн предпросмотра не меньше суммы внутренних бюджетов")
     func previewDeadlineCoversInternalBudgets() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Services/MyCoderAPIServer.swift")
+        let source = try RepoRoot.apiServerSourceText
         // The deadline must be a named constant, not an inline literal.
         #expect(source.contains("contextPreviewDeadline"))
         #expect(!source.contains("semaphore.wait(timeout: .now() + 60)")

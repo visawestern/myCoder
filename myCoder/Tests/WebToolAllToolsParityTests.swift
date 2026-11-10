@@ -75,13 +75,27 @@ struct WebToolAllToolsParityTests {
 
     @Test("Исходный U3 read_symbol исполняется на реальном файле проекта")
     func reportedReadSymbolCallExecutes() async throws {
+        // The code index verifies the file hash before it shows a symbol, so
+        // the index has to match the bytes on disk. A throwaway project keeps
+        // that precondition deterministic: the test owns both the file and
+        // its index, and does not depend on the state of the machine's repo.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("read-symbol-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
         let source = """
-        <tool_call>{"name": "read_symbol", "args": {"path": "myCoder/Sources/Services/WebToolProtocolEmulator.swift", "name": "parseToolCalls"}}</tool_call>
+        enum Sample {
+            static func parseToolCalls() -> Int { 1 }
+        }
         """
-        let calls = WebToolProtocolEmulator.parseToolCalls(from: source)
-        let call = try #require(calls.first)
+        try source.write(to: root.appendingPathComponent("Sample.swift"),
+                         atomically: true,
+                         encoding: .utf8)
+
+        let call = WebToolCall(name: "read_symbol",
+                               arguments: ["path": "Sample.swift", "name": "parseToolCalls"])
         let executor = ProjectWebToolExecutor(
-            projectRoot: RepoRoot.url.path,
+            projectRoot: root.path,
             accessLevel: .fullAccess
         )
         let result = await executor.execute(call)
