@@ -15,9 +15,9 @@
 | A4 | KeychainManager на деле UserDefaults | ✅ Закрыт | настоящий Keychain (Security.framework) + ленивая миграция из UserDefaults; 4 новых теста + 69 связанных GREEN |
 | A5 | Full access: bash без защиты от разрушительных команд | ✅ Закрыт | `DestructiveCommandGuard` (rm -rf /~/system, mkfs/dd/diskutil, reboot/shutdown, fork-бомбы) встроен в ProjectShellRunner; 6 тестов GREEN |
 | B1 | API: одна очередь, ожидания до 11 минут, гонки | ✅ Закрыт (ядро) | тяжёлые POST/долгие GET вынесены на отдельную `actionQueue` (`isHeavyRoute`); быстрые чтения больше не блокируются на 660с; 3 новых теста; остаточная синхронность через semaphore сохранена намеренно |
-| B2 | AppState не @MainActor | ⏳ Открыт | массовый рефактор |
-| B3 | God-файлы (ChatPanelView 5613 стр.) | ⏳ Открыт | требует поэтапного выноса |
-| B4 | Две реализации БД | ⏳ Открыт | требует аудита DatabaseBridge |
+| B2 | AppState не @MainActor | ⏳ Открыт | массовый рефактор; требует отдельной большой сессии с GUI-прогоном |
+| B3 | God-файлы (ChatPanelView 5613 стр., performDirectSend 1563 стр.) | ⏳ Открыт | частичный вынос уже сделан (Routing/Compaction helpers); полная декомпозиция требует живой проверки GUI |
+| B4 | Две реализации БД | ✅ Факт-проверка | подтверждено НЕ две параллельные реализации, а слои: DatabaseManager (общий SQLite) + ProjectDatabaseManager (per-project) + DatabaseBridge (фасад для AppState); дублирование частичное, единой гонки нет |
 | C1 | Тесты читают исходники (33 файла) | ⏳ Открыт | осознанный стиль; частично сохраняем |
 | C2 | Нет CI | ✅ Закрыт частично | `.github/workflows/ci.yml` (build+test); README/.gitignore/Package.resolved уже есть |
 | D1 | Веб-провайдеры: ToS-риск | ⏳ Открыт | решение человека |
