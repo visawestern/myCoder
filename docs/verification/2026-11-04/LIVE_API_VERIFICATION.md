@@ -103,22 +103,13 @@ task       args: {"description", "prompt", "subagentType"}
 
 ## 5. Аутентификация API (аудит A1, 2026-11-10)
 
-С 10.11.2026 локальный API требует Bearer-токен (`~/.mycoder/api-token`,
-права 0600). Примеры:
+Изначально был добавлен Bearer-токен (`~/.mycoder/api-token`). **По решению
+владельца 10.11.2026 ключ доступа удалён полностью**: локальный API снова
+принимает запросы без заголовка авторизации. Файл токена и код проверки
+(`APIRequestGuard.swift`) удалены из проекта.
 
 ```bash
-# Без токена → 403
+# Работает без токена
 curl -i http://127.0.0.1:8766/api/state
-
-# С токеном → 200
-curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
-  http://127.0.0.1:8766/api/state
-
-# Токен + браузерный Origin → 403
-curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
-  -H "Origin: http://evil.example" http://127.0.0.1:8766/api/state
-
-# Токен + чужой Host (DNS-rebinding) → 403
-curl -i -H "Authorization: Bearer $(cat ~/.mycoder/api-token)" \
-  -H "Host: evil.example:8766" http://127.0.0.1:8766/api/state
 ```
+

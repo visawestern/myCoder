@@ -36,7 +36,7 @@
 | Платформа | macOS 13+, нативный SwiftUI/AppKit/WebKit |
 | Сборка | `swift build`, `swift test`, `./build-app.sh` (сборка .app) |
 | Хранилище | SQLite `.db` с WAL; глобальная БД `~/.mycoder/mycoder.db`; проектная `<project>/.mycoder/project.db`; резервный фолбэк `~/.mycoder/projects/<stable-hash>/project.db` |
-| Безопасность | Гейты AccessLevel; `run_command` ограничен; экранирование shell-аргументов; Keychain для ключей |
+| Безопасность | Гейты AccessLevel; `run_command` ограничен; экранирование shell-аргументов. Ключи провайдеров хранятся в настройках программы (UserDefaults) — **Keychain и ключ доступа к локальному API удалены по решению владельца (10.11.2026)** |
 | Локализация | 10 языков (en, ru, es, fr, de, zh, ja, ko, pt, ar) |
 | Тесты | >2200 `@Test` в >350 суитах; все зелёные |
 | Приватность | Локальное хранилище по умолчанию; провайдерские данные — только при подключении |

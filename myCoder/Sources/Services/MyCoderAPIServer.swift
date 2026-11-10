@@ -22,7 +22,6 @@ final class MyCoderAPIServer {
     /// Быстрые GET-чтения остаются на `queue` и не ждут долгие POST
     /// (ожидания в обработчиках доходят до 660 с).
     private let actionQueue = DispatchQueue(label: "mycoder.api.actions", qos: .userInitiated)
-    private let apiToken = APITokenStore.loadOrCreate()
     private(set) var port: Int = 0
     
     static func appendLog(_ message: String) {
@@ -118,14 +117,6 @@ final class MyCoderAPIServer {
             }
 
             let header = String(decoding: buffer.prefix(upTo: headerRange.lowerBound), as: UTF8.self)
-            let headers = APIRequestGuard.parseHeaders(header)
-            if case .forbidden(let reason) = APIRequestGuard.validate(headers: headers,
-                                                                       token: self.apiToken,
-                                                                       port: Self.fixedPort) {
-                Self.appendLog("API request rejected: \(reason)")
-                self.sendResponse(Self.forbiddenResponse(), on: connection)
-                return
-            }
             let contentLength = Self.contentLength(in: header)
             let bodyStart = headerRange.upperBound
             let available = buffer.count - bodyStart
@@ -196,11 +187,6 @@ final class MyCoderAPIServer {
 
     private func payloadTooLarge() -> String {
         return "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\n\r\n{\"error\":\"request body exceeds 4 MB\"}"
-    }
-
-    private static func forbiddenResponse() -> String {
-        let body = "{\"error\":\"forbidden\"}"
-        return "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
     }
 
     private func routeRequest(method: String, path: String, body: String, query: String = "") -> String {
