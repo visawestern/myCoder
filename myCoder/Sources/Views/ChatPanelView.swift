@@ -37,7 +37,7 @@ private struct PaginationAnchor {
     let oldOffset: CGFloat
 }
 
-private struct PreparedLocalToolCall {
+struct PreparedLocalToolCall {
     let call: WebToolCall
     let callID: String
     let validationError: WebToolValidationError?
@@ -53,7 +53,7 @@ private struct PreparedLocalToolCall {
 
 struct ChatPanelView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var messageStore = MessageStore()
+    @StateObject var messageStore = MessageStore()
     @StateObject private var messageQueue = MessageQueue()
     @StateObject private var attachmentStore = MessageAttachmentStore()
     @State private var messageText = ""
@@ -62,7 +62,7 @@ struct ChatPanelView: View {
     @State private var composerHoldsQueuedMessage = false
     @State private var showFilePicker = false
     @State private var streamingText = ""
-    @State private var currentAssistantMessageID: String?
+    @State var currentAssistantMessageID: String?
     @State private var currentTask: Task<Void, Never>?
     @State private var previousSessionID: String?
     @State private var isChatBottomVisible = true
@@ -110,7 +110,7 @@ struct ChatPanelView: View {
     @State private var highlightClearTask: Task<Void, Never>?
     @State private var focusLoadingTask: Task<Void, Never>?
     @State private var draftSaveTask: Task<Void, Never>?
-    @State private var serveTimeoutTask: Task<Void, Never>?
+    @State var serveTimeoutTask: Task<Void, Never>?
     @State private var isCompacting = false
     /// Task of the automatic compaction that follows a model switch into a
     /// smaller context window. It is kept here so the user can stop it and
@@ -134,7 +134,7 @@ struct ChatPanelView: View {
     /// default, expand on tap). Persisted so the choice survives restarts.
     @AppStorage("mycoder.webBrowserPanelExpanded") private var webBrowserPanelExpanded = false
     #endif
-    private let sseClient = SSEClient()
+    let sseClient = SSEClient()
     private let db = DatabaseManager.shared
     
     var body: some View {
@@ -3946,79 +3946,7 @@ struct ChatPanelView: View {
     /// written into its own chat's feed as it arrives, so switching chats no
     /// longer hides the text until the whole response is ready. Providers that
     /// reject `stream: true` fall back to the plain request.
-    private func streamDirectChat(
-        baseURL: String,
-        apiKey: String?,
-        model: String,
-        messages: [DirectChatMessage],
-        parameters: ModelCallParameters,
-        assistantID: String,
-        timelineParts: [MessagePartContent]
-    ) async throws -> DirectChatResult {
-        do {
-            return try await DirectChatStreamer.stream(
-                baseURL: baseURL,
-                apiKey: apiKey,
-                model: model,
-                messages: messages,
-                parameters: parameters
-            ) { update in
-                let reasoning = update.reasoning.isEmpty ? nil : update.reasoning
-                self.messageStore.update(id: assistantID) { msg in
-                    if !update.content.isEmpty {
-                        msg.content = update.content
-                    }
-                    if let reasoning {
-                        msg.reasoning = reasoning
-                        if msg.reasoningStartedAt == nil {
-                            msg.reasoningStartedAt = Date()
-                        }
-                    }
-                    msg.parts = AssistantTurnPartsLogic.directStreamingParts(
-                        timeline: timelineParts,
-                        reasoning: reasoning,
-                        answer: update.content
-                    )
-                    msg.isStreaming = true
-                }
-            }
-        } catch let error as DirectChatError {
-            // A provider that does not implement SSE answers 400/405/422/501.
-            if case .http(let status, _) = error,
-               [400, 405, 422, 501].contains(status) {
-                return try await DirectChatClient.send(
-                    baseURL: baseURL,
-                    apiKey: apiKey,
-                    model: model,
-                    messages: messages,
-                    parameters: parameters
-                )
-            }
-            throw error
-        }
-    }
-
-    private func startServeTimeout(assistantID: String) {
-        serveTimeoutTask?.cancel()
-        serveTimeoutTask = Task {
-            try? await Task.sleep(nanoseconds: 90_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard self.appState.isLoading,
-                      self.currentAssistantMessageID == assistantID else { return }
-                self.sseClient.disconnect()
-                self.appState.isLoading = false
-                self.appState.isStreaming = false
-                self.messageStore.update(id: assistantID) { msg in
-                    msg.content = "The local agent did not finish this request within 90 seconds. Check MiMo Serve and try again."
-                    msg.isFinished = true
-                    msg.isStreaming = false
-                }
-                self.currentAssistantMessageID = nil
-                self.serveTimeoutTask = nil
-            }
-        }
-    }
+    // (streamDirectChat / startServeTimeout moved to ChatPanelView+ToolLoop.swift — audit B3)
 
     /// One assistant message can have several gated calls. They are all
     /// registered and rendered before the loop starts awaiting them, so the
@@ -4103,212 +4031,16 @@ struct ChatPanelView: View {
         }
     }
 
-    private func subagentLauncher(
-        projectRoot: String,
-        transport: SubagentRunner.Transport,
-        sessionID: String?
-    ) -> (String, String) async -> String {
-        let parentSessionID = sessionID
-            ?? messageStore.currentSessionID
-            ?? appState.selectedSession?.id
-            ?? ""
-        let projectKey = appState.selectedWorkspace?.id ?? ChatSession.standaloneProjectKey
-        let directory = appState.selectedWorkspace?.path ?? ChatSession.standaloneProjectKey
-        let context = SubagentRunner.Context(
-            parentSessionID: parentSessionID,
-            projectKey: projectKey,
-            directory: directory,
-            projectRoot: projectRoot,
-            transport: transport
-        )
-        return { description, prompt in
-            await SubagentRunner.launch(description: description, prompt: prompt, context: context)
-        }
-    }
-
-    private func prepareLocalToolCalls(
-        _ calls: [WebToolCall],
-        modelContext: String,
-        projectRoot: String,
-        accessLevel: AccessLevel,
-        agentMode: AgentMode
-    ) -> [PreparedLocalToolCall] {
-        calls.map { call in
-            let callID = UUID().uuidString
-            var validationError = WebToolProtocolEmulator.validate(
-                call, projectRoot: projectRoot, accessLevel: accessLevel
-            )
-            if call.arguments["__mycoder_truncated"] == "1", validationError == nil {
-                validationError = .incompleteJSON
-            }
-            // Plan/Compose modes are read-only: mutating tools are refused
-            // right away, without a security prompt (user directive
-            // 2026-10-30, extended to compose 2026-11-05).
-            var denialReason: String?
-            if case .deny(let reason) = PlanModeToolPolicy.decision(
-                for: call, mode: agentMode
-            ) {
-                denialReason = reason
-            }
-            var approval: PendingToolApproval?
-            if case .pathEscapesProject(let path) = validationError {
-                // The path lies outside the project folder. The user is asked
-                // for access instead of dead-ending the call with a validation
-                // error the model can only apologize about.
-                approval = PendingToolApproval(
-                    callID: callID,
-                    tool: call.name,
-                    message: OutOfProjectAccessLogic.approvalMessage(
-                        tool: call.name,
-                        path: path,
-                        projectRoot: projectRoot
-                    ),
-                    accessGrant: OutOfProjectAccessLogic.grantRoot(forPath: path)
-                )
-            } else if validationError == nil,
-                      !PlanModeToolPolicy.bypassesApproval(for: call, mode: agentMode),
-                      WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
-                let details = WebToolApprovalDetails(
-                    call: call,
-                    projectRoot: projectRoot,
-                    modelContext: modelContext
-                )
-                approval = PendingToolApproval(
-                    callID: callID,
-                    tool: call.name,
-                    message: details.formattedMessage
-                )
-            }
-            return PreparedLocalToolCall(
-                call: call,
-                callID: callID,
-                validationError: validationError,
-                approval: denialReason == nil ? approval : nil,
-                denialReason: denialReason
-            )
-        }
-    }
-
-    /// Outcome of an out-of-project access request.
-    private enum OutOfProjectAccessOutcome {
-        case allowed(grantedRoots: [String])
-        case denied(message: String)
-        case notApplicable
-    }
+    // (subagentLauncher / prepareLocalToolCalls / OutOfProjectAccessOutcome moved to ChatPanelView+ToolLoop.swift — audit B3)
 
     /// Ask the user for access to a folder outside the project folder.
     ///
     /// A path outside the project is not a dead end: the user decides. An
     /// approved grant lets the call run, a refusal is reported back to the
     /// model as a denial (so it stops retrying and asks the user instead).
-    @MainActor
-    private func resolveOutOfProjectAccess(
-        _ item: PreparedLocalToolCall,
-        assistantID: String
-    ) async -> OutOfProjectAccessOutcome {
-        guard case .pathEscapesProject(let path)? = item.validationError else {
-            return .notApplicable
-        }
-        guard let approval = item.approval else { return .notApplicable }
-        let approved = await awaitLocalToolApproval(approval, assistantID: assistantID)
-        guard !Task.isCancelled else { return .notApplicable }
-        guard approved else {
-            return .denied(message: OutOfProjectAccessLogic.denialMessage(
-                tool: item.call.name,
-                path: path
-            ))
-        }
-        return .allowed(grantedRoots: [approval.accessGrant].compactMap { $0 })
-    }
-
-    @MainActor
-    private func enqueueLocalToolApprovals(
-        _ approvals: [PendingToolApproval],
-        assistantID: String
-    ) {
-        guard !approvals.isEmpty else { return }
-        let sessionID = messageStore.currentSessionID
-            ?? appState.selectedSession?.id
-            ?? ""
-        let sessionTitle = appState.sessions.first(where: { $0.id == sessionID })?.title
-            ?? appState.selectedSession?.title
-            ?? "myCoder"
-        for approval in approvals {
-            ToolApprovalCenter.shared.register(
-                approval,
-                sessionID: sessionID,
-                assistantID: assistantID
-            )
-            appState.notificationService.add(AppNotification(
-                id: approval.id,
-                title: "Tool approval needed",
-                message: "\(approval.tool) is waiting in \(sessionTitle). Allow or deny it in the chat.",
-                type: .warning,
-                action: sessionID.isEmpty
-                    ? nil
-                    : .openMessage(sessionID: sessionID, messageID: assistantID)
-            ))
-        }
-        messageStore.update(id: assistantID) { msg in
-            let existing = Set(msg.pendingApprovals.map(\.id))
-            msg.pendingApprovals.append(contentsOf: approvals.filter { !existing.contains($0.id) })
-            msg.isStreaming = true
-        }
-        MyCoderAPIServer.appendLog(
-            "⏸ queued local tool approvals: " + approvals.map { "\($0.tool) id=\($0.id)" }.joined(separator: ", ")
-        )
-        playLocalApprovalSound()
-    }
-
-    @MainActor
-    private func awaitLocalToolApproval(
-        _ approval: PendingToolApproval,
-        assistantID: String
-    ) async -> Bool {
-        let approved = await ToolApprovalCenter.shared.awaitVerdict(id: approval.id)
-        messageStore.update(id: assistantID) { msg in
-            msg.pendingApprovals.removeAll { $0.id == approval.id }
-            msg.isStreaming = true
-        }
-        appState.notificationService.remove(approval.id)
-        MyCoderAPIServer.appendLog(
-            "⏸ local tool approval resolved: \(approval.tool) approved=\(approved) id=\(approval.id)"
-        )
-        return approved
-    }
-
-    @MainActor
-    private func reattachPendingApprovals(sessionID: String) {
-        let assistantIDs = Set(
-            messageStore.messages
-                .filter { $0.role == .assistant }
-                .map(\.id)
-        )
-        let grouped = ToolApprovalCenter.shared.pendingApprovals(matchingAssistantIDs: assistantIDs)
-        guard !grouped.isEmpty else { return }
-        messageStore.setPendingApprovals(grouped)
-    }
-
-    @MainActor
-    private func publishToolParts(
-        _ parts: [MessagePartContent],
-        assistantID: String,
-        content: String? = nil
-    ) {
-        messageStore.update(id: assistantID) { msg in
-            msg.parts = parts
-            if let content { msg.content = content }
-            msg.isStreaming = true
-        }
-    }
-
-    private func playLocalApprovalSound() {
-        if let sound = NSSound(named: NSSound.Name("Glass")) {
-            sound.play()
-        } else {
-            NSSound.beep()
-        }
-    }
+    // (resolveOutOfProjectAccess / enqueueLocalToolApprovals /
+    //  awaitLocalToolApproval / reattachPendingApprovals / publishToolParts /
+    //  playLocalApprovalSound moved to ChatPanelView+ToolLoop.swift — audit B3)
 
     func stopGeneration() {
         stopGeneration(cancelQueued: true)
