@@ -187,44 +187,17 @@ enum GitHubCLIService {
         stdin: String?,
         timeout: TimeInterval
     ) -> CommandResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        if let currentDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory)
+        let r = BoundedProcessRunner.run(executable: executable,
+                                         arguments: arguments,
+                                         workingDirectory: currentDirectory,
+                                         timeout: timeout,
+                                         standardInputText: stdin)
+        if let e = r.launchError { return CommandResult(exitCode: -1, output: e) }
+        if r.timedOut {
+            return CommandResult(exitCode: -1,
+                                 output: "Command timed out: \(executable) \(arguments.joined(separator: " "))")
         }
-
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = outputPipe
-
-        if let stdin, let data = stdin.data(using: .utf8) {
-            let stdinPipe = Pipe()
-            process.standardInput = stdinPipe
-            stdinPipe.fileHandleForWriting.write(data)
-            stdinPipe.fileHandleForWriting.closeFile()
-        }
-
-        do {
-            try process.run()
-        } catch {
-            return CommandResult(exitCode: -1, output: error.localizedDescription)
-        }
-
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .utility).async {
-            process.waitUntilExit()
-            group.leave()
-        }
-        if group.wait(timeout: .now() + timeout) == .timedOut {
-            process.terminate()
-            return CommandResult(exitCode: -1, output: "Command timed out: \(executable) \(arguments.joined(separator: " "))")
-        }
-
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return CommandResult(exitCode: process.terminationStatus, output: output)
+        return CommandResult(exitCode: r.exitCode,
+                             output: r.output.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }

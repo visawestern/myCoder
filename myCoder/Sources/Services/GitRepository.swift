@@ -151,42 +151,18 @@ struct GitRepository {
 
     @discardableResult
     static func run(_ arguments: [String], in directory: String, timeout: TimeInterval = 20) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: directory)
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        try process.run()
-
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            process.waitUntilExit()
-            group.leave()
-        }
-
-        let waitResult = group.wait(timeout: .now() + timeout)
-        if waitResult == .timedOut {
-            process.terminate()
-            process.waitUntilExit()  // Ensure process fully exits before reading status
-            throw GitCommandError.commandFailed("Git command timed out")
-        }
-
-        let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-
-        guard process.terminationStatus == 0 else {
-            let message = err.trimmingCharacters(in: .whitespacesAndNewlines)
-            let fallback = out.trimmingCharacters(in: .whitespacesAndNewlines)
+        let r = BoundedProcessRunner.run(executable: "/usr/bin/git",
+                                         arguments: arguments,
+                                         workingDirectory: directory,
+                                         timeout: timeout)
+        if let launchError = r.launchError { throw GitCommandError.commandFailed(launchError) }
+        if r.timedOut { throw GitCommandError.commandFailed("Git command timed out") }
+        guard r.exitCode == 0 else {
+            let message = r.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             throw GitCommandError.commandFailed(message.isEmpty ? fallback : message)
         }
-
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func normalizePath(_ path: String) -> String {

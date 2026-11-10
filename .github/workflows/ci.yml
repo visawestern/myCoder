@@ -1,0 +1,26 @@
+# CI for myCoder (audit C2, 2026-11-10): builds the package and runs the
+# full unit suite on every push/PR. Live (network/AppKit-dependent) suites are
+# opt-in via env flags and stay disabled here by default.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test --no-parallel
+        env:
+          # Offline by default; live suites require manual opt-in.
+          MYCODER_LIVE_TESTS: ""
+          MYCODER_LIVE_ROUTING: ""
+          MIMO_LIVE_TESTS: ""

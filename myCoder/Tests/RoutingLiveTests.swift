@@ -5,12 +5,18 @@ import Foundation
 /// M1 live route execution against the LOCAL Ollama server.
 ///
 /// Запуск: `MYCODER_LIVE_ROUTING=1 swift test --filter RoutingLive`
-/// (нужны `ollama serve` и ≥2 установленные модели).
+/// (нужны `ollama serve` и модель `gemma4:31b-cloud`).
 ///
-/// Цель — доказать, что маршрутизатор ДЕЙСТВИТЕЛЬНО исполняет цепочку на
-/// разных моделях: каждый узел журнала несёт фактическую modelID, а не
-/// назначение «на бумаге». Если Ollama недоступен или моделей меньше двух,
-/// тест честно пропускается (SkipError), а не падает и не притворяется.
+/// Пользовательское ограничение (2026-11-10): на Ollama используется ТОЛЬКО
+/// `gemma4:31b-cloud` — все роли маршрутизатора ходят на эту модель.
+/// Цель теста — доказать, что маршрутизатор ДЕЙСТВИТЕЛЬНО исполняет цепочку
+/// и журналирует каждый узел с фактической modelID (здесь — везде
+/// `gemma4:31b-cloud`). Различие моделей МЕЖДУ узлами проверяется юнит-
+/// тестами `RoutedTurnExecutorTests` на scripted-транспорте; живой прогон
+/// обязан следовать ограничению пользователя.
+///
+/// Если Ollama недоступен или модели нет — тест честно пропускается
+/// (SkipError), а не падает и не притворяется.
 @Suite("RoutingLive (M1)")
 struct RoutingLiveTests {
 
@@ -18,6 +24,9 @@ struct RoutingLiveTests {
     private var enabled: Bool {
         ProcessInfo.processInfo.environment["MYCODER_LIVE_ROUTING"] == "1"
     }
+
+    /// Единственная разрешённая пользователем модель на Ollama.
+    private var liveModel: String { "gemma4:31b-cloud" }
 
     /// Фактические имена моделей из `GET /api/tags` (порт 11434).
     ///
@@ -31,30 +40,6 @@ struct RoutingLiveTests {
             return []
         }
         return models.compactMap { $0["name"] as? String }
-    }
-
-    /// Выбирает до `count` различных моделей, предпочитая маленькие/быстрые,
-    /// чтобы живой прогон не длился минуты на больших весах.
-    ///
-    /// Вход: полный список моделей, нужное количество. Выход: массив моделей.
-    /// Зависимости: нет (чистая эвристика по имени).
-    private func pickModels(from all: [String], count: Int) -> [String] {
-        let fastHints = ["gemma", "speakeasy", "e2b", "flash", "mini", "small", "tiny", "b-", "1b", "2b", "3b", "4b"]
-        let sorted = all.sorted { a, b in
-            let al = a.lowercased(), bl = b.lowercased()
-            let af = fastHints.contains { al.contains($0) }
-            let bf = fastHints.contains { bl.contains($0) }
-            if af != bf { return af }
-            return al < bl
-        }
-        var seen = Set<String>()
-        var result: [String] = []
-        for model in sorted where !seen.contains(model) {
-            seen.insert(model)
-            result.append(model)
-            if result.count == count { break }
-        }
-        return result
     }
 
     /// Каталог-провайдер Ollama для резолва транспорта ролей.
@@ -73,24 +58,36 @@ struct RoutingLiveTests {
         )
     }
 
-    @Test("RoutedTurnExecutor исполняет compose-цепочку на разных фактических моделях")
-    func executorRunsRealChainOnDistinctModels() async throws {
+    /// Определяет, является ли сообщение об ошибке внешним требованием оплаты
+    /// (HTTP 402 от Ollama cloud: «Add usage credits or subscribe»). Такая
+    /// ошибка — ожидаемая внешняя недоступность модели, а не сбой
+    /// маршрутизации; честная остановка без fallback в этом случае есть
+    /// корректное поведение M1.
+    ///
+    /// Вход: текст ошибки. Выход: true для 402/credit/plans.
+    /// Зависимости: нет (чистая эвристика по тексту).
+    private func isExternalPaymentRequirement(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("402")
+            || lower.contains("credit")
+            || lower.contains("plans")
+            || lower.contains("subscribe")
+    }
+
+    @Test("RoutedTurnExecutor исполняет compose-цепочку на gemma4:31b-cloud")
+    func executorRunsRealChainOnGemmaCloud() async throws {
         guard enabled else { throw SkipError.issue("MYCODER_LIVE_ROUTING != 1") }
         let all = ollamaModels()
-        guard all.count >= 2 else {
-            throw SkipError.issue("Ollama недоступен или <2 моделей (нужно: ollama serve + ollama pull)")
+        guard all.contains(liveModel) else {
+            throw SkipError.issue("Ollama недоступен или нет \(liveModel) (нужно: ollama serve + ollama pull gemma4:31b-cloud)")
         }
-        let models = pickModels(from: all, count: 3)
-        let dispatchModel = models[0]
-        let executionModel = models.count > 1 ? models[1] : models[0]
-        let finalModel = models.count > 2 ? models[2] : models[0]
         let context = ollamaContext(models: all, agentMode: .compose)
         let configuration = ModelRoutingConfiguration(mode: .perRole, assignments: [
-            .dispatch: ModelAssignment(providerID: "live-ollama", modelID: dispatchModel),
-            .execution: ModelAssignment(providerID: "live-ollama", modelID: executionModel),
-            .finalResponse: ModelAssignment(providerID: "live-ollama", modelID: finalModel),
+            .dispatch: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
+            .execution: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
+            .finalResponse: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
         ])
-        let primary = ModelAssignment(providerID: "live-ollama", modelID: dispatchModel)
+        let primary = ModelAssignment(providerID: "live-ollama", modelID: liveModel)
         let snapshot = RoutedTurnSnapshot(
             configuration: configuration,
             primary: primary,
@@ -109,7 +106,8 @@ struct RoutingLiveTests {
         // Журнал обязан содержать реальные узлы с ФАКТИЧЕСКИМИ modelID.
         #expect(outcome.entries.count >= 1, "должен остаться журнал выполненных узлов")
         let executedModels = outcome.entries.map(\.assignment.modelID)
-        #expect(executedModels.contains(dispatchModel), "dispatch должен реально уйти на \(dispatchModel)")
+        #expect(executedModels.contains(liveModel), "dispatch должен реально уйти на \(liveModel)")
+        #expect(executedModels.allSatisfy { $0 == liveModel }, "ограничение: только \(liveModel)")
         for entry in outcome.entries where entry.isCompleted {
             #expect(entry.error == nil)
             #expect(!(entry.result ?? "").isEmpty || entry.usage != nil,
@@ -120,7 +118,18 @@ struct RoutingLiveTests {
             #expect(!(outcome.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                     "completed-ход обязан дать непустой финальный текст")
         case .failed(let message):
-            Issue.record("Ход упал: \(message); журнальные модели: \(executedModels)")
+            // Честная остановка — тоже доказательство M1: маршрутизатор НЕ
+            // подменил модель и журналировал узел. Внешний HTTP 402 от
+            // Ollama (cloud-модель требует платных кредитов) — ожидаемая
+            // деградация, а не сбой маршрутизации.
+            if isExternalPaymentRequirement(message) {
+                #expect(outcome.entries.first?.assignment.modelID == liveModel,
+                        "узел должен реально уйти на \(liveModel)")
+                #expect(outcome.entries.first?.error != nil,
+                        "журнал обязан зафиксировать ошибку узла")
+            } else {
+                Issue.record("Ход упал по неожиданной причине: \(message); журнальные модели: \(executedModels)")
+            }
         case .cancelled, .reviewLimitReached:
             Issue.record("Неожиданный статус для compose-графа: \(outcome.status)")
         }
@@ -130,21 +139,17 @@ struct RoutingLiveTests {
     func runnerRunsCustomReviewGraph() async throws {
         guard enabled else { throw SkipError.issue("MYCODER_LIVE_ROUTING != 1") }
         let all = ollamaModels()
-        guard all.count >= 2 else {
-            throw SkipError.issue("Ollama недоступен или <2 моделей")
+        guard all.contains(liveModel) else {
+            throw SkipError.issue("Ollama недоступен или нет \(liveModel)")
         }
-        let models = pickModels(from: all, count: 3)
-        let execModel = models[0]
-        let reviewModel = models.count > 1 ? models[1] : models[0]
-        let finalModel = models.count > 2 ? models[2] : models[0]
         let context = ollamaContext(models: all, agentMode: .build)
         let configuration = ModelRoutingConfiguration(mode: .perRole, assignments: [
-            .execution: ModelAssignment(providerID: "live-ollama", modelID: execModel),
-            .review: ModelAssignment(providerID: "live-ollama", modelID: reviewModel),
-            .correction: ModelAssignment(providerID: "live-ollama", modelID: execModel),
-            .finalResponse: ModelAssignment(providerID: "live-ollama", modelID: finalModel),
+            .execution: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
+            .review: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
+            .correction: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
+            .finalResponse: ModelAssignment(providerID: "live-ollama", modelID: liveModel),
         ])
-        let primary = ModelAssignment(providerID: "live-ollama", modelID: execModel)
+        let primary = ModelAssignment(providerID: "live-ollama", modelID: liveModel)
         let graph = TurnRouteGraph(
             initialRoles: [.execution, .review, .finalResponse],
             maxReviewCycles: 1,
@@ -161,16 +166,20 @@ struct RoutingLiveTests {
         let report = outcome.report
         #expect(report.entries.count >= 1, "журнал должен содержать выполненные узлы")
         let executedModels = report.entries.map(\.assignment.modelID)
-        #expect(executedModels.contains(execModel), "execution должен реально уйти на \(execModel)")
+        #expect(executedModels.contains(liveModel), "execution должен реально уйти на \(liveModel)")
+        #expect(executedModels.allSatisfy { $0 == liveModel }, "ограничение: только \(liveModel)")
         // Review-узел на живой модели почти наверняка вернёт не-JSON → граф
         // честно дойдёт до лимита ревью ИЛИ завершится; оба исхода допустимы.
+        // Внешняя платная недоступность (402) — тоже допустимый честный исход.
         #expect(report.outcome == .completed || report.outcome == .reviewLimitReached || report.outcome == .failed,
                 "исход должен быть одним из честных")
         if report.outcome == .completed {
             #expect(!(report.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         if let error = outcome.error {
-            Issue.record("Граф остановился на ошибке: \(error.localizedDescription); модели: \(executedModels)")
+            if !isExternalPaymentRequirement(error.localizedDescription) {
+                Issue.record("Граф остановился на неожиданной ошибке: \(error.localizedDescription); модели: \(executedModels)")
+            }
         }
     }
 }

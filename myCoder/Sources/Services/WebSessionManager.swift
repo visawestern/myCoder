@@ -57,9 +57,13 @@ enum WebSessionManager {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(store).write(to: storeURL(providerId: providerId,
-                                                       homeDirectory: homeDirectory,
-                                                       sessionID: sessionID), options: .atomic)
+        // Cookies are credentials: restrict the file to the current user
+        // (audit A3 — default permissions made them world/group readable).
+        let cookieURL = storeURL(providerId: providerId,
+                                 homeDirectory: homeDirectory,
+                                 sessionID: sessionID)
+        try encoder.encode(store).write(to: cookieURL, options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cookieURL.path)
 
         let existing = restoreMetadata(providerId: providerId, sessionID: sessionID, homeDirectory: homeDirectory)
         let metadata = WebStoredLoginSession(
@@ -70,9 +74,11 @@ enum WebSessionManager {
             lastUsedAt: Date(),
             store: store
         )
-        try encoder.encode(metadata).write(to: metadataURL(providerId: providerId,
-                                                            sessionID: sessionID,
-                                                            homeDirectory: homeDirectory), options: .atomic)
+        let metadataURL = metadataURL(providerId: providerId,
+                                     sessionID: sessionID,
+                                     homeDirectory: homeDirectory)
+        try encoder.encode(metadata).write(to: metadataURL, options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: metadataURL.path)
     }
 
     static func restore(providerId: String,

@@ -24,49 +24,22 @@ enum ProjectShellRunner {
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ProjectShellResult(output: "error: empty command", exitCode: 2)
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: shellPath)
-        process.arguments = ["-c", command]
-        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        do {
-            try process.run()
-        } catch {
-            return ProjectShellResult(output: "error: failed to launch: \(error.localizedDescription)", exitCode: -1)
+        let r = BoundedProcessRunner.run(executable: shellPath,
+                                         arguments: ["-c", command],
+                                         workingDirectory: workingDirectory,
+                                         timeout: timeoutSeconds)
+        if let launchError = r.launchError {
+            return ProjectShellResult(output: "error: \(launchError)", exitCode: -1)
         }
-
-        // Wait for completion, then terminate on timeout (like the terminal
-        // panel's deadline loop) so runaway commands cannot hang the loop.
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while process.isRunning {
-            if Date() > deadline {
-                process.terminate()
-                process.waitUntilExit()
-                return ProjectShellResult(output: "error: command timed out after \(Int(timeoutSeconds))s", exitCode: 124)
-            }
-            Thread.sleep(forTimeInterval: 0.05)
+        if r.timedOut {
+            return ProjectShellResult(output: "error: command timed out after \(Int(timeoutSeconds))s", exitCode: 124)
         }
-
-        let outData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let outText = String(data: outData, encoding: .utf8) ?? ""
-        let errText = String(data: errData, encoding: .utf8) ?? ""
-
-        var lines: [String] = []
-        let combined = (outText + errText)
+        var lines = r.output
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
-        for line in combined where !line.isEmpty {
-            lines.append(line)
-        }
-        if process.terminationStatus != 0 {
-            lines.append("(exit \(process.terminationStatus))")
-        }
-        return ProjectShellResult(output: lines.joined(separator: "\n"), exitCode: process.terminationStatus)
+            .filter { !$0.isEmpty }
+        if r.truncated { lines.append("[output truncated at 1 MB per stream]") }
+        if r.exitCode != 0 { lines.append("(exit \(r.exitCode))") }
+        return ProjectShellResult(output: lines.joined(separator: "\n"), exitCode: r.exitCode)
     }
 }

@@ -224,7 +224,7 @@
 
 ---
 
-- [ ] **M1. Маршрутизатор моделей в панели ввода: единая модель или отдельные
+- [x] **M1. Маршрутизатор моделей в панели ввода: единая модель или отдельные
   провайдеры/модели для каждого типа работы.**
   Добавить в композер новый кастомный селект рядом с текущими выборами
   провайдера/модели. В простом режиме — «Одна модель для всего»: существующий
@@ -307,9 +307,37 @@
   изображение при текстовой основной модели → vision-модель → текстовый ответ;
   смена назначения между ходами и подтверждение в журнале фактических моделей.
 
----
+  **Закрыто (2026-11-10).** Ядро: `ModelRouting.swift` (9 ролей `ModelRole`,
+  `ModelAssignment`, `ModelRoutingConfiguration` + `changingMode` без потери
+  назначений, `ModelRoutingError`, `ModelRouteResolver`, `ModelRoutingStore` —
+  проект + chat-override в UserDefaults). Граф: `TurnRouteGraph.build` (plan →
+  planning/finalResponse; compose → dispatch/execution/finalResponse; build →
+  dispatch/planning/research/execution/review/finalResponse; vision-узел первым
+  при изображениях и не-vision основной модели; review-цикл с лимитом и
+  correction, перезаписывающим артефакт execution), `TurnRouteRunner.runCollecting`
+  — журнал каждого узла даже при ошибке/отмене, `ReviewResponseParser`, журнал
+  `ModelRouteJournalStore` (50/сессию). Транспорт: `RoleModelTransport.swift`
+  (резолвер web → local (ollama/strata/opencode serve) → custom (ACP/openAI) →
+  mimo → unresolved; никакого скрытого fallback), `RoutedImagesPolicy`
+  (capability из каталога, не из имени). Сервис: `RoutedTurnService.swift`
+  (executor: validate Все роли ДО отправки → carriers → честный vision-fallback →
+  runCollecting; честные failureMessage/chips/usage/статусы). Wiring: routed-ветка
+  в `ChatPanelView` ДО `SendRouteGuard`; compaction/planner/subagent/vision идут
+  через роли; `ChatPanelView+Routing.swift`; `ModelRoutingMenu.swift` (режимы,
+  scope Проект/Чат, 9 ролей с capability-badges из каталога, предупреждения
+  заранее, «Применить ко всем», «Сбросить к единой», chainPreview, журнал).
+  Тесты: 35 (ядро) + 17 (логика/executor) + 8 (wiring) GREEN. Живой прогон
+  (`MYCODER_LIVE_ROUTING=1`, Ollama, ТОЛЬКО `gemma4:31b-cloud` по указанию
+  пользователя): цепочка реально исполнилась и журналировалась с фактической
+  modelID `gemma4:31b-cloud` на каждом узле; Ollama вернула HTTP 402 (облачная
+  модель требует платных кредитов), маршрутизатор НЕ выполнил скрытого
+  fallback — честная ошибка «Route failed at Request routing (live-ollama/
+  gemma4:31b-cloud) … No fallback provider was used». Различие моделей между
+  ролями покрыто юнит-тестами на scripted-транспорте (RoutedTurnExecutorTests).
+  Для полного живого прогона «3 разные модели» нужны кредиты/подписка
+  Ollama для `gemma4:31b-cloud` или разрешение пользователя на другую модель.
 
-- [x] **T1. Вызовы плановых инструментов показываются в чате под чужим
+---- [x] **T1. Вызовы плановых инструментов показываются в чате под чужим
   именем («read file»).** `todo_read` отображался как «Reading file»,
   `todo_write`/`task_create` — как «Writing code»: эвристика
   `ToolCallPresentationLogic.title` срабатывала на contains("read") /

@@ -73,6 +73,32 @@ struct WebBrowserRuntimeTests {
                                           sessionID: config.activeSessionID ?? "")?.cookies.first?.value == "second")
     }
 
+    @Test("Cookie session files are restricted to the current user (A3)")
+    func persistedSessionsAreOwnerOnly() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mycoder-session-perms-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let store = WebSessionStore(
+            cookies: [BrowserCookie(name: "sid", value: "secret", domain: "kimi.com", expiresEpoch: 9_999_999_999)],
+            localStorage: ["account": "secret"],
+            savedAt: Date()
+        )
+        try WebSessionManager.persist(store, providerId: "kimi", homeDirectory: home)
+
+        var isDir: ObjCBool = false
+        let cookieURL = WebSessionManager.storeURL(providerId: "kimi", homeDirectory: home)
+        let sessionURL = WebSessionManager.sessionDirectory(providerId: "kimi", homeDirectory: home)
+            .appendingPathComponent("session.json")
+        #expect(FileManager.default.fileExists(atPath: cookieURL.path, isDirectory: &isDir))
+        #expect(FileManager.default.fileExists(atPath: sessionURL.path, isDirectory: &isDir))
+        let attrs = try FileManager.default.attributesOfItem(atPath: cookieURL.path)
+        #expect(attrs[.posixPermissions] as? NSNumber == 0o600)
+        let sessionAttrs = try FileManager.default.attributesOfItem(atPath: sessionURL.path)
+        #expect(sessionAttrs[.posixPermissions] as? NSNumber == 0o600)
+    }
+
     @Test("Remote chat mappings isolate local chat, project and active login")
     func remoteChatMappingIsolationAndRoundTrip() {
         let suiteName = "WebRemoteChatStoreTests.\(UUID().uuidString)"
