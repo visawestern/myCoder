@@ -42,6 +42,64 @@ enum ToolCallInspectorLogic {
 }
 
 enum ToolCallPresentationLogic {
+    /// Max width of the "what it reads/writes" summary in a plan-tool header.
+    /// Longer content is cut with an ellipsis so the header always fits one
+    /// line (user directive 2026-11-10, T1).
+    static let planSummaryMaxWidth = 80
+
+    /// Plan/checklist tools always keep their real tool name plus a one-line
+    /// summary of what the call reads or writes. The generic
+    /// contains("read")/contains("write") heuristics in `title` used to render
+    /// `todo_read` as "Reading file" and `todo_write`/`task_create` as
+    /// "Writing code" (T1 bug).
+    ///
+    /// Вход: имя инструмента в любом алиасе (todoread, read_todos, …) и
+    /// JSON-строка аргументов.
+    /// Выход: заголовок вида «todo_read · reads checklist + plan» или nil для
+    /// непла новых инструментов.
+    /// Зависимости: `WebToolProtocolEmulator.canonicalToolName`, `WebEmulatedTool`.
+    static func planToolTitle(name: String, args: String) -> String? {
+        guard let canonical = WebToolProtocolEmulator.canonicalToolName(name),
+              let tool = WebEmulatedTool(rawValue: canonical) else { return nil }
+        switch tool {
+        case .todoRead:
+            return "todo_read · reads checklist + plan"
+        case .taskList:
+            return "task_list · reads the step list"
+        case .todoWrite:
+            let items = planItems(from: args)
+            guard let first = items.first.flatMap(planItemText) else {
+                return "todo_write · writes the checklist"
+            }
+            return "todo_write · writes checklist (\(items.count)): \(oneLineTruncated(first))"
+        case .taskCreate:
+            guard let content = planArgument(args, keys: ["content", "title", "description", "task", "text"]) else {
+                return "task_create · adds a plan step"
+            }
+            return "task_create · adds step: \(oneLineTruncated(content))"
+        case .taskUpdate:
+            let id = planArgument(args, keys: ["id"])
+            let status = planArgument(args, keys: ["status"])
+            let content = planArgument(args, keys: ["content", "title", "description"])
+            if let id {
+                if let status {
+                    return "task_update · step \(oneLineTruncated(id)) → \(oneLineTruncated(status))"
+                }
+                if let content {
+                    return "task_update · step \(oneLineTruncated(id)): \(oneLineTruncated(content))"
+                }
+                return "task_update · step \(oneLineTruncated(id))"
+            }
+            if let status {
+                return "task_update · sets status \(oneLineTruncated(status))"
+            }
+            return "task_update · updates a plan step"
+        default:
+            // Not a plan tool (task/todo aliases are exhaustive above).
+            return nil
+        }
+    }
+
     static func argumentSections(from arguments: String) -> [ToolCallArgumentSection] {
         guard let data = arguments.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data),
@@ -58,7 +116,72 @@ enum ToolCallPresentationLogic {
         }
     }
 
+    /// Checklist items from a todo_write payload: accepts a bare array and
+    /// the {"todos": [...]} wrapper (same contract as `ProjectWebToolExecutor`).
+    ///
+    /// Вход: JSON-строка аргументов. Выход: массив словарей-элементов.
+    /// Зависимости: `JSONSerialization`.
+    private static func planItems(from args: String) -> [[String: Any]] {
+        guard let data = args.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) else {
+            return []
+        }
+        if let array = json as? [[String: Any]] { return array }
+        if let dict = json as? [String: Any] {
+            for key in ["todos", "items", "tasks"] {
+                if let array = dict[key] as? [[String: Any]] { return array }
+            }
+        }
+        return []
+    }
+
+    /// Display text of one checklist item (first non-empty canonical key).
+    private static func planItemText(_ item: [String: Any]) -> String? {
+        planValue(item, keys: ["content", "title", "text", "description"])
+    }
+
+    /// First non-empty string value among `keys` in a flat args object.
+    /// Keys are matched case-insensitively; numbers are stringified so a
+    /// numeric step id still shows in the header.
+    private static func planArgument(_ args: String, keys: [String]) -> String? {
+        guard let data = args.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let dict = json as? [String: Any] else {
+            return nil
+        }
+        return planValue(dict, keys: keys)
+    }
+
+    private static func planValue(_ dict: [String: Any], keys: [String]) -> String? {
+        let lowered = Dictionary(uniqueKeysWithValues: dict.map { ($0.key.lowercased(), $0.value) })
+        for key in keys {
+            if let string = lowered[key] as? String,
+               !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return string
+            }
+            if let number = lowered[key] as? NSNumber {
+                return number.stringValue
+            }
+        }
+        return nil
+    }
+
+    /// Collapses newlines/extra spaces into single spaces and truncates with
+    /// an ellipsis so a header never exceeds one line.
+    private static func oneLineTruncated(_ value: String) -> String {
+        let cleaned = value
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        guard cleaned.count > planSummaryMaxWidth else { return cleaned }
+        return cleaned.prefix(planSummaryMaxWidth) + "…"
+    }
+
     static func title(name: String, args: String) -> String {
+        // T1: plan/checklist tools keep their real name — the generic
+        // heuristics below would rename todo_read to "Reading file".
+        if let planTitle = planToolTitle(name: name, args: args) {
+            return planTitle
+        }
         let values = Dictionary(
             uniqueKeysWithValues: argumentSections(from: args).map { ($0.key.lowercased(), $0.value) }
         )

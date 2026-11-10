@@ -516,6 +516,14 @@ extension AppState {
         // The sidebar tree renders its own caches, so removing the chat from
         // `sessions` alone left a dead row that opened an empty chat.
         removeSessionFromInMemoryState(id: id)
+        // M1: the deleted chat's routing evidence and chat-level override must
+        // not outlive it — clear both, and drop the panel's journal view if it
+        // was showing exactly this chat's nodes.
+        ModelRouteJournalStore().clear(sessionID: id)
+        ModelRoutingStore().clearChat(sessionID: id)
+        if modelRouteJournal.contains(where: { $0.sessionID == id }) {
+            modelRouteJournal = []
+        }
     }
 
     /// Full transcript (Markdown) for Share/Export, read from the store that

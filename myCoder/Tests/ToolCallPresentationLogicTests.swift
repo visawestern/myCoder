@@ -69,4 +69,87 @@ struct ToolCallPresentationLogicTests {
 
         #expect(ToolCallInspectorLogic.headerTitle(for: steps) == "✨ Доработать верстку")
     }
+
+    // MARK: - T1: plan tools keep their real name (user directive 2026-11-10)
+
+    @Test("T1: todo_read shows its real name, not 'Reading file'")
+    func todoReadKeepsRealName() {
+        #expect(
+            ToolCallPresentationLogic.title(name: "todo_read", args: "{}")
+                == "todo_read · reads checklist + plan"
+        )
+    }
+
+    @Test("T1: todo_read aliases (todoread/TodoRead/read_todos) show the same real header")
+    func todoReadAliasesKeepRealName() {
+        for alias in ["todoread", "TodoRead", "read_todos", "todo-read"] {
+            #expect(
+                ToolCallPresentationLogic.title(name: alias, args: "{}")
+                    == "todo_read · reads checklist + plan"
+            )
+        }
+    }
+
+    @Test("T1: task_list shows its real name, not 'Running task'")
+    func taskListKeepsRealName() {
+        #expect(
+            ToolCallPresentationLogic.title(name: "task_list", args: "{}")
+                == "task_list · reads the step list"
+        )
+    }
+
+    @Test("T1: todo_write names the tool and summarizes what it writes on one line")
+    func todoWriteSummarizesChecklist() {
+        let args = #"{"todos":[{"id":"1","content":"сделать X","status":"pending"},{"id":"2","content":"сделать Y","status":"pending"}]}"#
+        #expect(
+            ToolCallPresentationLogic.title(name: "todo_write", args: args)
+                == "todo_write · writes checklist (2): сделать X"
+        )
+    }
+
+    @Test("T1: todo_write without parsable items still shows its real name")
+    func todoWriteWithoutItems() {
+        #expect(
+            ToolCallPresentationLogic.title(name: "todo_write", args: "not json")
+                == "todo_write · writes the checklist"
+        )
+    }
+
+    @Test("T1: task_create names the tool and shows the added step")
+    func taskCreateShowsAddedStep() {
+        #expect(
+            ToolCallPresentationLogic.title(name: "task_create", args: #"{"content":"Шаг A","status":"pending"}"#)
+                == "task_create · adds step: Шаг A"
+        )
+    }
+
+    @Test("T1: task_update names the tool and shows step id and new status")
+    func taskUpdateShowsStepAndStatus() {
+        #expect(
+            ToolCallPresentationLogic.title(name: "task_update", args: #"{"id":"3","status":"completed"}"#)
+                == "task_update · step 3 → completed"
+        )
+        #expect(
+            ToolCallPresentationLogic.title(name: "task_update", args: #"{"id":"7"}"#)
+                == "task_update · step 7"
+        )
+    }
+
+    @Test("T1: long multiline plan content is truncated to one line")
+    func planContentTruncatedToOneLine() {
+        let long = String(repeating: "очень длинный текст шага ", count: 20)
+        let args = #"{"content":"первая строка\nвторая строка — "# + long + #""}"#
+        let title = ToolCallPresentationLogic.title(name: "task_create", args: args)
+        #expect(title.hasPrefix("task_create · adds step: первая строка"))
+        #expect(!title.contains("\n"))
+        #expect(title.hasSuffix("…"))
+        #expect(title.count <= ToolCallPresentationLogic.planSummaryMaxWidth + "task_create · adds step: ".count + 1)
+    }
+
+    @Test("T1: non-plan tools keep their existing headers")
+    func nonPlanToolsUnchanged() {
+        #expect(ToolCallPresentationLogic.title(name: "read_file", args: #"{"path":"/a/README.md"}"#) == "Reading README.md")
+        #expect(ToolCallPresentationLogic.title(name: "write", args: #"{"path":"/a/main.swift"}"#) == "Writing main.swift")
+        #expect(ToolCallPresentationLogic.title(name: "task", args: #"{"description":"✨ Доработать верстку"}"#) == "✨ Доработать верстку")
+    }
 }

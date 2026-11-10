@@ -8,7 +8,8 @@ enum TurnContextPlanningService {
                                     records: [FileIndexRecord],
                                     priorTurns: [ChatHistoryBuilder.Turn],
                                     ledger: TaskLedger?,
-                                    budget: TimeInterval = InternalContextPlanner.defaultBudget) async -> LocalQueryPlanResult {
+                                    budget: TimeInterval = InternalContextPlanner.defaultBudget,
+                                    complete: (@Sendable ([DirectChatMessage]) async throws -> String)? = nil) async -> LocalQueryPlanResult {
         let skillsRoot = MyCoderPaths.skillsDir(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         let catalog = TurnEvidence.skillCatalog(directory: skillsRoot)
         let recent = TurnContextCompiler.historySection(priorTurns).body
@@ -23,6 +24,12 @@ enum TurnContextPlanningService {
         let context = LocalPlannerContextBuilder.build(message: message, board: board, memories: memories,
                                                        taskContext: taskContext, graphContext: graphContext,
                                                        skillIDs: catalog.map(\.id))
+        // M1: per-role routing may inject the routed .planning transport; nil
+        // keeps the default internal-model completion. Passthrough only — the
+        // fallback semantics (catch → .fallback(reason:)) stay in the planner.
+        if let complete {
+            return await InternalContextPlanner.plan(message: message, context: context, budget: budget, complete: complete)
+        }
         return await InternalContextPlanner.plan(message: message, context: context, budget: budget)
     }
     /// Reserve room for every source so a long transcript cannot evict rules or memory.

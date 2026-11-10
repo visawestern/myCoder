@@ -28,6 +28,30 @@ enum HarnessPromptQuality {
     - Before declaring the goal complete, call `todo_read` (or `task_list`) and confirm every step is completed; report any remaining step explicitly.
     """
 
+    /// The single canonical coding-discipline contract, mandatory for EVERY
+    /// app / website / coding project on EVERY transport. This is the one
+    /// source of truth: `collaborationCore` (native routes) embeds it and
+    /// `ToolInstructionGuide.build` (emulated web / OpenAI-compatible routes)
+    /// appends it, so no route can ship code work without these rules and the
+    /// text is never duplicated or allowed to drift between routes.
+    ///
+    /// Captures the user directive verbatim in intent: work through TDD with
+    /// all reasonable tests; no file over 600 lines; every function carries a
+    /// contract comment (inputs, outputs, what it does, dependencies); every
+    /// function is small, atomic and modular so it can be debugged in isolation
+    /// and reused in another module without friction.
+    static let codeDiscipline = """
+    # Code work pipeline — mandatory for every app, website or coding project
+    - Work test-first (TDD): write or update a failing test, watch it fail, implement the smallest change, then make it pass; run the relevant test suites before finishing. Cover the changed logic with all reasonable tests.
+    - Keep every source file under 600 lines; split larger files instead of growing them.
+    - Write a short comment above every function stating its contract — input, output, what it does, and its dependencies. A function without a clear contract is not finished.
+    - Decompose the task into small, atomic functions BEFORE writing them. Each function does exactly one thing, has no hidden side effects, can be understood alone, and is modular enough to be debugged in isolation and reused in another module without friction.
+    - Build only from self-contained, modular units, so any module can be compiled, tested, and debugged independently of the rest of the program.
+    - Verify as you go: compile and test each unit the moment it is written, not after the whole program exists. Never write a large chunk and then dig through it to find errors.
+    - When a bug appears, isolate it to the smallest module, fix it at that level, and run that module's tests before moving on. Do not debug inside a finished program when a unit test can pinpoint the fault.
+    - Prefer many small, pure, composable functions over a few large ones; separation makes each piece testable in isolation and reusable elsewhere.
+    """
+
     /// The collaboration/communication/codebase core, modeled on OpenCode's
     /// real system prompt. This is what a native runtime should carry so the
     /// agent is predictable about rendering, parallelism, file references, and
@@ -44,16 +68,8 @@ enum HarnessPromptQuality {
     # Working in codebases
     - Keep changes consistent with the structure, naming, style, and patterns of the surrounding code.
     - Treat unfamiliar files or changes as potential user work and investigate before deleting or overwriting them.
-    - Keep every source file under 600 lines; split larger files instead of growing them.
-    - Work test-first (TDD): write or update a failing test, watch it fail, implement the smallest change, then make the test pass; run the relevant test suites before finishing.
 
-    # Code work pipeline (write code that works from the first unit)
-    - Decompose the task into small, atomic functions BEFORE writing them. Each function does exactly one thing, has no hidden side effects, and can be understood alone.
-    - Write a short comment above every function stating its contract — input, output, and what it guarantees. A function without a clear contract is not finished.
-    - Build only from self-contained, modular units, so any module can be compiled, tested, and debugged independently of the rest of the program.
-    - Verify as you go: compile and test each unit the moment it is written, not after the whole program exists. Never write a large chunk and then dig through it to find errors.
-    - When a bug appears, isolate it to the smallest module, fix it at that level, and run that module's tests before moving on. Do not debug inside a finished program when a unit test can pinpoint the fault.
-    - Prefer many small, pure, composable functions over a few large ones; separation makes each piece testable in isolation.
+    \(codeDiscipline)
 
     \(todoWorkflow)
 

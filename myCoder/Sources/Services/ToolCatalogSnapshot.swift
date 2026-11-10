@@ -72,6 +72,11 @@ extension ToolInstructionGuide {
         Host permissions: at askBeforeChanges, file writes, checklist mutations, Git mutations and sub-agent requests require approval. Read-only tools and recognized read-only shell commands are allowed by the current gate. Other run_command calls require approval below fullAccess. Permission does not guarantee that a provider, browser session, skill, repository or external service is configured.
         """
         var parts = [protocolGuide]
+        // M1/refactor: the canonical coding-discipline contract rides EVERY
+        // emulated route too, so web / OpenAI-compatible transports enforce the
+        // exact same TDD / ≤600-line / function-contract / modularity rules as
+        // the native route (single source: `HarnessPromptQuality.codeDiscipline`).
+        parts.append(HarnessPromptQuality.codeDiscipline)
         if agentMode == .build || agentMode == .plan {
             parts.append(HarnessPromptQuality.todoWorkflow)
         }

@@ -398,6 +398,8 @@ struct MessageInputToolbar: View {
 
             ProviderSelectorMenu()
             ModelPickerDropdown()
+            // M1: per-role routing selector (single model vs role routes).
+            ModelRoutingMenu()
             // Model call-parameters popover (plan Раздел 13 п.14).
             if ModelSelectionPresentationLogic.shouldShowParameters(
                 selectedModel: appState.selectedModel,

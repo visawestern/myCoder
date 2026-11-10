@@ -420,6 +420,11 @@ struct ChatPanelView: View {
         .onChange(of: appState.selectedSession?.id) { newSessionID in
             handleSelectedSessionChange(newSessionID)
         }
+        .onChange(of: appState.selectedWorkspace?.path) { _ in
+            // M1: switching project changes which project-default routing
+            // applies, so reload configuration + journal for the new root.
+            reloadModelRouting()
+        }
         .onChange(of: appState.effectiveSelectedModel()) { newModel in
             handleModelSwitch(to: newModel)
         }
@@ -959,8 +964,13 @@ struct ChatPanelView: View {
             stashedComposerDraft = nil
             restoreStashedDraftAfterSend = false
             composerHoldsQueuedMessage = false
+            // M1: no chat selected → the composer shows the project default
+            // routing and an empty journal, not the previous chat's state.
+            reloadModelRouting()
             return
         }
+        // M1: routing configuration and executed-route journal are per chat.
+        reloadModelRouting()
         prepareMarkdownPrewarmProfile()
         if SessionReloadLogic.shouldReloadMessages(
             hasCachedMessages: messageStore.hasLoadedMessages(sessionID: sessionID)
@@ -1028,6 +1038,9 @@ struct ChatPanelView: View {
             prepareMarkdownPrewarmProfile()
             loadSessionMessages(sessionID: sessionID)
         }
+        // M1: the panel can appear with a chat already selected (launch,
+        // window reopen) — load that chat's routing config and journal.
+        reloadModelRouting()
         // The model that is selected when the panel appears is the baseline
         // for the next switch: the notice names the model the chat came from.
         lastSelectedModel = appState.effectiveSelectedModel()
@@ -1743,8 +1756,10 @@ struct ChatPanelView: View {
 
     /// Routes that send the local feed as history can be compacted; server-
     /// managed routes (mimo serve, opencode serve, web, ACP) keep their own
-    /// history, so replacing it locally would be a lie.
+    /// history, so replacing it locally would be a lie. Per-role routing (M1)
+    /// always composes each node's input from the LOCAL feed, so it compacts.
     private func supportsLocalHistoryCompaction(_ route: SendRoute) -> Bool {
+        if appState.modelRoutingConfiguration.mode == .perRole { return true }
         switch route {
         case .openAICompatible: return true
         default: return false
@@ -1790,7 +1805,12 @@ struct ChatPanelView: View {
 
     /// Route-specific summarizer transport: a plain one-shot completion that
     /// never touches the visible chat (no streaming bubble, no tool protocol).
-    private func summaryTransport(for route: SendRoute) -> ConversationSummarizer.Transport {
+    /// In per-role routing mode the summary runs on the .compaction role's own
+    /// model and is journalled like any other routed node (M1).
+    private func summaryTransport(for route: SendRoute, sessionID: String?) -> ConversationSummarizer.Transport {
+        if appState.modelRoutingConfiguration.mode == .perRole {
+            return routedCompactionTransport(sessionID: sessionID)
+        }
         switch route {
         case .openAICompatible(let baseURL, let apiKey, let model):
             return { prompt in
@@ -1839,7 +1859,7 @@ struct ChatPanelView: View {
         defer { isCompacting = false }
 
         let beforeTokens = ContextBudgetLogic.usedTokens(messages: history)
-        let summarizer = ConversationSummarizer(transport: summaryTransport(for: route))
+        let summarizer = ConversationSummarizer(transport: summaryTransport(for: route, sessionID: targetSessionID))
         do {
             // The summary request goes to the model that will continue the
             // chat, so the transcript must fit into ITS window: a 48k
@@ -2516,6 +2536,9 @@ struct ChatPanelView: View {
                 ownLimit: InternalContextPlanner.defaultBudget,
                 startedAt: contextCollectionStartedAt
             )
+            // M1: in per-role routing mode the planner runs on the .planning
+            // role's model (nil in single mode keeps the internal model).
+            let planningComplete = routedPlanningComplete(agentMode: agentMode, sessionID: sendSessionID)
             localPlan = await Task.detached(priority: .utility) {
                 await TurnContextPlanningService.plan(
                     message: text,
@@ -2526,7 +2549,8 @@ struct ChatPanelView: View {
                     records: pointContextRecords,
                     priorTurns: priorTurnsForContext,
                     ledger: taskLedger,
-                    budget: planningBudget
+                    budget: planningBudget,
+                    complete: planningComplete
                 )
             }.value
             let planningOutcome = ContextAssemblyLogLogic.planningResult(localPlan)
@@ -2789,7 +2813,22 @@ struct ChatPanelView: View {
             appState.isStreaming = true
             streamingText = ""
         }
-        
+
+        // M1: per-role routing executes the whole role graph locally. It runs
+        // BEFORE the route guard: a routed send never uses the composer's
+        // nominal provider branch, and each node fails honestly on its own.
+        if appState.modelRoutingConfiguration.mode == .perRole {
+            await runRoutedTurn(
+                assistantID: assistantID,
+                sendSessionID: sendSessionID,
+                request: TurnDelivery.withSystem(sysPrompt, modelText: preparation.modelText),
+                files: files,
+                images: images,
+                agentMode: agentMode
+            )
+            return
+        }
+
         // Route was resolved before the first append, so every branch uses
         // the same stable local/remote session identity.
         // Round 8 P3: a `.none` route must never fall through into the serve
@@ -2950,7 +2989,7 @@ struct ChatPanelView: View {
                 )
                 executor.subagentLauncher = subagentLauncher(
                     projectRoot: projectRoot,
-                    transport: .openAICompatible(baseURL: URL(string: baseURL) ?? URL(fileURLWithPath: "/"), apiKey: apiKey ?? "", model: model),
+                    transport: routedSubagentTransport(fallback: .openAICompatible(baseURL: URL(string: baseURL) ?? URL(fileURLWithPath: "/"), apiKey: apiKey ?? "", model: model)),
                     sessionID: sendSessionID
                 )
                 let maxIterations = 15
@@ -3973,6 +4012,85 @@ struct ChatPanelView: View {
     /// One assistant message can have several gated calls. They are all
     /// registered and rendered before the loop starts awaiting them, so the
     /// user sees the full queue instead of one modal at a time.
+
+    /// M1: executes the whole per-role route graph for one send and writes the
+    /// honest outcome into the assistant message: final text per status, node
+    /// journal, aggregated usage, per-node route chips and raw responses.
+    ///
+    /// Вход: id assistant-сообщения, id чата, собранный запрос, вложения, режим.
+    /// Выход: нет (обновляет messageStore/appState; прогресс каждого узла виден
+    /// в пузыре сообщения, отмена родительского хода отменяет все узлы).
+    /// Зависимости: `buildRoutedTurnSnapshot`, `RoutedTurnExecutor`,
+    /// `AppState.recordRouteJournalEntry`, `ToolProtocolStripping`.
+    private func runRoutedTurn(
+        assistantID: String,
+        sendSessionID: String?,
+        request: String,
+        files: [FileInfo],
+        images: [ClipboardImage],
+        agentMode: AgentMode
+    ) async {
+        let snapshot = await MainActor.run {
+            buildRoutedTurnSnapshot(
+                sessionID: sendSessionID,
+                request: request,
+                agentMode: agentMode,
+                files: files,
+                images: images
+            )
+        }
+        // The graph runs inside this Task: cancelling the turn (Stop) cancels
+        // the task and therefore every pending node — the runner checks
+        // cancellation before and after each role.
+        let outcome = await RoutedTurnExecutor.run(snapshot: snapshot) { role, assignment in
+            Task { @MainActor in
+                guard self.currentAssistantMessageID == assistantID else { return }
+                let line = "⚙️ \(role.displayName) → \(assignment.providerID)/\(assignment.modelID)…"
+                self.streamingText = line
+                self.messageStore.update(id: assistantID) { msg in
+                    msg.content = line
+                }
+            }
+        }
+        await MainActor.run {
+            // The journal records EVERY node that ran — including failed and
+            // cancelled ones — before the message shows the final state.
+            for entry in outcome.entries {
+                appState.recordRouteJournalEntry(entry)
+            }
+            appState.isLoading = false
+            appState.isStreaming = false
+            streamingText = ""
+            messageStore.update(id: assistantID) { msg in
+                switch outcome.status {
+                case .completed:
+                    msg.content = ToolProtocolStripping.visibleText(from: outcome.finalText ?? "")
+                case .reviewLimitReached:
+                    // Visible degradation: findings + last draft, never a fake
+                    // "complete" answer.
+                    msg.content = outcome.finalText ?? ""
+                case .cancelled:
+                    let kept = ToolProtocolStripping.visibleText(from: msg.content)
+                    msg.content = kept.hasPrefix("⚙️") || kept.isEmpty
+                        ? L.t(AppLocalizationKey.locGenerationStopped)
+                        : kept
+                case .failed(let message):
+                    msg.content = message
+                }
+                msg.usage = outcome.usage
+                msg.rawResponses = outcome.rawResponses
+                var routeParts = msg.parts
+                routeParts.removeAll { if case .routeInfo = $0 { return true } else { return false } }
+                if !outcome.chips.isEmpty {
+                    routeParts.append(.routeInfo(chips: outcome.chips))
+                }
+                msg.parts = routeParts
+                msg.isFinished = true
+                msg.isStreaming = false
+            }
+            currentAssistantMessageID = nil
+        }
+    }
 
     private func subagentLauncher(
         projectRoot: String,

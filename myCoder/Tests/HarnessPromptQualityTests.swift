@@ -58,6 +58,42 @@ struct HarnessPromptQualityTests {
         #expect(lower.contains("compile and test each unit"), "проверка должна идти по мере написания модулей")
     }
 
+    // MARK: - Code discipline is one canonical block on EVERY route (dedup + ironclad)
+
+    @Test func codeDisciplineIsSingleCanonicalSourceWithEveryMandatoryRule() {
+        let discipline = HarnessPromptQuality.codeDiscipline.lowercased()
+        // Обязательные правила из пользовательской директивы, в одном блоке.
+        #expect(discipline.contains("under 600 lines"), "≤600 строк на файл")
+        #expect(discipline.contains("tdd") || discipline.contains("test-first"), "TDD")
+        #expect(discipline.contains("all reasonable tests") || discipline.contains("every"), "все возможные тесты")
+        #expect(discipline.contains("contract"), "комментарий-контракт над каждой функцией")
+        #expect(discipline.contains("input") && discipline.contains("output"), "входные и выходные параметры")
+        #expect(discipline.contains("dependencies"), "зависимости функции")
+        #expect(discipline.contains("modular"), "модульность")
+        #expect(discipline.contains("reuse") || discipline.contains("reusable"), "переиспользуемость в другом модуле")
+        #expect(discipline.contains("debug"), "лёгкая отладка")
+        // Дедуп: collaborationCore НЕ дублирует правила, а встраивает этот блок.
+        #expect(HarnessPromptQuality.collaborationCore.contains(HarnessPromptQuality.codeDiscipline))
+    }
+
+    @Test func webAndOpenAIRoutesCarryTheSameCodeDiscipline() {
+        // Железное покрытие: эмулированная web/OpenAI-ветка получает ту же
+        // дисциплину кода, что и нативная — через общий канонический блок.
+        for route in [
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            #expect(prompt.contains(HarnessPromptQuality.codeDiscipline),
+                    "route \(route) должна нести каноническую дисциплину кода")
+            let lower = prompt.lowercased()
+            #expect(lower.contains("under 600 lines"))
+            #expect(lower.contains("code work pipeline"))
+        }
+    }
+
     @Test func nativeSystemTeachesCanonicalTodoWorkflow() {
         let native = TurnDelivery.systemInstruction(
             route: .mimoServe, userRules: "", projectRoot: "/project",

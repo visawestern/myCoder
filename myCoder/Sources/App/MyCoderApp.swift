@@ -296,6 +296,22 @@ class AppState: ObservableObject {
     /// signal to recalculate the window right after a Settings edit (C6).
     @Published private(set) var modelMetadataRevision = 0
 
+    /// M1 model router: active routing configuration for the current
+    /// project/chat. Loaded from `ModelRoutingStore` whenever the project or
+    /// the open chat changes; assignments survive switching back to single
+    /// mode (they are kept as an inactive configuration).
+    @Published var modelRoutingConfiguration = ModelRoutingConfiguration()
+    /// Whether the routing editor edits a chat override (true) or the project
+    /// default (false).
+    @Published var modelRoutingScopeIsChat = false
+    /// Actually executed route nodes of the open chat — the panel only ever
+    /// shows real runs, never promised ones. Mutated only through the routing
+    /// APIs in `AppState+Routing.swift` (the setter must stay reachable from
+    /// that extension file, so it is internal, not private(set)).
+    @Published var modelRouteJournal: [TurnRouteJournalEntry] = []
+    /// Bumped on every routing save so the composer label re-renders.
+    @Published var modelRoutingRevision = 0
+
     @Published var workspaces: [Workspace] = []
     /// Lightweight registry snapshot used to reconcile sidebar visibility with
     /// Storage archive actions without hiding an unknown legacy workspace.
