@@ -18,6 +18,10 @@ final class MyCoderAPIServer {
     static let contextPreviewDeadline: TimeInterval = ContextCollectionBudget.total + 60
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "mycoder.api.server")
+    /// Отдельная очередь для тяжёлых долгих/мутирующих запросов (audit B1).
+    /// Быстрые GET-чтения остаются на `queue` и не ждут долгие POST
+    /// (ожидания в обработчиках доходят до 660 с).
+    private let actionQueue = DispatchQueue(label: "mycoder.api.actions", qos: .userInitiated)
     private let apiToken = APITokenStore.loadOrCreate()
     private(set) var port: Int = 0
     
@@ -146,9 +150,30 @@ final class MyCoderAPIServer {
                 path = String(rawPath[..<queryStart])
                 query = String(rawPath[rawPath.index(after: queryStart)...])
             }
-            let response = self.routeRequest(method: method, path: path, body: body, query: query)
-            self.sendResponse(response, on: connection)
+            // Audit B1: тяжёлые запросы не блокируют очередь слушателя —
+            // быстрые GET-чтения отвечают, пока долгий POST выполняется.
+            if Self.isHeavyRoute(method: method, path: path) {
+                self.actionQueue.async { [weak self] in
+                    guard let self else { return }
+                    let response = self.routeRequest(method: method, path: path, body: body, query: query)
+                    self.sendResponse(response, on: connection)
+                }
+            } else {
+                let response = self.routeRequest(method: method, path: path, body: body, query: query)
+                self.sendResponse(response, on: connection)
+            }
         }
+    }
+
+    /// Классифицирует запрос: тяжёлые (долгие/мутирующие) обрабатываются на
+    /// отдельной `actionQueue`, чтобы не блокировать очередь слушателя.
+    ///
+    /// Вход: HTTP-метод и путь. Выход: true для POST и долгих GET
+    /// (inspect/scroll/screenshot). Зависимости: нет.
+    static func isHeavyRoute(method: String, path: String) -> Bool {
+        if method == "POST" { return true }
+        let heavyReads = ["/api/inspect", "/api/scroll", "/api/screenshot"]
+        return heavyReads.contains(path)
     }
 
     private static func contentLength(in header: String) -> Int {

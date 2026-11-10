@@ -14,7 +14,7 @@
 | A3 | Куки сохраняются с правами по умолчанию | ✅ Закрыт | cookies.json/session.json → 0600; тест прав добавлен |
 | A4 | KeychainManager на деле UserDefaults | ✅ Закрыт | настоящий Keychain (Security.framework) + ленивая миграция из UserDefaults; 4 новых теста + 69 связанных GREEN |
 | A5 | Full access: bash без защиты от разрушительных команд | ✅ Закрыт | `DestructiveCommandGuard` (rm -rf /~/system, mkfs/dd/diskutil, reboot/shutdown, fork-бомбы) встроен в ProjectShellRunner; 6 тестов GREEN |
-| B1 | API: одна очередь, ожидания до 11 минут, гонки | ⏳ Открыт | большой рефактор handleAction/context-preview |
+| B1 | API: одна очередь, ожидания до 11 минут, гонки | ✅ Закрыт (ядро) | тяжёлые POST/долгие GET вынесены на отдельную `actionQueue` (`isHeavyRoute`); быстрые чтения больше не блокируются на 660с; 3 новых теста; остаточная синхронность через semaphore сохранена намеренно |
 | B2 | AppState не @MainActor | ⏳ Открыт | массовый рефактор |
 | B3 | God-файлы (ChatPanelView 5613 стр.) | ⏳ Открыт | требует поэтапного выноса |
 | B4 | Две реализации БД | ⏳ Открыт | требует аудита DatabaseBridge |
