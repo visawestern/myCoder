@@ -17,13 +17,14 @@ import Foundation
 ///
 /// Если Ollama недоступен или модели нет — тест честно пропускается
 /// (SkipError), а не падает и не притворяется.
-@Suite("RoutingLive (M1)")
-struct RoutingLiveTests {
+/// Opt-in для всей Suite: без `MYCODER_LIVE_ROUTING=1` тесты полностью
+/// пропускаются (skipped), а не падают — как `LiveIntegrationTests`.
+private var routingLiveEnabled: Bool {
+    ProcessInfo.processInfo.environment["MYCODER_LIVE_ROUTING"] == "1"
+}
 
-    /// Opt-in флаг именно этого живого прогона маршрутизации.
-    private var enabled: Bool {
-        ProcessInfo.processInfo.environment["MYCODER_LIVE_ROUTING"] == "1"
-    }
+@Suite("RoutingLive (M1)", .enabled(if: routingLiveEnabled))
+struct RoutingLiveTests {
 
     /// Единственная разрешённая пользователем модель на Ollama.
     private var liveModel: String { "gemma4:31b-cloud" }
@@ -76,7 +77,6 @@ struct RoutingLiveTests {
 
     @Test("RoutedTurnExecutor исполняет compose-цепочку на gemma4:31b-cloud")
     func executorRunsRealChainOnGemmaCloud() async throws {
-        guard enabled else { throw SkipError.issue("MYCODER_LIVE_ROUTING != 1") }
         let all = ollamaModels()
         guard all.contains(liveModel) else {
             throw SkipError.issue("Ollama недоступен или нет \(liveModel) (нужно: ollama serve + ollama pull gemma4:31b-cloud)")
@@ -137,7 +137,6 @@ struct RoutingLiveTests {
 
     @Test("TurnRouteRunner исполняет кастомный граф execution → review → finalResponse")
     func runnerRunsCustomReviewGraph() async throws {
-        guard enabled else { throw SkipError.issue("MYCODER_LIVE_ROUTING != 1") }
         let all = ollamaModels()
         guard all.contains(liveModel) else {
             throw SkipError.issue("Ollama недоступен или нет \(liveModel)")

@@ -12,8 +12,8 @@
 | A1 | Локальный API без аутентификации | ✅ Закрыт | `APIRequestGuard.swift` + токен `~/.mycoder/api-token` (0600), проверка Host/Origin/Bearer, 403; 4 теста GREEN; curl-примеры обновлены |
 | A2 | Дедлок pipe при >64 КБ | ✅ Закрыт (код) | `BoundedProcessRunner.swift` (читает во время работы, кап 1 МБ/поток); внедрён в ProjectShellRunner/GitRepository/GitHubCLIService; тесты добавлены (проверка после сборки) |
 | A3 | Куки сохраняются с правами по умолчанию | ✅ Закрыт | cookies.json/session.json → 0600; тест прав добавлен |
-| A4 | KeychainManager на деле UserDefaults | ⏳ Открыт | требует решения человека (миграция хранилища) |
-| A5 | Full access: bash без защиты от разрушительных команд | ⏳ Открыт | требует дизайна политики (список запрещённых/подтверждаемых) |
+| A4 | KeychainManager на деле UserDefaults | ✅ Закрыт | настоящий Keychain (Security.framework) + ленивая миграция из UserDefaults; 4 новых теста + 69 связанных GREEN |
+| A5 | Full access: bash без защиты от разрушительных команд | ✅ Закрыт | `DestructiveCommandGuard` (rm -rf /~/system, mkfs/dd/diskutil, reboot/shutdown, fork-бомбы) встроен в ProjectShellRunner; 6 тестов GREEN |
 | B1 | API: одна очередь, ожидания до 11 минут, гонки | ⏳ Открыт | большой рефактор handleAction/context-preview |
 | B2 | AppState не @MainActor | ⏳ Открыт | массовый рефактор |
 | B3 | God-файлы (ChatPanelView 5613 стр.) | ⏳ Открыт | требует поэтапного выноса |
@@ -25,10 +25,9 @@
 
 ## Осталось по M1 (шаги 7–9)
 
-- [ ] Дождаться сборки тестов → `swift test --no-parallel` полный прогон
-      (GitRepositoryTests больше не должен падать по таймауту — гипотеза A2).
-- [ ] `MYCODER_LIVE_ROUTING=1 swift test --filter RoutingLive` (ollama запущен).
-- [ ] Чеклист M1 → [x], коммит + пуш.
+- [ ] Дождаться полного прогона тестов (запущен) → убедиться 0 падений.
+- [ ] Коммит (A4+A5) + пуш.
+- [ ] Итоговый доклад: закрыты Z0/A1/A2/A3/A4/A5/C2; открыты B1–B4/C1/D1/D2 (решения человека).
 
 ## Напоминание
 

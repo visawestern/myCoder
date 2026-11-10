@@ -1091,7 +1091,13 @@ struct ChatPanelView: View {
 
     @MainActor
     private func performRollback(targetMessageID: String, sessionID: String) async {
-        let messages = messageStore.messages(in: sessionID)
+        // Живой фид, если чат открыт; иначе — полный срез из БД (API-откат
+        // невыбранного чата). `RollbackDialogueLoader` — чистая функция с тестами.
+        let messages = RollbackDialogueLoader.resolve(
+            for: sessionID,
+            fromStore: { messageStore.messages(in: sessionID) },
+            fromDatabase: { DatabaseBridge.shared.loadMessages(sessionId: $0) }
+        )
         guard !messages.isEmpty else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let projectPath = appState.selectedWorkspace?.path
@@ -1117,7 +1123,12 @@ struct ChatPanelView: View {
             sessionID: sessionID,
             homeDirectory: home,
             removeMessage: { id in
-                self.messageStore.remove(id: id)
+                // Когда фид не загружен (API-откат невыбранного чата),
+                // `MessageStore.remove` вернёт false и не тронет БД — поэтому
+                // удаление дублируется напрямую в БД.
+                if !self.messageStore.remove(id: id) {
+                    DatabaseBridge.shared.deleteMessage(id: id)
+                }
             },
             appendMessage: { msg in
                 self.messageStore.append(msg, to: sessionID)

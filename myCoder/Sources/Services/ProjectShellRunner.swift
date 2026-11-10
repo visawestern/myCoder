@@ -24,6 +24,11 @@ enum ProjectShellRunner {
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ProjectShellResult(output: "error: empty command", exitCode: 2)
         }
+        // Audit A5: даже Full access не должен исполнять катастрофические команды
+        // (rm -rf /, форматирование, перезагрузка, fork-бомбы).
+        if let reason = DestructiveCommandGuard.blockReason(for: command) {
+            return ProjectShellResult(output: "error: \(reason)", exitCode: 2)
+        }
         let r = BoundedProcessRunner.run(executable: shellPath,
                                          arguments: ["-c", command],
                                          workingDirectory: workingDirectory,
