@@ -158,24 +158,15 @@ struct ModelEnablementRefreshTests {
 
     @Test("T5: строка модели берёт состояние из AppState и не держит локальный счётчик")
     func rowReadsDerivedState() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let modelSettings = try String(
-            contentsOf: root.appendingPathComponent("Sources/Views/Settings/ModelSettingsView.swift"),
-            encoding: .utf8
-        )
+        let modelSettings = try RepoRoot.modelSettingsSourceText
         #expect(modelSettings.contains("appState.isModelEnabled"))
         #expect(modelSettings.contains("appState.setModelEnabled"))
         #expect(!modelSettings.contains("disabledRevision"))
         #expect(!modelSettings.contains("DisabledModelStore.setDisabled"))
 
-        let providers = try String(
-            contentsOf: root.appendingPathComponent("Sources/Views/Settings/ProvidersSettingsView.swift"),
-            encoding: .utf8
-        ) + "\n" + String(
-            contentsOf: root.appendingPathComponent("Sources/Views/Settings/LocalProvidersSettingsView.swift"),
-            encoding: .utf8
+        let providers = try RepoRoot.sourceTextOfFamily(
+            in: "myCoder/Sources/Views/Settings",
+            prefixes: ["ProvidersSettingsView", "LocalProvidersSettingsView"]
         )
         // The local card reads the persisted config, not the captured value it
         // was created with.
@@ -186,19 +177,13 @@ struct ModelEnablementRefreshTests {
 
     @Test("T5: единственный путь мутации — AppState, стор остаётся хранилищем")
     func singleMutationPath() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let app = try String(
-            contentsOf: root.appendingPathComponent("Sources/App/MyCoderApp.swift"),
-            encoding: .utf8
-        )
+        let app = try RepoRoot.appStateSourceText
         #expect(app.contains("func setModelEnabled(providerID:"))
         #expect(app.contains("func isModelEnabled(providerID:"))
 
         // Persistence layer stays pure: no notification, no UI knowledge.
         let store = try String(
-            contentsOf: root.appendingPathComponent("Sources/Services/DisabledModelStore.swift"),
+            contentsOf: RepoRoot.url.appendingPathComponent("myCoder/Sources/Services/DisabledModelStore.swift"),
             encoding: .utf8
         )
         #expect(!store.contains("NotificationCenter"))

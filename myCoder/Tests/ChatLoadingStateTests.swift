@@ -39,7 +39,7 @@ struct ChatLoadingStateTests {
         let router = try sourceText("myCoder/Sources/Services/AppActionRouter.swift")
         let snapshots = try sourceText("myCoder/Sources/Services/AppActionRouter+Snapshots.swift")
         #expect(router.contains("\"isLoadingMessages\"") || snapshots.contains("\"isLoadingMessages\""))
-        let app = try sourceText("myCoder/Sources/App/MyCoderApp.swift")
+        let app = try RepoRoot.appStateSourceText
         #expect(app.contains("loadingChatSessionID"))
         let panel = try RepoRoot.chatPanelSourceText
         #expect(panel.contains("appState.loadingChatSessionID = newID"))

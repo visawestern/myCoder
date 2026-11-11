@@ -485,7 +485,7 @@ struct ModelSettingsTests {
 
     @Test("model list is flat and shows the full catalog inside a ScrollView")
     func flatModelListShowsAll() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Views/Settings/ModelSettingsView.swift")
+        let source = try RepoRoot.modelSettingsSourceText
         #expect(source.contains("ForEach(familyGroups"))
         #expect(source.contains("ScrollView {"))
         #expect(!source.contains("ModelSettingsListLogic"))

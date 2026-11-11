@@ -36,7 +36,7 @@ struct SendContextWiringTests {
 
     @Test("Флаг включён по умолчанию и сохраняется между запусками")
     func flagDefaultsOnAndPersists() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/App/MyCoderApp.swift")
+        let source = try RepoRoot.appStateSourceText
         #expect(source.contains("var isPointContextEnabled: Bool = true"))
         #expect(source.contains("com.mycoder.pointContextEnabled"))
     }
@@ -52,7 +52,7 @@ struct SendContextWiringTests {
 
     @Test("Ключи памяти переведены на все языки")
     func memoryKeysAreLocalized() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Services/AppLocalization.swift")
+        let source = try RepoRoot.localizationSourceText
         for key in ["locMemorySaved", "locMemoryFailed", "locMemoryUsage", "locMemoryLoadFailed"] {
             #expect(source.contains("\"\(key)\""))
         }

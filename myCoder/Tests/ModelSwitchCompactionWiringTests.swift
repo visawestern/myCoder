@@ -12,7 +12,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Состояние уведомления живёт в AppState")
     func noticeStateIsPublished() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/App/MyCoderApp.swift")
+        let source = try RepoRoot.appStateSourceText
         #expect(source.contains("@Published var modelSwitchCompactionNotice"))
     }
 
@@ -81,7 +81,7 @@ struct ModelSwitchCompactionWiringTests {
 
     @Test("Подписи сжатия переведены на все языки")
     func compactionLabelsAreLocalized() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Services/AppLocalization.swift")
+        let source = try RepoRoot.localizationSourceText
         for key in ["locModelSwitchCompactionTitle",
                     "locModelSwitchCompactionStop",
                     "locModelSwitchCompactionRollback",

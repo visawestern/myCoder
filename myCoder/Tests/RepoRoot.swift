@@ -110,4 +110,32 @@ enum RepoRoot {
                                    prefixes: ["MyCoderAPIServer"])
         }
     }
+
+    /// The whole application-state source: `AppState.swift` plus every focused
+    /// `AppState+…` extension module. Source-inspection tests assert on the
+    /// state object as a unit, so splitting its behaviour across sibling files
+    /// must not hide it from them.
+    static var appStateSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/App",
+                                   prefixes: ["AppState"])
+        }
+    }
+
+    /// The whole localization source (keys + every translation table).
+    static var localizationSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Services",
+                                   prefixes: ["AppLocalization"])
+        }
+    }
+
+    /// The whole model-settings source (the view plus its focused column
+    /// modules).
+    static var modelSettingsSourceText: String {
+        get throws {
+            try sourceTextOfFamily(in: "myCoder/Sources/Views/Settings",
+                                   prefixes: ["ModelSettings"])
+        }
+    }
 }

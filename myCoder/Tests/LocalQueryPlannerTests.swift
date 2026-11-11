@@ -319,13 +319,7 @@ struct LocalQueryPlannerTests {
     @Test("T6: переключатель, локализация и вызов из отправки существуют")
     func switchIsWired() throws {
         #expect(LocalPlannerSettings.storageKey == "com.mycoder.localQueryPlannerEnabled")
-        let appSource = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Sources/App/MyCoderApp.swift"),
-            encoding: .utf8
-        )
+        let appSource = try RepoRoot.appStateSourceText
         #expect(appSource.contains("LocalPlannerSettings.isEnabled"))
         #expect(appSource.contains("isLocalQueryPlannerEnabled"))
 

@@ -56,7 +56,7 @@ struct ContextAssemblyLogWiringTests {
 
     @Test("Новые подписи журнала переведены на все языки")
     func journalLabelsAreLocalized() throws {
-        let source = try RepoRoot.sourceText("myCoder/Sources/Services/AppLocalization.swift")
+        let source = try RepoRoot.localizationSourceText
         for key in ["locContextAssemblyLog", "locContextActionsCount", "locContextRequestLabel",
                     "locContextProcessingLabel", "locContextResultLabel", "locContextStatusRunning",
                     "locContextStatusDone", "locContextStatusWarning", "locContextStatusFailed",

@@ -10,10 +10,6 @@ import Testing
 struct ModuleSizeRatchetTests {
     /// Current over-budget files. Remove an entry as soon as the file is split.
     private static let overBudget: Set<String> = [
-        "myCoder/Sources/App/MyCoderApp.swift",
-        "myCoder/Sources/Services/AppLocalization.swift",
-        "myCoder/Sources/Services/WebChatDriver.swift",
-        "myCoder/Sources/Views/Settings/ModelSettingsView.swift",
     ]
 
     private static let moduleBudget = 600

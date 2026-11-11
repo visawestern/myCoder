@@ -47,7 +47,7 @@ struct SelectionRestoreLogicTests {
 
     @Test("AppState separates user preference from fallback auto-selection")
     func appStateWiresPreference() throws {
-        let source = try sourceText("myCoder/Sources/App/MyCoderApp.swift")
+        let source = try RepoRoot.appStateSourceText
         #expect(source.contains("preferredProviderID"))
         #expect(source.contains("SelectionRestoreLogic.resolvedProviderID"))
         #expect(source.contains("persistPreference"))

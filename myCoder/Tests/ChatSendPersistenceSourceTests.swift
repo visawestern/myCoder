@@ -27,7 +27,7 @@ struct ChatSendPersistenceSourceTests {
 
     @Test("AppState bootstrap writes to the project database and does not select early")
     func bootstrapUsesProjectDatabase() throws {
-        let appSource = try RepoRoot.sourceText("myCoder/Sources/App/MyCoderApp.swift")
+        let appSource = try RepoRoot.appStateSourceText
         #expect(appSource.contains("func prepareLocalSessionForSend(title: String) -> String?"))
         #expect(appSource.contains("DatabaseBridge.shared.createSession("))
         #expect(appSource.contains("return sessionID"))
