@@ -182,14 +182,15 @@ enum InternalModelRunner {
     }
 
     static func complete(messages: [DirectChatMessage],
-                         store: InternalModelStore = .shared) async throws -> String {
+                         store: InternalModelStore = .shared,
+                         timeout: TimeInterval = 600) async throws -> String {
         let refs = store.models
         guard !refs.isEmpty else { throw NoModelError() }
         var lastError: Error?
         for ref in refs {
             guard let route = InternalModelResolver.route(for: ref) else { continue }
             do {
-                return try await LiveSpecCompletionProvider().complete(
+                return try await LiveSpecCompletionProvider(timeout: timeout).complete(
                     SpecCompletionRequest(route: route, messages: messages)
                 )
             } catch {

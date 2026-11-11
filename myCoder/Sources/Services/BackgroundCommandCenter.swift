@@ -18,11 +18,26 @@ actor BackgroundCommandCenter {
     private init() {}
 
     /// Запустить команду в фоне. Возвращает id задачи.
+    ///
+    /// Здесь стоит только быстрая жёсткая защита от катастроф (без сети).
+    /// Смысловая проверка внутренней моделью выполняется на входе инструмента
+    /// (`ProjectWebToolExecutor.runCommandInBackground`), чтобы не держать
+    /// актор фонового терминала на время сетевого вызова.
     @discardableResult
     func start(command: String,
                workingDirectory: String,
                timeoutSeconds: TimeInterval = BackgroundCommandCenter.defaultTimeoutSeconds) -> String {
         let task = BackgroundCommandTask(command: command, workingDirectory: workingDirectory)
+        if let reason = DestructiveCommandGuard.blockReason(for: command) {
+            var blocked = task
+            blocked.state = .completed
+            blocked.output = "error: \(reason)"
+            blocked.exitCode = 2
+            blocked.finishedAt = Date()
+            tasks[task.id] = blocked
+            NotificationCenter.default.post(name: .backgroundCommandChanged, object: nil)
+            return task.id
+        }
         tasks[task.id] = task
         let id = task.id
         let process = Process()

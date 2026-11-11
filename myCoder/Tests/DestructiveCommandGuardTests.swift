@@ -43,6 +43,27 @@ struct DestructiveCommandGuardTests {
         expectBlocked("rm -rf /private", reasonContains: "system")
     }
 
+    @Test("Вложенные пути home и системных папок блокируются")
+    func blocksNestedHomeAndSystemPaths() {
+        expectBlocked("rm -rf /Users/apple", reasonContains: "system")
+        expectBlocked("rm -rf /Users/apple/Documents", reasonContains: "system")
+        expectBlocked("rm -rf /System/Library", reasonContains: "system")
+        expectBlocked("rm -rf /private/etc", reasonContains: "system")
+        expectBlocked("rm -rf /etc", reasonContains: "system")
+        expectBlocked("rm -rf /usr/local", reasonContains: "system")
+        expectBlocked("rm -rf ~/Documents", reasonContains: "home")
+        expectBlocked("rm -rf ~/.ssh", reasonContains: "home")
+        expectBlocked("rm -rf $HOME/Library", reasonContains: "home")
+        expectBlocked("rm -rf ${HOME}/Documents", reasonContains: "home")
+    }
+
+    @Test("Удаление содержимого корня после перехода блокируется")
+    func blocksRootContentDeletionAfterChdir() {
+        expectBlocked("cd / && rm -rf *", reasonContains: "root")
+        expectBlocked("cd / && rm -rf ./*", reasonContains: "root")
+        expectBlocked("cd /System && rm -rf *", reasonContains: "system")
+    }
+
     @Test("Форматирование и перезапись устройств блокируются")
     func blocksDeviceWipes() {
         expectBlocked("mkfs.ext4 /dev/sda1", reasonContains: "format")

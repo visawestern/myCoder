@@ -444,7 +444,20 @@ struct ProjectWebToolExecutor: WebToolExecutor {
 
     /// Запуск команды через фоновый терминал: процесс самостоятелен, UI и
     /// отправка новых сообщений не блокируются; тут только ждём итог.
+    ///
+    /// Перед запуском команда проходит проверку безопасности внутренней
+    /// моделью (аудит A6). Опасная или непроверенная команда возвращает
+    /// ошибку и не запускается.
     private func runCommandInBackground(_ command: String, workingDirectory: String) async -> String {
+        if let block = await ProjectShellRunner.safetyBlock(
+            command: command,
+            workingDirectory: workingDirectory
+        ) {
+            return BackgroundCommandLogic.renderResult(
+                output: block.output,
+                exitCode: Int(block.exitCode)
+            )
+        }
         let id = await BackgroundCommandCenter.shared.start(
             command: command,
             workingDirectory: workingDirectory

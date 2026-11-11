@@ -47,4 +47,37 @@ enum ProjectShellRunner {
         if r.exitCode != 0 { lines.append("(exit \(r.exitCode))") }
         return ProjectShellResult(output: lines.joined(separator: "\n"), exitCode: r.exitCode)
     }
+
+    /// Проверяет команду перед исполнением и возвращает готовую ошибку, если
+    /// выполнять её нельзя. nil означает «можно запускать».
+    ///
+    /// Вход: команда, рабочий каталог и функция вызова внутренней модели
+    /// (в тестах — подставная). Выход: результат-блокировка или nil.
+    /// Зависимости: `DangerousCommandAnalyzer`.
+    static func safetyBlock(
+        command: String,
+        workingDirectory: String,
+        completion: ([DirectChatMessage]) async throws -> String = { messages in
+            try await InternalModelRunner.complete(
+                messages: messages,
+                timeout: DangerousCommandAnalyzer.reviewTimeout
+            )
+        }
+    ) async -> ProjectShellResult? {
+        switch await DangerousCommandAnalyzer.evaluate(
+            command: command,
+            workingDirectory: workingDirectory,
+            completion: completion
+        ) {
+        case .allowed:
+            return nil
+        case .blocked(let reason):
+            return ProjectShellResult(output: "error: \(reason)", exitCode: 2)
+        case .notReviewed(let reason):
+            return ProjectShellResult(
+                output: "error: команда может изменить файлы или систему, но проверка внутренней моделью недоступна (\(reason)); команда не выполнена",
+                exitCode: 2
+            )
+        }
+    }
 }

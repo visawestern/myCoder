@@ -55,17 +55,81 @@ enum DestructiveCommandGuard {
             || (tokens.contains("--recursive") && tokens.contains("--force"))
         guard recursive else { return nil }
 
-        if tokens.contains("/") || tokens.contains("/*") {
-            return "Deleting the filesystem root is blocked (destructive command)."
+        // `cd / && rm -rf *` не содержит токена `/` рядом с rm, но удаляет
+        // всё содержимое корня. Проверяем цель перехода и маску удаления.
+        if let chdirIndex = tokens.firstIndex(of: "cd"),
+           tokens.count > chdirIndex + 1 {
+            let target = cleanToken(tokens[chdirIndex + 1])
+            let deletesEverything = tokens.contains("*") || tokens.contains("./*")
+                || tokens.contains("*.") || tokens.contains("/*")
+            if deletesEverything {
+                if target == "/" || target == "//" { return rootReason }
+                if isSystemPath(target) {
+                    return "Deleting system directory \(target) is blocked (destructive command)."
+                }
+            }
         }
-        if tokens.contains("~") || tokens.contains("$home") {
-            return "Deleting the home directory is blocked (destructive command)."
-        }
-        let systemRoots = ["/users", "/system", "/private", "/home"]
-        if let matched = tokens.first(where: { systemRoots.contains($0) }) {
-            return "Deleting system directory \(matched) is blocked (destructive command)."
+
+        for token in tokens {
+            let value = cleanToken(token)
+            if value == "/" || value == "/*" || value == "//" {
+                return rootReason
+            }
+            if isHomePath(value) {
+                return "Deleting the home directory is blocked (destructive command)."
+            }
+            if isSystemPath(value) {
+                return "Deleting system directory \(value) is blocked (destructive command)."
+            }
         }
         return nil
+    }
+
+    private static let rootReason = "Deleting the filesystem root is blocked (destructive command)."
+
+    /// Системные корни: удаление самого корня или любого пути внутри него
+    /// необратимо ломает машину. `/tmp` и пользовательские временные папки
+    /// сознательно не входят в список.
+    private static let systemRoots = [
+        "/users", "/system", "/library", "/applications", "/etc",
+        "/usr", "/bin", "/sbin", "/opt", "/cores", "/volumes", "/home"
+    ]
+
+    /// Снимает обрамляющие кавычки и знаки командной строки, чтобы
+    /// `rm -rf "/Users/x";` распознавался так же, как `rm -rf /Users/x`.
+    ///
+    /// Вход: токен. Выход: очищенный токен. Зависимости: нет.
+    private static func cleanToken(_ token: String) -> String {
+        token.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`()[]{};,"))
+    }
+
+    /// Домашний каталог: `~`, `~/…`, `~user`, `$HOME`, `${HOME}/…`.
+    ///
+    /// Вход: токен. Выход: true, если путь ведёт в домашний каталог.
+    /// Зависимости: нет.
+    private static func isHomePath(_ value: String) -> Bool {
+        if value.hasPrefix("~") { return true }
+        if value == "$home" || value.hasPrefix("$home/") { return true }
+        if value.hasPrefix("${home}") { return true }
+        return false
+    }
+
+    /// Путь внутри системного корня. `/private/tmp` и
+    /// `/private/var/folders` — временные каталоги, их удаление не ломает
+    /// систему, поэтому они исключены.
+    ///
+    /// Вход: токен. Выход: true для системного пути. Зависимости: нет.
+    private static func isSystemPath(_ value: String) -> Bool {
+        if value.hasPrefix("/private") {
+            if value.hasPrefix("/private/tmp") || value.hasPrefix("/private/var/folders") {
+                return false
+            }
+            return value == "/private" || value.hasPrefix("/private/")
+        }
+        for root in systemRoots {
+            if value == root || value.hasPrefix(root + "/") { return true }
+        }
+        return false
     }
 
     /// Блокирует форматирование (mkfs/diskutil) и перезапись блочных устройств
