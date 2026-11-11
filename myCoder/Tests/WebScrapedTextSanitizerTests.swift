@@ -7,6 +7,7 @@ import Testing
 /// the "tool" language chip and the localized copy button ("Копировать").
 /// The sanitizer must strip those standalone chip lines while preserving
 /// real content, fences, and prose that merely contains the words.
+@MainActor
 @Suite("WEB-CHAT-12: scraped vendor chrome sanitizer")
 struct WebScrapedTextSanitizerTests {
 

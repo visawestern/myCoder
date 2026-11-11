@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Send API response metadata")
 struct SendAPIResponseLogicTests {
     @Test("API response reports the effective model")

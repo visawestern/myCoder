@@ -6,6 +6,7 @@ import Foundation
 /// button next to resend/retry that swaps the rendered message for the raw
 /// one. The old leaf-icon button (which turned the message into plain text for
 /// selection) is no longer wanted.
+@MainActor
 @Suite("Кнопка сырого ответа у сообщения")
 struct RawAnswerToggleTests {
 

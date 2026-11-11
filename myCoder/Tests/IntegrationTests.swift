@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Integration Tests - Smart Send Flow")
 struct IntegrationTests {
 

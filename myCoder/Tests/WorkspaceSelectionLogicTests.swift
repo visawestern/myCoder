@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Workspace selection and session loading")
 struct WorkspaceSelectionLogicTests {
     @Test("switching workspace requests a session reload")

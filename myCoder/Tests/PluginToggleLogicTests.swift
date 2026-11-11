@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-13: plugin enable/disable settings")
 struct PluginToggleLogicTests {
     @Test("toggle adds a plugin to disabled IDs")

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Reasoning blocks render in arrival order")
 struct ReasoningSegmentsTests {
 

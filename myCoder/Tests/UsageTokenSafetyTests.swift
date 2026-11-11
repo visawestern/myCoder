@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("USG-02/USG-03 usage token safety")
 struct UsageTokenSafetyTests {
     @Test("UsageCapture clamps negative provider token counts")

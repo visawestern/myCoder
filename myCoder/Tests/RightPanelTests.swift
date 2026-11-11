@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - RTP-01: Right Panel Visibility Logic
 
+@MainActor
 @Suite("RTP-01: Right panel visibility (showGoal)")
 struct RightPanelVisibilityTests {
 
@@ -114,6 +115,7 @@ struct RightPanelVisibilityTests {
 
 // MARK: - RTP-02: TaskStep Model
 
+@MainActor
 @Suite("RTP-02: TaskStep model")
 struct TaskStepModelTests {
 
@@ -140,6 +142,7 @@ struct TaskStepModelTests {
 
 // MARK: - StepStatus Enum
 
+@MainActor
 @Suite("StepStatus enum")
 struct StepStatusTests {
 
@@ -167,6 +170,7 @@ struct StepStatusTests {
 
 // MARK: - TaskStep State Transitions
 
+@MainActor
 @Suite("TaskStep state transitions")
 struct TaskStepTransitionTests {
 
@@ -215,6 +219,7 @@ struct TaskStepTransitionTests {
 
 // MARK: - TaskProgress Model
 
+@MainActor
 @Suite("TaskProgress model")
 struct TaskProgressTests {
 
@@ -294,6 +299,7 @@ struct TaskProgressTests {
 
 // MARK: - RightPanelProgressDisplay Logic
 
+@MainActor
 @Suite("RightPanelProgressDisplay logic")
 struct RightPanelProgressDisplayTests {
 
@@ -384,6 +390,7 @@ struct RightPanelProgressDisplayTests {
 // ExecutionStepSyncLogicTests.swift (already existing).
 // The tests below verify complementary logic not covered there.
 
+@MainActor
 @Suite("ExecutionStepSyncLogic — additional")
 struct ExecutionStepSyncLogicAdditionalTests {
 

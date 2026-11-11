@@ -13,6 +13,7 @@ import Foundation
 ///
 /// Отдельно проверяется, что `.image`-части больше не попадают в вертикальный
 /// поток текста (их рисует коллаж), а legacy `attachedImages` не дублируются.
+@MainActor
 @Suite("Коллаж картинок в сообщении (C5)")
 struct MessageImageCollageLogicTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Role-based model routing")
 struct ModelRoutingTests {
     private let primary = ModelAssignment(providerID: "alpha", modelID: "one")

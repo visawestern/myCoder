@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-09 web selection reconciliation")
 struct WebSelectionReconciliationLogicTests {
     @Test("destination provider selection beats a shared global preference")

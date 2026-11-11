@@ -5,6 +5,7 @@ import Foundation
 /// Auto-backup of a per-project DB before destructive operations
 /// (plan Раздел 8 п.49): backup into `<project>/.mycoder/backups/` with
 /// retention by count and by age.
+@MainActor
 @Suite("Project auto-backup before destructive ops (plan Раздел 8 п.49)")
 struct ProjectAutoBackupTests {
 

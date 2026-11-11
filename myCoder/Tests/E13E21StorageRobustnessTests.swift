@@ -6,6 +6,7 @@ import Foundation
 /// `<project>/.mycoder/` cannot be created) must still open — the DB falls
 /// back to `<home>/.mycoder/projects/<stable-hash>/project.db` instead of the
 /// whole open failing. E21 (Раздел 7 п.46): per-project DBs run in WAL mode.
+@MainActor
 @Suite("E13/E21 — read-only fallback + WAL journaling (Round 24)")
 struct E13E21StorageRobustnessTests {
 

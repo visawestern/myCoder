@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Tool call presentation")
 struct ToolCallPresentationLogicTests {
 

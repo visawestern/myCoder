@@ -10,6 +10,7 @@ import Foundation
 /// (backed by the todo store). Deliberately NOT added: web_search (no search
 /// backend — would be a stub), LSP (no language server), Notebook* (no
 /// notebook runtime), plan-mode toggles (UI modes, not tools).
+@MainActor
 @Suite("Web tools — Claude Code parity (aliases, args, new tools)")
 struct WebToolsClaudeParityTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Send routing + direct chat client (empty-response fix)")
 struct SendRoutingTests {
 

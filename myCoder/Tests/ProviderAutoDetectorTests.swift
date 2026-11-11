@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Provider auto-detector (plan Раздел 9)")
 struct ProviderAutoDetectorTests {
 

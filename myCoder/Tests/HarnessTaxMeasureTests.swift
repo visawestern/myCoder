@@ -5,6 +5,7 @@ import Foundation
 /// Harness-tax C4 living gate: the minimal profile must stay substantially
 /// cheaper than full, and the numbers below are the measured baseline
 /// (also recorded in .claude/evals/harness-tax-report.md).
+@MainActor
 @Suite("Harness-tax C4 measurement gate")
 struct HarnessTaxMeasureTests {
 

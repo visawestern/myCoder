@@ -4,6 +4,7 @@ import Foundation
 
 /// The message store holds one feed per chat so a model turn can keep writing
 /// while the user reads another conversation.
+@MainActor
 @Suite("MessageStore background streaming")
 struct MessageStoreBackgroundStreamingTests {
 

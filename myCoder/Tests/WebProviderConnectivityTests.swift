@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Web provider connectivity for chat input (plan Раздел 13 п.4)")
 struct WebProviderConnectivityTests {
 

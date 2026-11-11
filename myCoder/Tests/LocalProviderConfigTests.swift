@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Local provider config + unified providers logic (plan Раздел 1)")
 struct LocalProviderConfigTests {
 

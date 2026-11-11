@@ -8,6 +8,7 @@ import Foundation
 /// 3. read_file on an image returns the ATTACHED_IMAGE marker (not a lie
 ///    about "model does not support image input") and round-trips through
 ///    the driver as a real attachment.
+@MainActor
 @Suite("Web discovery honesty + image attach (audit 2026-09-06)")
 struct WebDiscoveryHonestyTests {
 

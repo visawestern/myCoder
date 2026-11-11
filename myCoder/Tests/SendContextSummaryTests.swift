@@ -4,6 +4,7 @@ import Foundation
 
 /// Человекочитаемая сводка подготовки контекста: всегда есть что показать
 /// в окне «Контекст» — либо собранный пакет, либо честная причина.
+@MainActor
 @Suite("Сводка контекста (SendContextPreparationLogic.summary)")
 struct SendContextSummaryTests {
 

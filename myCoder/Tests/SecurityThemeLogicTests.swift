@@ -5,6 +5,7 @@ import SwiftUI
 
 // MARK: - SEC-02: AccessLevelPermissionLogic
 
+@MainActor
 @Suite("SEC-02: AccessLevel Permission Logic")
 struct AccessLevelPermissionLogicTests {
 
@@ -165,6 +166,7 @@ struct AccessLevelPermissionLogicTests {
 
 // MARK: - THE-02: Font scaling / zoom logic
 
+@MainActor
 @Suite("THE-02: Font Scaling and Zoom Logic")
 struct FontScalingTests {
 
@@ -267,6 +269,7 @@ struct FontScalingTests {
 
 // MARK: - PROV-09: Test connection logic
 
+@MainActor
 @Suite("PROV-09: Provider Connection Logic")
 struct ProviderConnectionTests {
 
@@ -411,6 +414,7 @@ struct ProviderConnectionTests {
 
 // MARK: - ERR-01: Session busy recovery / MimoServeError
 
+@MainActor
 @Suite("ERR-01: Session Busy Recovery and MimoServeError")
 struct MimoServeErrorTests {
 

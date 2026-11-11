@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - SSE Client Tests
 
+@MainActor
 @Suite("SSE Client")
 struct SSEClientTests {
 
@@ -75,6 +76,7 @@ struct SSEClientTests {
 
 // MARK: - Message Send Flow Tests
 
+@MainActor
 @Suite("Message Send Flow")
 struct MessageSendFlowTests {
 
@@ -166,6 +168,7 @@ struct MessageSendFlowTests {
 
 // MARK: - Status Bar Tests
 
+@MainActor
 @Suite("Status Bar")
 struct StatusBarTests {
 

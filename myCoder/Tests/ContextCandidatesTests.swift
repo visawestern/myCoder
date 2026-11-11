@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Кандидаты контекста — ранжирование вместо полной доски")
 struct ContextCandidatesTests {
 

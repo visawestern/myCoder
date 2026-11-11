@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Input command trigger + dropdown filter (plan Раздел 6)")
 struct InputCommandTriggerTests {
 

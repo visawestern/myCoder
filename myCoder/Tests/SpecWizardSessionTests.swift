@@ -51,6 +51,7 @@ private final class ProviderCallRecorder {
     }
 }
 
+@MainActor
 @Suite("Spec wizard session")
 struct SpecWizardSessionTests {
 

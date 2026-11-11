@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Sync Start True Response")
 struct SyncStartTrueResponseTests {
 

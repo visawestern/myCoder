@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Usage data sources")
 struct UsageDataSourcesLogicTests {
     private func point(_ model: String, cost: Double?) -> UsageDataPoint {

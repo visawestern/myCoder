@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("E23/E24 — auto-detect requires confirmation + overall timeout is enforced (Раздел 9 п.30/п.33)")
 struct E23E24AutoDetectConfirmationTests {
 

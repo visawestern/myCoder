@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Activity 14 provider send readiness")
 struct SendProviderReadinessLogicTests {
     @Test("Serve connectivity cannot approve an unrelated expired web route")

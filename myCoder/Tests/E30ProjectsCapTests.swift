@@ -6,6 +6,7 @@ import Foundation
 /// projects through `DatabaseManager.getAllProjects()`, which silently applied
 /// `LIMIT 100` by default. A user with more than 100 projects loses the rest
 /// from the UI with no indication. The cap must be explicit, not hidden.
+@MainActor
 @Suite("E30 — no silent 100-project cap on the projects list")
 struct E30ProjectsCapTests {
 

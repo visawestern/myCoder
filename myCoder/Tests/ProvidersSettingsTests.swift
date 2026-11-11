@@ -5,6 +5,7 @@ import SwiftUI
 
 // MARK: - Provider Tab Tests
 
+@MainActor
 @Suite("Providers Settings Tab")
 struct ProvidersSettingsTests {
 
@@ -130,6 +131,7 @@ struct ProvidersSettingsTests {
 
 // MARK: - Provider Row View Tests
 
+@MainActor
 @Suite("ProviderRowView Tests")
 struct ProviderRowViewTests {
 
@@ -162,6 +164,7 @@ struct ProviderRowViewTests {
 
 // MARK: - CustomProvider Chip Display
 
+@MainActor
 @Suite("CustomProvider Chip Display")
 struct CustomProviderChipTests {
 

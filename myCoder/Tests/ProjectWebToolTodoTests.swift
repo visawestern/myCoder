@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project web tool executor — todo_read/todo_write (plan Раздел 12)")
 struct ProjectWebToolTodoTests {
 

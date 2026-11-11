@@ -6,6 +6,7 @@ import Foundation
 /// data directory (project.db + snapshots) to a single .zip archive and
 /// restore it back. Pure planning logic is tested here; the zip itself is
 /// produced by the platform `ditto` tool (never a stub).
+@MainActor
 @Suite("Project backup export/import (plan Раздел 8 п.29/п.30)")
 struct ProjectBackupTests {
 

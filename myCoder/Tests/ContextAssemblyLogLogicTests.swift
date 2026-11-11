@@ -6,6 +6,7 @@ import Foundation
 /// spoiler with the complete context-assembly log. Every action keeps what was
 /// requested, how it was processed and what actually came back — no invented
 /// steps, no silent omissions. This suite locks the pure model behind that UI.
+@MainActor
 @Suite("Журнал сборки контекста")
 struct ContextAssemblyLogLogicTests {
 

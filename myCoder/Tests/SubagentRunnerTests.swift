@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("SubagentRunner — sessions, lifecycle and gating", .serialized)
 struct SubagentRunnerTests {
 

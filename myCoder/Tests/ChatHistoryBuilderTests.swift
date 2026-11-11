@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Chat history builder (audit P1 — stateless chat fix)")
 struct ChatHistoryBuilderTests {
 

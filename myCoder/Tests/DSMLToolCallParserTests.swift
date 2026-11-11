@@ -6,6 +6,7 @@ import Foundation
 /// часть моделей (DeepSeek V4.1 Flash / MiMo-style агенты) эмитят вместо
 /// наших ```tool-блоков. Live-дефект 2026-11-09: чат завис на
 /// `<｜DSML｜ invoke …>` — вызов не исполнялся, ответ показывался как текст.
+@MainActor
 @Suite("Инструменты — DSML формат вызовов")
 struct DSMLToolCallParserTests {
 

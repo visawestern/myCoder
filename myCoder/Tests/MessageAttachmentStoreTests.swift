@@ -10,6 +10,7 @@ private struct MockClipboardProvider: ClipboardProviding {
     }
 }
 
+@MainActor
 @Suite("Message Attachment Store")
 struct MessageAttachmentStoreTests {
 

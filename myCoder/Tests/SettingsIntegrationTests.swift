@@ -5,6 +5,7 @@ import SwiftUI
 
 // MARK: - SET-02: General Settings Tab
 
+@MainActor
 @Suite("SET-02 General Settings", .serialized)
 struct GeneralSettingsTests {
 
@@ -124,6 +125,7 @@ struct GeneralSettingsTests {
 
 // MARK: - SET-03: Model Settings Tab
 
+@MainActor
 @Suite("SET-03 Model Settings")
 struct ModelSettingsTests {
 
@@ -495,6 +497,7 @@ struct ModelSettingsTests {
 
 // MARK: - SET-04: Skills Tab
 
+@MainActor
 @Suite("SET-04 Skills Tab")
 struct SkillsTabTests {
 
@@ -559,6 +562,7 @@ struct SkillsTabTests {
 
 // MARK: - SET-05: MCP Tab
 
+@MainActor
 @Suite("SET-05 MCP Tab")
 struct MCPTabTests {
 
@@ -608,6 +612,7 @@ struct MCPTabTests {
 
 // MARK: - SET-06: Plugins Tab
 
+@MainActor
 @Suite("SET-06 Plugins Tab")
 struct PluginsTabTests {
 
@@ -630,6 +635,7 @@ struct PluginsTabTests {
 
 // MARK: - SET-07: Commands Tab
 
+@MainActor
 @Suite("SET-07 Commands Tab")
 struct CommandsTabTests {
 
@@ -651,6 +657,7 @@ struct CommandsTabTests {
 
 // MARK: - SET-08: Remote Connection Sheet
 
+@MainActor
 @Suite("SET-08 Remote Connection")
 struct RemoteConnectionTests {
 
@@ -691,6 +698,7 @@ struct RemoteConnectionTests {
 
 // MARK: - Settings Tab Navigation
 
+@MainActor
 @Suite("Settings Tab Navigation")
 struct SettingsTabNavigationTests {
 
@@ -780,6 +788,7 @@ struct SettingsTabNavigationTests {
 
 // MARK: - AppState Integration
 
+@MainActor
 @Suite("AppState Settings Integration", .serialized)
 struct AppStateSettingsIntegrationTests {
 

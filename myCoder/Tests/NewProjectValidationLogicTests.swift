@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("New Project validation")
 struct NewProjectValidationLogicTests {
     @Test("validates trimmed name and existing directory")

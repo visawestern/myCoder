@@ -7,6 +7,7 @@ import Foundation
 /// name — the same way opencode does. This proves the loader maps
 /// `provider.<id>.models.<model>.limit.context` → model id, and that the
 /// catalog consults that dictionary.
+@MainActor
 @Suite("OpenCode model-window reference dictionary")
 struct OpenCodeModelWindowsTests {
 

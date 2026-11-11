@@ -4,6 +4,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Markdown render cache", .serialized)
 struct ChatMarkdownCacheTests {
 

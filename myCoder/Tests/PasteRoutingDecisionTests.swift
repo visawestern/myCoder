@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Paste Routing Decision")
 struct PasteRoutingDecisionTests {
 

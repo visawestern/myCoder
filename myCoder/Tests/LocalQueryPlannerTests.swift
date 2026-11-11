@@ -5,6 +5,7 @@ import Foundation
 /// The local planner may only *widen* the deterministic plan, from a bounded
 /// list of real entities, and every failure must be a visible fallback — never
 /// a broken send and never invented code or line numbers.
+@MainActor
 @Suite("Локальный планировщик запроса — контракт, валидатор, fallback")
 struct LocalQueryPlannerTests {
 

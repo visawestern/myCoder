@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Model selection presentation")
 struct ModelSelectionPresentationLogicTests {
     @Test("effective model drives visible selector label and selected-row identity")

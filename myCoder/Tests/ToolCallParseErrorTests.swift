@@ -5,6 +5,7 @@ import Foundation
 /// A tool block the model got wrong must never vanish. Every broken block is
 /// reported back to the model as a tool_result error so the agentic loop keeps
 /// running and the model can re-emit a valid call.
+@MainActor
 @Suite("Tool call parse errors")
 struct ToolCallParseErrorTests {
 

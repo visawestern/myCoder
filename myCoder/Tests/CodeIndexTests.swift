@@ -6,6 +6,7 @@ import Foundation
 /// target is unambiguous, labelled heuristics where a convention was used, and
 /// no unresolved placeholders in evidence. `read_symbol` must never show a line
 /// number that was not verified against the file on disk.
+@MainActor
 @Suite("Граф кода — извлечение, БД, поиск и tools")
 struct CodeIndexTests {
 

@@ -9,6 +9,7 @@ import Foundation
 /// empty or the previously selected session). The response must reflect the
 /// post-mutation state, so target resolution is extracted into one MainActor
 /// function whose result IS what the response reports.
+@MainActor
 @Suite("Round 29 R4 — API send target resolution matches the response")
 struct MyCoderAPIServerSendResolutionTests {
 

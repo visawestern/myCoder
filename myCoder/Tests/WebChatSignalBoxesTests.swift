@@ -5,6 +5,7 @@ import Foundation
 /// Сигналы веб-чата и стабильностные боксы: retry/approval/completion
 /// сигналы (первый записывается, take() сбрасывает), подтверждения
 /// лимита и счётчик рестартов.
+@MainActor
 @Suite("Сигналы и боксы веб-чата")
 struct WebChatSignalBoxesTests {
 

@@ -11,6 +11,7 @@ import Foundation
 ///   п.16 /pr → create a PR (or publish wizard when no remote exists)
 ///   п.23 /context → show workspace/branch/model/provider context in chat
 ///   п.14 /test → inject instruction with the DETECTED test runner
+@MainActor
 @Suite("E08 — slash commands dispatch real side effects")
 struct E08SlashCommandDispatchTests {
 

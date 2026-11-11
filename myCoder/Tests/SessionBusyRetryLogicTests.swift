@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("ERR-01 session busy retry")
 struct SessionBusyRetryLogicTests {
     @Test("retry stops after three recovery attempts")

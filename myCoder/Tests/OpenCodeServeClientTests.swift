@@ -4,6 +4,7 @@ import Foundation
 
 /// OpenCode headless-server session API (verified live against
 /// `opencode serve` 1.18.29: POST /session → POST /session/:id/message).
+@MainActor
 @Suite("OpenCode serve session client (OC-2)")
 struct OpenCodeServeClientTests {
 

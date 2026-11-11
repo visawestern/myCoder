@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project files cache (audit P12 — @ dropdown was empty)")
 struct ProjectFilesCacheLogicTests {
 

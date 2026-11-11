@@ -6,6 +6,7 @@ import Foundation
 // Tests that verify every capability gate, provider selection, variant logic,
 // context window display, and error handling for ALL edge cases
 
+@MainActor
 @Suite("Provider & Model Edge Cases")
 struct ProviderModelEdgeCaseTests {
 

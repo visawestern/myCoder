@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("LSP — обнаружение серверов")
 struct LSPDiscoveryTests {
 
@@ -35,6 +36,7 @@ struct LSPDiscoveryTests {
     }
 }
 
+@MainActor
 @Suite("LSP — реестр")
 struct LSPRegistryManagerTests {
 
@@ -71,6 +73,7 @@ struct LSPRegistryManagerTests {
     }
 }
 
+@MainActor
 @Suite("LSP — мутация конфига")
 struct LSPConfigMutationLogicTests {
 

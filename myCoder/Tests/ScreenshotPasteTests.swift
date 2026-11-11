@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 @testable import myCoder
 
+@MainActor
 @Suite("Screenshot Pasteboard", .serialized)
 struct ScreenshotPasteboardTests {
 
@@ -158,6 +159,7 @@ private final class PromisedPNGProvider: NSObject, NSPasteboardItemDataProvider 
     }
 }
 
+@MainActor
 @Suite("Chat Paste Routing")
 struct ChatPasteRoutingTests {
 

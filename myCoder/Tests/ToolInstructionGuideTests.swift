@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Detailed tool mini guide")
 struct ToolInstructionGuideTests {
     @Test func includesEveryExecutableToolContractExactlyOnce() {

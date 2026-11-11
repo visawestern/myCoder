@@ -7,6 +7,7 @@ import Foundation
 /// `sessions = []` → `loadSessionsFromDatabase(projectId: "standalone")`
 /// hit the unknown-workspace guard and returned early — the list stayed
 /// empty forever although every row was intact in the DB.
+@MainActor
 @Suite("Standalone chat list survives workspace switches (plus-button wipe)")
 struct StandaloneListWipeTests {
 
@@ -71,6 +72,7 @@ struct StandaloneListWipeTests {
     }
 }
 
+@MainActor
 @Suite("Session row actions (click-path audit)")
 struct SessionRowActionsTests {
 

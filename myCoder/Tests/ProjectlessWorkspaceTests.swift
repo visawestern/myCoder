@@ -4,6 +4,7 @@ import Foundation
 
 /// The "no project" mode: a chat that is not tied to a project folder must
 /// still have a real working directory, so tools and shell commands work.
+@MainActor
 @Suite("No-project mode")
 struct ProjectlessWorkspaceTests {
 

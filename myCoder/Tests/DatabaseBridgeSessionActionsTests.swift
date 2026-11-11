@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("DatabaseBridge — sidebar session actions (program DB only)", .serialized)
 struct DatabaseBridgeSessionActionsTests {
 

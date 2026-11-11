@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Command file manager CRUD", .serialized)
 struct CommandFileManagerTests {
 
@@ -135,6 +136,7 @@ struct CommandFileManagerTests {
     }
 }
 
+@MainActor
 @Suite("Slash command executor custom template injection")
 struct SlashCommandExecutorCustomTests {
 

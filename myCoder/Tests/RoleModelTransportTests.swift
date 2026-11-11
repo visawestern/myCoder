@@ -52,6 +52,7 @@ private func testContext(
     )
 }
 
+@MainActor
 @Suite("Role transport resolution (M1)")
 struct RoleTransportResolverTests {
 
@@ -141,6 +142,7 @@ struct RoleTransportResolverTests {
     }
 }
 
+@MainActor
 @Suite("Role request execution (M1)")
 struct RoleRequestExecutorTests {
 
@@ -344,6 +346,7 @@ struct RoleRequestExecutorTests {
     }
 }
 
+@MainActor
 @Suite("Routed images policy (M1)")
 struct RoutedImagesPolicyTests {
     private let primary = ModelAssignment(providerID: "p-main", modelID: "main")

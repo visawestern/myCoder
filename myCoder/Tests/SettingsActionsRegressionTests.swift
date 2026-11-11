@@ -77,6 +77,7 @@ struct SettingsActionsRegressionTests {
 // can fill them all.
 // ═══════════════════════════════════════════════════════════════════════════
 
+@MainActor
 @Suite("Localization coverage — every key translated (Round 10)")
 struct LocalizationCoverageTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Plan ↔ todo bridge (alias of the current plan into todo_read)")
 struct PlanTodoBridgeTests {
 

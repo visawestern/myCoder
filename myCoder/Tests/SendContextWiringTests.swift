@@ -6,6 +6,7 @@ import Foundation
 /// really use it. These tests read the wiring at the source level — the
 /// project has no UI test target, and a deleted call site is exactly the
 /// regression that "tests pass" would otherwise hide.
+@MainActor
 @Suite("Точечный контекст подключён к отправке и настройкам")
 struct SendContextWiringTests {
 
@@ -72,6 +73,7 @@ struct SendContextWiringTests {
 /// The user's design (2026-11-03): the system instruction is built BEFORE the
 /// context is compiled, so the pack can carry it and the context viewer shows
 /// the whole payload (system + context + request) instead of only evidence.
+@MainActor
 @Suite("Системная инструкция собирается до контекста")
 struct SendSystemPromptWiringTests {
 

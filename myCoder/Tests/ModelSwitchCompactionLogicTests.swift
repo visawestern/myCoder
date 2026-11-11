@@ -6,6 +6,7 @@ import Foundation
 /// context window is smaller than the chat's current context, the chat must
 /// be compacted before it continues — and the user must be able to stop that
 /// compaction, roll it back, or pick another model with a larger window.
+@MainActor
 @Suite("Сжатие контекста при смене модели")
 struct ModelSwitchCompactionLogicTests {
 

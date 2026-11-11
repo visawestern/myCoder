@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Sidebar resize logic (plan Раздел 11 Блок 1)")
 struct SidebarResizeLogicTests {
 

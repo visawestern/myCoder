@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Web chat driver — agentic loop over web chat (plan Раздел 12 Блок 2/3)")
 struct WebChatDriverTests {
 
@@ -379,6 +380,7 @@ struct WebChatDriverTests {
     }
 }
 
+@MainActor
 @Suite("Web session manager — cookie persistence (plan Раздел 12 Блок 3)")
 struct WebSessionManagerTests {
 
@@ -425,6 +427,7 @@ struct WebSessionManagerTests {
 }
 
 
+@MainActor
 @Suite("WEB-CHAT-12: approval interruption in web agent loop")
 struct WebChatApprovalInterruptionTests {
     final class ApprovalBridge: BrowserAutomationBridge, @unchecked Sendable {

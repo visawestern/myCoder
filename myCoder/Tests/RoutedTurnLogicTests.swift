@@ -67,6 +67,7 @@ private func makeEntry(
     )
 }
 
+@MainActor
 @Suite("Routed turn pure logic (M1)")
 struct RoutedTurnLogicTests {
 
@@ -236,6 +237,7 @@ struct RoutedTurnLogicTests {
     }
 }
 
+@MainActor
 @Suite("Routed turn executor (M1)")
 struct RoutedTurnExecutorTests {
 

@@ -7,6 +7,7 @@ import Foundation
 /// and there was no "Add account" button anywhere — even though
 /// /api/add-account supports cloning. Adding another account of the same
 /// vendor must clone settings under a NEW id/name with a clean session state.
+@MainActor
 @Suite("Round 30b — web account cloning logic")
 struct WebAccountCloneLogicTests {
 

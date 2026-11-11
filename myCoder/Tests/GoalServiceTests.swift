@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("ЦЕЛЬ — GoalService")
 struct GoalServiceTests {
 
@@ -49,6 +50,7 @@ struct GoalServiceTests {
     }
 }
 
+@MainActor
 @Suite("ЦЕЛЬ — авто-проверка адвокатом дьявола")
 struct GoalVerificationServiceTests {
 

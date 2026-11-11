@@ -5,6 +5,7 @@ import Foundation
 /// Confirmation gate for destructive project deletion (plan Раздел 8 п.24/п.54:
 /// "требование ввода названия проекта для подтверждения деструктивной операции",
 /// GitHub "type repo name to delete" pattern).
+@MainActor
 @Suite("Project deletion confirmation gate (plan Раздел 8 п.24/п.54)")
 struct ProjectDeleteConfirmationTests {
 

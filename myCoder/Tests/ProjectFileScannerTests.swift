@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project file scanner (plan Раздел 7 Блок 3)")
 struct ProjectFileScannerTests {
 

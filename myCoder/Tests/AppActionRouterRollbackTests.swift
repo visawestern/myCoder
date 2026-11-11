@@ -3,6 +3,7 @@ import Foundation
 @testable import myCoder
 
 /// Чистый разбор параметров `chat.rollback` — без AppState/UI.
+@MainActor
 @Suite("AppActionRouter chat.rollback")
 struct AppActionRouterRollbackTests {
 

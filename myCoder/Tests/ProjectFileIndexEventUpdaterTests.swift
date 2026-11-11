@@ -4,6 +4,7 @@ import Foundation
 
 /// Событийный апдейтер индекса: FSEvents-событие обновляет только
 /// затронутые файлы/папки, а не пересканирует весь проект.
+@MainActor
 @Suite("ProjectFileIndexEventUpdater — событийная переиндексация")
 struct ProjectFileIndexEventUpdaterTests {
 

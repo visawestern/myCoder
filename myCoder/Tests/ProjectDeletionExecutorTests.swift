@@ -4,6 +4,7 @@ import Foundation
 
 /// Безопасное удаление данных проекта: отказ для пустых/небезопасных
 /// путей и реальное удаление временной папки `.mycoder` внутри проекта.
+@MainActor
 @Suite("Удаление данных проекта (ProjectDeletionExecutor)")
 struct ProjectDeletionExecutorTests {
 

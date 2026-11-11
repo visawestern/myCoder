@@ -6,6 +6,7 @@ import Testing
 /// tabs — system instruction, request, plan, memory, skills, graph, files,
 /// gaps. The tab order must match the assembly order the model receives, so a
 /// reader never has to guess where a section came from.
+@MainActor
 @Suite("Вкладки просмотра собранного контекста")
 struct TurnPresentationTabTests {
 

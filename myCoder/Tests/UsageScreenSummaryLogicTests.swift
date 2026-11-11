@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("USG-02 usage screen summary")
 struct UsageScreenSummaryLogicTests {
     @Test("message count follows the selected usage points")

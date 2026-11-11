@@ -6,6 +6,7 @@ import Foundation
 /// sidebar (and via `/goal edit`, the same path the API uses), and the change
 /// is written to the same store the panel, the composer spoiler and the
 /// verification read.
+@MainActor
 @Suite("Редактирование цели")
 struct GoalEditingTests {
 

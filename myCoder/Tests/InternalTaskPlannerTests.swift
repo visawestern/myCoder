@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Internal task planner evidence and questions")
 struct InternalTaskPlannerTests {
     @Test func promptIncludesTaskGraphAndAvailableSkills() {

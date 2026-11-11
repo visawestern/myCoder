@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Web session limit + prompt chunking (plan Раздел 12 extension)")
 struct WebPromptChunkerTests {
 

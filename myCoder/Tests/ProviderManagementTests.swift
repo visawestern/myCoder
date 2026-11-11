@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Provider management")
 struct ProviderManagementTests {
     private func customProvider(

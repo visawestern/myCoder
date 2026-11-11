@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-05 active browser stop routing")
 struct WebBrowserStopRoutingLogicTests {
     @Test("stop target preserves the active project/chat/provider/session identity")

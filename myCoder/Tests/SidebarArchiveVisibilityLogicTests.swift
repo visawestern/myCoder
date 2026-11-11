@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SID-05: archived workspace visibility")
 struct SidebarArchiveVisibilityLogicTests {
     @Test("archived registry project is excluded from active sidebar")

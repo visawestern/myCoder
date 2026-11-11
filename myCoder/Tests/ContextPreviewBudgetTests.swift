@@ -10,6 +10,7 @@ import Foundation
 /// give `compiled` with 12 dependents one run and `noEvidence`/timeout the
 /// next. The preview must honour the same budget — a slow graph walk is a
 /// gap, never a dead endpoint.
+@MainActor
 @Suite("Бюджет impact-прохода в предпросмотре контекста")
 struct ContextPreviewBudgetTests {
 

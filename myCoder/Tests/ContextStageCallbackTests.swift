@@ -5,6 +5,7 @@ import Testing
 /// User directive 2026-11-03 (п.2): the composer line must name every source
 /// that is actually being read. Graph and skills used to be collected silently
 /// inside the compiler, so the one-line log stopped at "читаю файлы".
+@MainActor
 @Suite("Стадии сборки: граф, скиллы, влияние")
 struct ContextStageCallbackTests {
 

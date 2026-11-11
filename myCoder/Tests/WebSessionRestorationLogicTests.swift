@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-LOGIN-13: browser session restoration payload")
 struct WebSessionRestorationLogicTests {
     @Test("restoration payload preserves cookies and localStorage")

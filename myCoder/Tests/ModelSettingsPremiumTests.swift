@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Model Settings Premium Layout")
 struct ModelSettingsPremiumTests {
 

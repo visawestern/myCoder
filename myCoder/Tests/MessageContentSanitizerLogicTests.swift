@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Message content sanitizer")
 struct MessageContentSanitizerLogicTests {
 
@@ -49,6 +50,7 @@ struct MessageContentSanitizerLogicTests {
     }
 }
 
+@MainActor
 @Suite("Think tag handling")
 struct ThinkTagLogicTests {
 
@@ -108,6 +110,7 @@ struct ThinkTagLogicTests {
         #expect(cleaned == "Visible")
     }
 }
+@MainActor
 @Suite("OpenCode tool status")
 struct OpenCodeToolStatusLogicTests {
 

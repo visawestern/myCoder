@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Message Sending")
 struct MessageSendTests {
 
@@ -114,6 +115,7 @@ struct MessageSendTests {
     }
 }
 
+@MainActor
 @Suite("File Attachment Support")
 struct FileAttachmentTests {
 
@@ -143,6 +145,7 @@ struct FileAttachmentTests {
     }
 }
 
+@MainActor
 @Suite("Session Busy Error Handling")
 struct SessionBusyTests {
 

@@ -5,6 +5,7 @@ import Foundation
 /// TDD для инструмента `browser_fetch` — «продвинутый web_fetch» через
 /// API браузера: полный доступ к DOM (script), чтение по селектору,
 /// клики по ссылкам, хромкаст/скриншоты.
+@MainActor
 @Suite("browser_fetch — планировщик и рендер (чистая логика)")
 struct BrowserFetchToolTests {
 

@@ -7,6 +7,7 @@ import Testing
 /// (`/api/state`, `/api/chats`) стоят до 660с за долгим POST. Чистый
 /// помощник `isHeavyRoute` классифицирует маршруты; фактическая отправка
 /// тяжёлых выполняется на отдельной `actionQueue`.
+@MainActor
 @Suite("MyCoderAPIServer queue partition (B1)")
 struct MyCoderAPIServerQueueTests {
 

@@ -4,6 +4,7 @@ import Foundation
 
 /// Хранилища сессий opencode serve: маппинг chatID→sessionID и
 /// персистентное хранилище идентификаторов.
+@MainActor
 @Suite("Хранилища сессий OpenCode")
 struct OpenCodeSessionStoresTests {
 

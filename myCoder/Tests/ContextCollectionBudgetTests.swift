@@ -11,6 +11,7 @@ import Foundation
 /// own limit is still needed, but no stage may push the collection past the
 /// shared five-minute ceiling: every stage gets the lesser of its own limit
 /// and what is left of the shared budget.
+@MainActor
 @Suite("Накопительный бюджет сбора контекста")
 struct ContextCollectionBudgetTests {
 

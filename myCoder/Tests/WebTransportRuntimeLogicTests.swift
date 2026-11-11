@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-05 browser transport honesty")
 struct WebTransportRuntimeLogicTests {
     @Test("the only transport is AntiBrowser (CDP + REST)")

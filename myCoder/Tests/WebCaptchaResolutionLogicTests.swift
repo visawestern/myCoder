@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-07 captcha resolution policy")
 struct WebCaptchaResolutionLogicTests {
     @Test("captcha state keeps the agent waiting")

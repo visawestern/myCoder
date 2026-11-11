@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Skill/MCP registry persistence (plan Раздел 3/4 Блок 1)")
 struct AgentResourceRegistryManagerTests {
 

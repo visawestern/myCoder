@@ -8,6 +8,7 @@ import Foundation
 /// изменяемого кода" and the turn never produced an answer (live run
 /// 2026-11-04, chat FF5D0A17). The pass must be bounded: past its budget the
 /// turn continues with the graph it already has instead of waiting forever.
+@MainActor
 @Suite("Бюджет проверки связей")
 struct ImpactBudgetTests {
 

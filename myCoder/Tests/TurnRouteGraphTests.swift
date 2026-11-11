@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Conditional role graph and execution journal")
 struct TurnRouteGraphTests {
     private let primary = ModelAssignment(providerID: "alpha", modelID: "one")

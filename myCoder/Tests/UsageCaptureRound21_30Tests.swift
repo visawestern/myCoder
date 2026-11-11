@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Usage pipeline edge cases (rounds 21-30)")
 struct UsageEdgeCaseTests {
 

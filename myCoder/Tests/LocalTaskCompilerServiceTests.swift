@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Компилятор атомарной задачи — разбор и валидация ответа локальной модели")
 struct LocalTaskCompilerServiceTests {
 

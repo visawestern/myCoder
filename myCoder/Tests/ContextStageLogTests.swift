@@ -5,6 +5,7 @@ import Foundation
 /// User directive 2026-11-03 (п.2): while the context is being assembled, the
 /// composer shows ONE line saying exactly what is happening right now and what
 /// is being collected — not a generic "собирается контекст".
+@MainActor
 @Suite("Однострочный лог сборки контекста")
 struct ContextStageLogTests {
 

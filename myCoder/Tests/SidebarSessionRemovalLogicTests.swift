@@ -5,6 +5,7 @@ import Testing
 /// Deleting a chat used to touch only `sessions`, while the sidebar tree
 /// renders its own per-project/project-less caches. The deleted chat stayed in
 /// the list and opened an empty chat when clicked (user report 2026-10-29).
+@MainActor
 @Suite("Удаление чата из боковой панели")
 struct SidebarSessionRemovalLogicTests {
 

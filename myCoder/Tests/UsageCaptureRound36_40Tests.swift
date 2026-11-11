@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("NULL compatibility + provider aggregation + ProjectDB parity (rounds 36-40)")
 struct UsageParityAndNullTests {
 

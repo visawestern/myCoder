@@ -14,6 +14,7 @@ import Foundation
 //   P4  no visible "waiting/thinking" state while a provider answers
 // ═══════════════════════════════════════════════════════════════════════════
 
+@MainActor
 @Suite("Send chain — no silent no-op (Round 8)")
 struct SendChainRegressionTests {
     init() { LocalizationRuntime.currentLanguage = .english }

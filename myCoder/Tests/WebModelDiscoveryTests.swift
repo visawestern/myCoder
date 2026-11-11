@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("WebModelDiscovery — model detection with custom dropdown")
 struct WebModelDiscoveryTests {
 
@@ -155,6 +156,7 @@ private final class FakeNestedQwenBridge: BrowserAutomationBridge {
     }
 }
 
+@MainActor
 @Suite("WebModelListParser — parse dropdown text")
 struct WebModelListParserCustomTests {
 
@@ -189,6 +191,7 @@ struct WebModelListParserCustomTests {
     }
 }
 
+@MainActor
 @Suite("WebProviderCatalog — load and query selectors")
 struct WebProviderCatalogTests {
 
@@ -214,6 +217,7 @@ struct WebProviderCatalogTests {
 }
 
 
+@MainActor
 @Suite("Round 107 — strict effort and malformed-candidate regressions")
 struct Round107WebModelDiscoveryRegressionTests {
     @Test("arbitrary model/page text never becomes a medium effort")

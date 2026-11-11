@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Round 97 error handling regressions")
 struct ErrorHandlingRound97Tests {
     @Test("empty Serve response array becomes actionable empty-response failure")

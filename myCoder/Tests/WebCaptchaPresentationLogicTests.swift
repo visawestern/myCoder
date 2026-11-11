@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-07 live captcha browser presentation")
 struct WebCaptchaPresentationLogicTests {
     @Test("captcha event opens the live browser solver")

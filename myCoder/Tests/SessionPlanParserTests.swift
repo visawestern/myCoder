@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Session Plan Parser")
 struct SessionPlanParserTests {
 
@@ -86,6 +87,7 @@ struct SessionPlanParserTests {
     }
 }
 
+@MainActor
 @Suite("Session Context Loader")
 struct SessionContextLoaderTests {
 

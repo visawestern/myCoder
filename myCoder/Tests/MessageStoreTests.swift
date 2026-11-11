@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("MessageStore")
 struct MessageStoreTests {
     @Test("History opens with twenty messages and grows by pages")

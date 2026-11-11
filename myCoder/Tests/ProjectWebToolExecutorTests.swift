@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project web tool executor — real file ops (plan Раздел 12 Блок 2 п.16)")
 struct ProjectWebToolExecutorTests {
 

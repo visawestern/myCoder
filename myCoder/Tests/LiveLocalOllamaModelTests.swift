@@ -8,6 +8,7 @@ import Foundation
 /// Модель берётся из `OLLAMA_MODEL` (по умолчанию `gemma4:31b-cloud`).
 /// Если Ollama недоступен или модель не загружена — тесты сообщают об
 /// этом честно (skip с причиной), а не падают.
+@MainActor
 @Suite("Live: локальная модель (Ollama)",
        .enabled(if: liveTestsEnabled))
 struct LiveLocalOllamaModelTests {

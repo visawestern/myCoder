@@ -14,6 +14,7 @@ import Foundation
 ///   3. проходит гейт доступа и политику plan/compose/build без падения;
 ///   4. безопасные файловые/читающие тулы исполняются и не отвечают
 ///      «unknown tool» (диспетчеризация реально есть).
+@MainActor
 @Suite("Все объявленные тулы обрабатываются (parity)")
 struct WebToolAllToolsParityTests {
 

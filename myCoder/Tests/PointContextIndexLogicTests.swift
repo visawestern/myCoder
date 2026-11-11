@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Индекс для точечного контекста строится один раз, а не молча пустует")
 struct PointContextIndexLogicTests {
 

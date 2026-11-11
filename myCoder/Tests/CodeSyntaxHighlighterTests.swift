@@ -5,6 +5,7 @@ import Testing
 /// Chat code blocks used to be plain monospaced text: no Python keywords,
 /// strings or comments were coloured and the palette chosen in Settings was
 /// never read (user report 2026-10-29, chat «привет»).
+@MainActor
 @Suite("Подсветка синтаксиса в блоках кода")
 struct CodeSyntaxHighlighterTests {
 

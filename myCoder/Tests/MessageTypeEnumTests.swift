@@ -3,6 +3,7 @@ import Testing
 
 /// Связка типа сообщения и режима агента (build/plan/compose) + роли и
 /// действия сообщения.
+@MainActor
 @Suite("MessageType и базовые перечисления сообщений")
 struct MessageTypeEnumTests {
 

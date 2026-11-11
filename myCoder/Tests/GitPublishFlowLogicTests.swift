@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Git Publish Flow Logic")
 struct GitPublishFlowLogicTests {
 

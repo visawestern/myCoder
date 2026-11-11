@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("G: header goal checklist progress")
 struct HeaderGoalProgressLogicTests {
     private func step(_ title: String, _ status: StepStatus) -> TaskStep {

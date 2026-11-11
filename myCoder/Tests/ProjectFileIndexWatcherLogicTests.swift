@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Project file index watcher")
 struct ProjectFileIndexWatcherLogicTests {
     @Test("a changed file inside the active project invalidates the index")

@@ -4,6 +4,7 @@ import Foundation
 
 /// Стратегия чанковой отправки: выбор по маршруту и упаковка пейлоадов
 /// с маркерами «часть 1/…» и «последняя часть …».
+@MainActor
 @Suite("Чанковая отправка (ChunkedSendSequencer)")
 struct ChunkedSendSequencerTests {
 

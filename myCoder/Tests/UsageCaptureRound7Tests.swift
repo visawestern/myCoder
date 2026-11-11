@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Message.usage field (round 7)")
 struct MessageUsageFieldTests {
 

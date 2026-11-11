@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-05 MCP config mutation safety")
 struct MCPConfigMutationLogicTests {
     private let source = """

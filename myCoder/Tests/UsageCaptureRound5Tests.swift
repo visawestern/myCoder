@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("DirectChatResult structure (round 5)")
 struct DirectChatResultTests {
 

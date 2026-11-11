@@ -8,6 +8,7 @@ import Foundation
 /// failed with `UNIQUE constraint failed: messages.id`, so the database kept
 /// the EMPTY bubble forever while memory had the real text. Persistence must be
 /// idempotent per message id: re-saving updates the row.
+@MainActor
 @Suite("Round 30 — message persistence is an upsert, streaming survives reload", .serialized)
 struct Round30MessageUpsertTests {
 

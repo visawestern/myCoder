@@ -2,6 +2,7 @@ import Testing
 import AppKit
 @testable import myCoder
 
+@MainActor
 @Suite("Paste Debug Trace")
 struct PasteDebugTraceTests {
 

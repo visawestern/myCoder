@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Turn evidence")
 struct TurnEvidenceTests {
     @Test func projectInstructionsAndMatchingSkillAreLoaded() throws {

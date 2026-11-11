@@ -5,6 +5,7 @@ import Testing
 /// (div.response-message-empty — "The current content is empty, please
 /// regenerate.") instead of a model answer when generation fails. None of
 /// these may ever be presented as a real answer.
+@MainActor
 @Suite("Vendor error placeholders are never real answers")
 struct WebVendorErrorPlaceholderTests {
     @Test func qwenEmptyPlaceholderIsRecognized() {

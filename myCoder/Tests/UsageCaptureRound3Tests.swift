@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("ACPUsage -> UsageCapture conversion (round 3)")
 struct ACPUsageConversionTests {
 

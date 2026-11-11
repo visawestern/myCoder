@@ -6,6 +6,7 @@ import Foundation
 /// composer really renders it. These tests read the wiring at the source
 /// level: the project has no UI test target, and a deleted call site is
 /// exactly the regression "tests pass" would otherwise hide.
+@MainActor
 @Suite("Журнал сборки контекста подключён к отправке и к композеру")
 struct ContextAssemblyLogWiringTests {
 

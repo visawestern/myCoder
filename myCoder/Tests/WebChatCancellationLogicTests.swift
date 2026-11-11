@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-05/WEB-07 web turn cancellation")
 struct WebChatCancellationLogicTests {
     @Test("cancelled web driver turn aborts post-driver completion handling")

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Workspace Model")
 struct WorkspaceModelTests {
 
@@ -32,6 +33,7 @@ struct WorkspaceModelTests {
     }
 }
 
+@MainActor
 @Suite("Settings Model")
 struct SettingsModelTests {
 
@@ -64,6 +66,7 @@ struct SettingsModelTests {
     }
 }
 
+@MainActor
 @Suite("Access Level Model")
 struct AccessLevelTests {
 
@@ -80,6 +83,7 @@ struct AccessLevelTests {
     }
 }
 
+@MainActor
 @Suite("Git Changes Model")
 struct GitChangesTests {
 
@@ -98,6 +102,7 @@ struct GitChangesTests {
     }
 }
 
+@MainActor
 @Suite("Progress Model")
 struct ProgressTests {
 

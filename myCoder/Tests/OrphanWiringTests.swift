@@ -15,6 +15,7 @@ import Foundation
 // Foundation-only harness and guard against regressions to "defined but dead".
 // ═══════════════════════════════════════════════════════════════════════════
 
+@MainActor
 @Suite("Round 7: orphan wiring")
 struct OrphanWiringTests {
 

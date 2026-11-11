@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Slash command execution + session goal (plan Раздел 5 Блок 1/3)")
 struct SlashCommandExecutorTests {
 

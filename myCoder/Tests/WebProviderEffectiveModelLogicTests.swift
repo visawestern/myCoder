@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-06 effective web model")
 struct WebProviderEffectiveModelLogicTests {
     @Test("stale persisted model falls back to a discovered model")

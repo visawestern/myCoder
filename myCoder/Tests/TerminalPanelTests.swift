@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - TERM-01: Terminal Panel State Model
 
+@MainActor
 @Suite("TERM-01: Terminal panel state")
 struct TerminalPanelStateTests {
 
@@ -42,6 +43,7 @@ struct TerminalPanelStateTests {
 
 // MARK: - TERM-02: Command Execution Model
 
+@MainActor
 @Suite("TERM-02: TerminalLine model")
 struct TerminalLineModelTests {
 
@@ -114,6 +116,7 @@ struct TerminalLineModelTests {
 
 // MARK: - TERM-03: Command Timeout
 
+@MainActor
 @Suite("TERM-03: Command timeout")
 struct CommandTimeoutTests {
 
@@ -158,6 +161,7 @@ struct CommandTimeoutTests {
 
 // MARK: - TERM-04: Terminal History
 
+@MainActor
 @Suite("TERM-04: Terminal history")
 struct TerminalHistoryTests {
 

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("ChatScrollLogic — нижняя видимость и отступ")
 struct ChatScrollLogicTests {
 

@@ -4,6 +4,7 @@ import Foundation
 
 /// Вывод состояния веб-сессии: captcha/лимит/logged-out/connected и
 /// порядок шагов восстановления.
+@MainActor
 @Suite("Инференция состояния веб-сессии")
 struct WebSessionLogicInferenceTests {
 

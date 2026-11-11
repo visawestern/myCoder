@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project registry admin (plan Раздел 8 Блок 2/3)")
 struct ProjectRegistryLogicTests {
 

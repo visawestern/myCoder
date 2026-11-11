@@ -6,6 +6,7 @@ import Testing
 /// connection-manager result. A manager can be online while the old AppState
 /// boolean is still false; that race prevented server model loading and made the
 /// first screen appear unusable even though the local agent was healthy.
+@MainActor
 @Suite("APP-01: startup connection readiness")
 struct ServerConnectionReadinessLogicTests {
     @Test("completed health result is copied into AppState connection state")

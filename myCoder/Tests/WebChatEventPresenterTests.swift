@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Web chat event presenter — captcha in chat (plan Раздел 12 Блок 3 п.34)")
 struct WebChatEventPresenterTests {
     init() { LocalizationRuntime.currentLanguage = .english }

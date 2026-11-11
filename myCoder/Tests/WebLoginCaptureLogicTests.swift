@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-LOGIN-11: capture session guard")
 struct WebLoginCaptureLogicTests {
     @Test("empty cookie snapshot cannot be captured as a login")

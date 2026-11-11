@@ -6,6 +6,7 @@ import Testing
 /// (1) a numbered item that starts its own line after a prose line must NOT be
 /// glued into the paragraph, and (2) single newlines inside plain prose stay
 /// visible instead of being joined with a space (user report 2026-10-30).
+@MainActor
 @Suite("Markdown — переносы нумерованных перечислений")
 struct MarkdownNumberedListTests {
 

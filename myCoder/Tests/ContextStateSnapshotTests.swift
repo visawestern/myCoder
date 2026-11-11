@@ -7,6 +7,7 @@ import Foundation
 /// on, which model is assigned to internal work, and what stage the assembly is
 /// in right now. Without those, "is the context actually being assembled?"
 /// cannot be answered over HTTP.
+@MainActor
 @Suite("Снапшот /api/state показывает конвейер контекста")
 struct ContextStateSnapshotTests {
 

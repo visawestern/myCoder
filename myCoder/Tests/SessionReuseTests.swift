@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Session Send Logic")
 struct SessionReuseTests {
     
@@ -86,6 +87,7 @@ struct SessionReuseTests {
     }
 }
 
+@MainActor
 @Suite("ChatSession Duration")
 struct ChatSessionDurationTests {
     

@@ -7,6 +7,7 @@ import Foundation
 /// part showed no context button at all. The metadata column now carries both
 /// the send info and the summary, while old rows with a bare `MessageSendInfo`
 /// JSON keep loading unchanged.
+@MainActor
 @Suite("Метаданные сообщения: sendInfo + contextSummary")
 struct MessageMetadataCodecTests {
 

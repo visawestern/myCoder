@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-LOGIN-12: detection mode honesty")
 struct WebDetectionStatusLogicTests {
     @Test("empty status names the built-in myCoder detector")

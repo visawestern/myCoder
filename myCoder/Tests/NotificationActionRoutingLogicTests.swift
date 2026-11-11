@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SID-15: notification action routing")
 struct NotificationActionRoutingLogicTests {
     @Test("supported actions dismiss after successful routing")

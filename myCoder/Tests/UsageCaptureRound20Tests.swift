@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Full usage pipeline integration (round 20)")
 struct UsagePipelineIntegrationTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Материализация контекста и разбивка под окно модели")
 struct ContextMaterializerTests {
 

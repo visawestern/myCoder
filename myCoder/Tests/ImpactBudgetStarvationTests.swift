@@ -8,6 +8,7 @@ import Foundation
 /// thread, so the "hanging" work wins the race (`"late"` after 5.0 s instead
 /// of nil after 0.3 s) — the exact stall ImpactBudget exists to prevent.
 /// This pins the failure deterministically without a whole-suite load.
+@MainActor
 @Suite("Дедлайн бюджета не зависит от cooperative pool")
 struct ImpactBudgetStarvationTests {
 

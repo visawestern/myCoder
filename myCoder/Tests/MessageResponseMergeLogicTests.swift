@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Message response merge")
 struct MessageResponseMergeLogicTests {
 
@@ -38,6 +39,7 @@ struct MessageResponseMergeLogicTests {
     }
 }
 
+@MainActor
 @Suite("Plan question parsing")
 struct PlanQuestionLogicTests {
 

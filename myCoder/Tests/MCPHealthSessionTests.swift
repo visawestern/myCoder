@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("MCPHealthSession — concurrency limiter + session cache", .serialized)
 struct MCPHealthSessionTests {
 

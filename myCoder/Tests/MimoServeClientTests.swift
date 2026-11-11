@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("MimoServeClient")
 struct MimoServeClientTests {
 
@@ -98,6 +99,7 @@ struct MimoServeClientTests {
     }
 }
 
+@MainActor
 @Suite("MimoServeClient Endpoint Enumeration")
 struct EndpointTests {
 

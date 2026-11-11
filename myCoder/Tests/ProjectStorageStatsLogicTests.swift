@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Project storage statistics")
 struct ProjectStorageStatsLogicTests {
     @Test("aggregates project databases and keeps the global database out of the project list")

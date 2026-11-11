@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - MessageRole Enum (MSG-02)
 
+@MainActor
 @Suite("MessageRole enum")
 struct MessageRoleTests {
 
@@ -48,6 +49,7 @@ struct MessageRoleTests {
 
 // MARK: - MessagePartContent Enum (MSG-02)
 
+@MainActor
 @Suite("MessagePartContent enum")
 struct MessagePartContentTests {
 
@@ -167,6 +169,7 @@ struct MessagePartContentTests {
 
 // MARK: - MessageResponseMergeLogic (MSG-02)
 
+@MainActor
 @Suite("MessageResponseMergeLogic comprehensive")
 struct MessageResponseMergeLogicComprehensiveTests {
 
@@ -525,6 +528,7 @@ struct MessageResponseMergeLogicComprehensiveTests {
 
 // MARK: - Reasoning spoiler grouping
 
+@MainActor
 @Suite("Reasoning spoiler grouping")
 struct ReasoningSpoilerGroupingTests {
 
@@ -658,6 +662,7 @@ struct ReasoningSpoilerGroupingTests {
 
 // MARK: - Stop Generation Notification Wiring (MSG-03)
 
+@MainActor
 @Suite("Stop Generation Notification Wiring")
 struct StopGenerationNotificationWiringTests {
 
@@ -686,6 +691,7 @@ struct StopGenerationNotificationWiringTests {
 
 // MARK: - Message Retry Logic (MSG-06)
 
+@MainActor
 @Suite("Message Retry Logic")
 struct MessageRetryLogicTests {
 
@@ -756,6 +762,7 @@ struct MessageRetryLogicTests {
 
 // MARK: - ToolCallPresentationLogic (MSG-11)
 
+@MainActor
 @Suite("ToolCallPresentationLogic")
 struct ToolCallPresentationLogicAdditionalTests {
 
@@ -910,6 +917,7 @@ struct ToolCallPresentationLogicAdditionalTests {
 
 // MARK: - MessageDisplayLogic Image Handling (MSG-12)
 
+@MainActor
 @Suite("MessageDisplayLogic Image Handling")
 struct MessageDisplayLogicImageTests {
 
@@ -981,6 +989,7 @@ struct MessageDisplayLogicImageTests {
 
 // MARK: - Markdown Text Scale & Parsing (MSG-13)
 
+@MainActor
 @Suite("Markdown Text Scale & Parsing")
 struct MarkdownTextScaleAndParsingTests {
 
@@ -1212,6 +1221,7 @@ struct MarkdownTextScaleAndParsingTests {
 
 // MARK: - PlanQuestionLogic (MSG-14)
 
+@MainActor
 @Suite("PlanQuestionLogic extended")
 struct PlanQuestionLogicExtendedTests {
 

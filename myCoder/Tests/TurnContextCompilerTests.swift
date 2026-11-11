@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Компилятор контекста хода — детерминированный пакет доказательств")
 struct TurnContextCompilerTests {
 

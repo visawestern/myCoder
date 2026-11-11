@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-12: provider endpoint and form defaults")
 struct ProviderEndpointLogicTests {
     @Test("normalizes whitespace and trailing slashes once")

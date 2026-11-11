@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Slash command registry (plan Раздел 5)")
 struct SlashCommandRegistryTests {
 

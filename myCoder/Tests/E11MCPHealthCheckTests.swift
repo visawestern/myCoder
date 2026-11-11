@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("E11 — real MCP health check (Раздел 4 п.5): probe classification, stdio resolution, HTTP probe, registry persistence, status mapping")
 struct E11MCPHealthCheckTests {
 

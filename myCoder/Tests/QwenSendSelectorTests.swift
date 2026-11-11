@@ -6,6 +6,7 @@ import Foundation
 /// is a DIV wrapper whose programmatic click() is a no-op; only the INNER
 /// `<button class="send-button">` actually submits. The sendButton selector must
 /// therefore target the inner button BEFORE any wrapper.
+@MainActor
 @Suite("Round 30 — Qwen sendButton selector targets the real button first")
 struct QwenSendSelectorTests {
 

@@ -5,6 +5,7 @@ import Foundation
 
 /// Логика приёма файлов из pasteboard/drag: извлечение URL, дедупликация,
 /// приёмлемость, legacy NSFilenames, приоритет файлов над изображениями.
+@MainActor
 @Suite("FileDropLogic")
 struct FileDropLogicTests {
 

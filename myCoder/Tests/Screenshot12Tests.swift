@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Screenshot 12 Right Panel Icons")
 struct Screenshot12Tests {
 

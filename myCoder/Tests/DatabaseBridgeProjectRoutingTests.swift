@@ -3,6 +3,7 @@ import Foundation
 @testable import myCoder
 
 // Serialized because the bridge and program database are shared resources.
+@MainActor
 @Suite("DatabaseBridge — chats live in the program database (user directive 2026-10-29)", .serialized)
 struct DatabaseBridgeProjectRoutingTests {
 

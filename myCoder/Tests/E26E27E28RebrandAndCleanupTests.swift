@@ -7,6 +7,7 @@ import Foundation
 /// be titled "Workspaces", and dead production code must be removed, not kept.
 /// Source-inspection tests match the existing repo pattern (Round 7 B6) —
 /// they fail on the current state and pass after the fixes.
+@MainActor
 @Suite("E26/E27/E28 — rebrand strings, overview title, dead code (Round 23)")
 struct E26E27E28RebrandAndCleanupTests {
 

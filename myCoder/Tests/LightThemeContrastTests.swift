@@ -3,6 +3,7 @@ import Foundation
 import SwiftUI
 @testable import myCoder
 
+@MainActor
 @Suite("Light Theme Contrast")
 struct LightThemeContrastTests {
 

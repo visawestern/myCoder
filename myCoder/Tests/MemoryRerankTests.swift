@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Local memory scoring + reranker (Phase 5, 5500M, no Jev)")
 struct MemoryRerankTests {
 

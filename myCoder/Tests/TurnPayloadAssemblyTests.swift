@@ -9,6 +9,7 @@ import Foundation
 ///
 /// These tests pin the contract at the compiler level, where it is testable
 /// without a UI.
+@MainActor
 @Suite("Полный пакет хода: системная инструкция + контекст + запрос")
 struct TurnPayloadAssemblyTests {
 

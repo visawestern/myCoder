@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Turn model and retrieval integration")
 struct TurnPlannerWiringRegressionTests {
     @Test func plannerContextUsesActualTaskSources() throws {

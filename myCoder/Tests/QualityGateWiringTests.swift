@@ -6,6 +6,7 @@ import Foundation
 /// project has no UI test target, so the send path is verified at the source
 /// level — a deleted call site is exactly the regression "tests pass" would
 /// otherwise hide.
+@MainActor
 @Suite("Проводка гейта качества и онбординга внутренней модели")
 struct QualityGateWiringTests {
 
@@ -37,6 +38,7 @@ struct QualityGateWiringTests {
     }
 }
 
+@MainActor
 @Suite("Баннер «назначьте внутреннюю модель» в настройках индексации")
 struct InternalModelOnboardingWiringTests {
 

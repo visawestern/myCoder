@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 @testable import myCoder
 
+@MainActor
 @Suite("Live Clipboard Probe", .serialized, .enabled(if: ProcessInfo.processInfo.environment["MIMO_CLIPBOARD_PROBE"] == "1"))
 struct LiveClipboardProbeTests {
 

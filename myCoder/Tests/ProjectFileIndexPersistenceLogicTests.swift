@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Persistent project file index")
 struct ProjectFileIndexPersistenceLogicTests {
     private func record(_ path: String, hash: String, mtime: TimeInterval = 1) -> FileIndexRecord {

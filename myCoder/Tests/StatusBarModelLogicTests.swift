@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Status bar effective model")
 struct StatusBarModelLogicTests {
     @Test("uses effective model when legacy selectedModel is empty")

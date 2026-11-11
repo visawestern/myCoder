@@ -7,6 +7,7 @@ import Foundation
 /// Titles derive from the request's first words: instant, offline, zero
 /// tokens. A local generative model can refine later; the heuristic is the
 /// floor that always works.
+@MainActor
 @Suite("Chat titles from request text")
 struct ChatTitleLogicTests {
 

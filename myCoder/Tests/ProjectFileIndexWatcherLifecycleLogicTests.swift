@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("STO-07 watcher lifecycle")
 struct ProjectFileIndexWatcherLifecycleLogicTests {
     @Test("branch-only workspace mutation does not restart watcher")

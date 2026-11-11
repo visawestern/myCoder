@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Per-turn context revision")
 struct TurnRevisionTests {
     @Test func everyPayloadHasSystemThenContextThenRequest() {

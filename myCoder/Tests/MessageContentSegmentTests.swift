@@ -7,6 +7,7 @@ import Testing
 /// only for *adjacent* blocks of the same kind (user report 2026-10-29: all
 /// reasoning was merged on top and all calls below it, so the train of thought
 /// could not be followed).
+@MainActor
 @Suite("Порядок рассуждений и вызовов инструментов")
 struct MessageContentSegmentTests {
 

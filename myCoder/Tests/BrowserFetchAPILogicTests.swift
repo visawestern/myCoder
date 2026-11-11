@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("browser.fetch internal API")
 struct BrowserFetchAPILogicTests {
     @Test func scalarArgumentsNormalizeToRealToolContract() throws {

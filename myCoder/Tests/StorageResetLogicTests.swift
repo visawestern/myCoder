@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Storage reset logic (plan Раздел 8)")
 struct StorageResetLogicTests {
 

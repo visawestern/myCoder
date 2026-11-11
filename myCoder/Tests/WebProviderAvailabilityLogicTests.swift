@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-06 real-model provider availability")
 struct WebProviderAvailabilityLogicTests {
     private func makeTempHome() throws -> URL {

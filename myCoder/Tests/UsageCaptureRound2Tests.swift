@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("UsageCapture helpers isZero / hasCost (round 2)")
 struct UsageCaptureHelpersTests {
 

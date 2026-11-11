@@ -7,6 +7,7 @@ import Testing
 /// только для КРАЙНЕ разрушительных команд (удаление корня/home, форматирование
 /// устройств, перезагрузка системы, fork-бомбы); обычные команды (включая
 /// `rm -rf ./build` и `git reset --hard`) проходят.
+@MainActor
 @Suite("DestructiveCommandGuard (A5)")
 struct DestructiveCommandGuardTests {
 

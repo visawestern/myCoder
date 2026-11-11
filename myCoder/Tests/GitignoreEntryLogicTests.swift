@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("GitignoreEntryLogic — deciding whether .mycoder/ needs a .gitignore entry")
 struct GitignoreEntryLogicTests {
 

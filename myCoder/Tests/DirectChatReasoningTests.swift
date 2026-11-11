@@ -5,6 +5,7 @@ import Foundation
 /// The direct (OpenAI-compatible) route used to drop the provider's thinking
 /// channel entirely, so the reasoning spoiler stayed empty even when the model
 /// returned `reasoning_content` / `thinking`.
+@MainActor
 @Suite("Рассуждения модели в прямом маршруте")
 struct DirectChatReasoningTests {
 

@@ -7,6 +7,7 @@ import Foundation
 /// already does this when assigned (`LocalQueryPlan.instructions`); this
 /// catalog is the deterministic floor for turns without an internal model —
 /// instructions must never be empty just because the planner fell back.
+@MainActor
 @Suite("Каталог инструкций задачи")
 struct TaskInstructionCatalogTests {
 

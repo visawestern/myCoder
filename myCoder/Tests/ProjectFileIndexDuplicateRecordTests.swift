@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("STO-06 duplicate file-index records")
 struct ProjectFileIndexDuplicateRecordTests {
     private func record(_ path: String, hash: String, mtime: TimeInterval = 1) -> FileIndexRecord {

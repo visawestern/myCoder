@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Session tokens_used / cost_usd aggregation (round 15)")
 struct SessionUsageAggregationTests {
 

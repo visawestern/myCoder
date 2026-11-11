@@ -8,6 +8,7 @@ import Foundation
 /// done" order, the analysis goes back into the model automatically; the
 /// loop stops only when the user's help is critically required or the depth
 /// cap is hit. These tests pin the pure logic of that gate.
+@MainActor
 @Suite("Гейт качества ответа — адвокат дьявола")
 struct AnswerQualityGateTests {
 

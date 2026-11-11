@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("E09/E10 — real tool operations record undo entries + request_history (Раздел 7 п.12-14)")
 struct E09E10ToolUndoHistoryTests {
 

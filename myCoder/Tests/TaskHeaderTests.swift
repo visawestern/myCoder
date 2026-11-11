@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Task Header")
 struct TaskHeaderTests {
 

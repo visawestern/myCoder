@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Agent dependency resolver")
 struct AgentDependencyResolverTests {
 

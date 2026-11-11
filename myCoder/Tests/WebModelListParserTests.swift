@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Web model list parser (plan Раздел 13 п.4)")
 struct WebModelListParserTests {
 
@@ -69,6 +70,7 @@ struct WebModelListParserTests {
     }
 }
 
+@MainActor
 @Suite("ChatGPT synthetic fallback labels survive sanitize (audit 2026-09-08)")
 struct ChatGPTFallbackLabelTests {
     @Test func autoReasoningLabelIsValid() {

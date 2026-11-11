@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Agent resource catalog and installer")
 struct AgentResourceInstallerTests {
     private func makeTempHome() throws -> URL {

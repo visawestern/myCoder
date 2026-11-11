@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Symbol name extractor — объявления функций/типов/переменных")
 struct SymbolNameExtractorTests {
 

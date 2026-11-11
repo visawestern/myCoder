@@ -7,6 +7,7 @@ import Foundation
 /// body) and on the ACP path (ACPClient.sendChatCompletion/stream body) — the
 /// direct OpenAI-compatible path was the only one that applied them. Раздел 9
 /// п.49 requires parameters to actually reach the model for every provider.
+@MainActor
 @Suite("E06 — call parameters reach serve + ACP bodies")
 struct E06CallParametersTests {
 

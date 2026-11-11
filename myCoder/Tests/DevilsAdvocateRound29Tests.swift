@@ -15,6 +15,7 @@ import Foundation
 /// R3 (MED): glob matched the pattern against lastPathComponent only, so any
 /// pattern containing "/" (`src/*.swift`, `**/*.swift`) always answered
 /// "(no matches)" — lying to the model about the project state.
+@MainActor
 @Suite("Round 29 — git arg injection, grep hit-limit warning, glob slash patterns")
 struct DevilsAdvocateRound29Tests {
 

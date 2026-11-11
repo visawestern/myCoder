@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Chat navigator numbers the whole session", .serialized)
 struct ChatNavigatorNumberingTests {
 

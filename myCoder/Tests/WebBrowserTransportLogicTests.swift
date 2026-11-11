@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-05 browser transport lifecycle")
 struct WebBrowserTransportLogicTests {
     @Test("navigation timeout is a failure, not an apparent success")

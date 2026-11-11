@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Harness profiles C2 (eval harness-tax)")
 struct HarnessProfileTests {
 
@@ -71,6 +72,7 @@ struct HarnessProfileTests {
 /// Regression (2026-11-03): adding `browser_fetch` to the tool list pushed the
 /// first-turn preamble past the vendor paste budget, so the tool contract was
 /// split into continuation parts and the model never saw it as one message.
+@MainActor
 @Suite("Преамбула влезает в бюджет вставки")
 struct PreambleBudgetTests {
 

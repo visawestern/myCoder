@@ -5,6 +5,7 @@ import Foundation
 /// Audit 2026-09-08 (user directive): standalone chats — conversations that
 /// do not belong to any workspace — must persist, appear in the sidebar's
 /// "Chats" group, and never silently disappear.
+@MainActor
 @Suite("Standalone chats (no project)")
 struct StandaloneChatTests {
 
@@ -67,6 +68,7 @@ struct StandaloneChatTests {
 }
 
 /// User directive 2026-09-08: reopen the last worked-on project at launch.
+@MainActor
 @Suite("WorkspaceRestoreLogic (last project on launch)")
 struct WorkspaceRestoreLogicTests {
 

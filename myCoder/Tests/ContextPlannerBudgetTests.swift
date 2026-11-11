@@ -7,6 +7,7 @@ import Foundation
 /// context assembly inherited that budget, so a slow or wedged internal model
 /// left the turn "collecting context" for ten minutes with no way out.
 /// The planner must have its own short budget and fall back deterministically.
+@MainActor
 @Suite("Бюджет сборки контекста")
 struct ContextPlannerBudgetTests {
 

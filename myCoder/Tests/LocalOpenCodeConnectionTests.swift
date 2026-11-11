@@ -6,6 +6,7 @@ import Foundation
 /// Proved live 2026-10-13: anonymous Zen is gated (403), random ses_ IDs are
 /// gated too — the only working path is the user's authenticated local
 /// server (basic auth, session REST API).
+@MainActor
 @Suite("Local OpenCode server connection (OC-1)")
 struct LocalOpenCodeConnectionTests {
 

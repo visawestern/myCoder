@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Registry and settings backup")
 struct AppConfigurationBackupLogicTests {
     @Test("backup round-trips both registry and settings payloads")

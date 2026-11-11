@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Turn delivery across transports")
 struct TurnDeliveryTests {
     @Test func nativeRuntimeIsNotGivenAnUnconnectedEmulatedToolProtocol() {

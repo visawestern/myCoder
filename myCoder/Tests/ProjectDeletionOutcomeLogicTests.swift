@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("STO-28 deletion outcome safety")
 struct ProjectDeletionOutcomeLogicTests {
     @Test("only a completed deletion may remove the registry entry")

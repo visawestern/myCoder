@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Web provider config + vendors (plan Раздел 12 Блок 1)")
 struct WebProviderConfigTests {
 
@@ -60,6 +61,7 @@ struct WebProviderConfigTests {
     }
 }
 
+@MainActor
 @Suite("Web tool-protocol emulator (plan Раздел 12 Блок 2)")
 struct WebToolProtocolEmulatorTests {
 
@@ -471,6 +473,7 @@ struct WebToolProtocolEmulatorTests {
     }
 }
 
+@MainActor
 @Suite("Web session + anti-ban logic (plan Раздел 12 Блок 3)")
 struct WebSessionLogicTests {
 
@@ -576,6 +579,7 @@ struct WebSessionLogicTests {
     }
 }
 
+@MainActor
 @Suite("Truncated tool-call stub recovery (audit 2026-09-08)")
 struct TruncatedToolCallStubTests {
     @Test func streamCutCallIsRecoveredNotFinal() {
@@ -610,6 +614,7 @@ struct TruncatedToolCallStubTests {
 }
 
 
+@MainActor
 @Suite("Qwen truncated XML tool-call recovery")
 struct QwenTruncatedXMLTests {
     @Test func qwenLiveTruncatedResponseIsToolCall() {
@@ -623,6 +628,7 @@ struct QwenTruncatedXMLTests {
     }
 }
 
+@MainActor
 @Suite("Unfenced NBSP JSON tool-call recovery (Qwen live)")
 struct UnfencedNBSPToolCallTests {
     @Test func qwenBrokenFenceWithNBSPStillParses() {
@@ -651,6 +657,7 @@ struct UnfencedNBSPToolCallTests {
     }
 }
 
+@MainActor
 @Suite("Truncated tool_name prefix recovery (Qwen live)")
 struct TruncatedToolNamePrefixTests {
     @Test func cutInsideToolNameIsRecovered() {

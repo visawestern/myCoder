@@ -5,6 +5,7 @@ import Foundation
 /// `RollbackDialogueLoader`: выбор источника сообщений для отката.
 /// Если живой фид (MessageStore) пуст — например, при откате через API для
 /// незагруженного чата — сообщения поднимаются из БД.
+@MainActor
 @Suite("RollbackDialogueLoader")
 struct RollbackDialogueLoaderTests {
 

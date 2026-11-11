@@ -5,6 +5,7 @@ import Foundation
 /// Force-send shows the user bubble before waiting for the interrupted turn.
 /// The send path must then fill that bubble in instead of appending a second
 /// copy (the DB had duplicate user messages on forced turns).
+@MainActor
 @Suite("Вставка user-сообщения при отправке")
 struct SendUserMessageAppendLogicTests {
 

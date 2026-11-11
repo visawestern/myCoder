@@ -7,6 +7,7 @@ import Foundation
 /// visible actions in a banner. These tests read the wiring at the source
 /// level — the project has no UI test target, and a deleted call site is
 /// exactly the regression "the logic tests pass" would otherwise hide.
+@MainActor
 @Suite("Сжатие при смене модели подключено к приложению")
 struct ModelSwitchCompactionWiringTests {
 

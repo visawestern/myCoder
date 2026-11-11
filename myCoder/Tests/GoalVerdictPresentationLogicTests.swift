@@ -4,6 +4,7 @@ import Foundation
 
 /// Сырой JSON вердикта цели не должен показываться в пузыре: он превращается
 /// в чип со статусом и спойлер с конкретными пунктами.
+@MainActor
 @Suite("Вердикт цели — чип и спойлер")
 struct GoalVerdictPresentationLogicTests {
 

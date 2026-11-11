@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Tool approval — detailed request shown before a local model runs a tool")
 struct WebToolApprovalDetailsTests {
 
@@ -94,6 +95,7 @@ struct WebToolApprovalDetailsTests {
     }
 }
 
+@MainActor
 @Suite("Tool approval — blocking mailbox")
 struct WebToolApprovalBoxTests {
 

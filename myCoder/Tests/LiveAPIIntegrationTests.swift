@@ -4,6 +4,7 @@ import Foundation
 
 // Общий opt-in-флаг определён в BackendTaxonomy.swift (liveTestsEnabled).
 
+@MainActor
 @Suite("Live API Integration", .serialized)
 struct LiveAPIIntegrationTests {
     

@@ -4,6 +4,7 @@ import Foundation
 
 /// Описания ошибок: человекочитаемые тексты для каждой ветки LocalizedError
 /// в приложении.
+@MainActor
 @Suite("Описания ошибок (LocalizedError)")
 struct ErrorDescriptionTests {
 

@@ -5,6 +5,7 @@ import Foundation
 /// Навигатор по сообщениям пользователя: фильтрация user-сообщений,
 /// превью (обрезка и нормализация пробелов), номера кнопок и шаги
 /// перехода.
+@MainActor
 @Suite("Логика навигатора по сообщениям (UserMessageNavigatorLogic)")
 struct UserMessageNavigatorLogicTests {
 

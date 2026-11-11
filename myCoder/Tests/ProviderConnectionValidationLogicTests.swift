@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("PROV-08 provider connection validation")
 struct ProviderConnectionValidationLogicTests {
     @Test("valid OpenAI-compatible model response is connected")

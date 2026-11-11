@@ -5,6 +5,7 @@ import Foundation
 /// Context-window accounting: the user must see how full the model context is
 /// before the provider silently truncates old turns, and auto-compaction must
 /// fire on the same measurement.
+@MainActor
 @Suite("Context usage accounting")
 struct ContextUsageLogicTests {
 

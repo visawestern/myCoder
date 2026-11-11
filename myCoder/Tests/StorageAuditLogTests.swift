@@ -5,6 +5,7 @@ import Foundation
 /// Storage audit log (plan Раздел 8 п.46): every registry operation
 /// (create/archive/restore/delete/relink/reset) is appended to a timestamped
 /// log so future "something appeared on its own" reports can be diagnosed.
+@MainActor
 @Suite("Storage audit log (plan Раздел 8 п.46)")
 struct StorageAuditLogTests {
 

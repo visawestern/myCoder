@@ -9,6 +9,7 @@ import Foundation
 /// vision model); skipped otherwise so normal runs stay hermetic.
 /// Verified live 2026-10-15: "dark blue M shape with light blue circular
 /// accents." (First cold run needs minutes for CPU model load.)
+@MainActor
 @Suite("LIVE image send via app stack (opt-in)")
 struct LiveImageSendVerificationTests {
 

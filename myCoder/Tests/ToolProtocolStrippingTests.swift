@@ -6,6 +6,7 @@ import Foundation
 /// результатами были), но сырой `<｜DSML｜ calls>…` оставался в тексте ответа
 /// вместе с «⏳ Running tools...». Вызов должен жить в tool-call части, а не
 /// в пузыре.
+@MainActor
 @Suite("Чистка протокола вызовов из текста")
 struct ToolProtocolStrippingTests {
 

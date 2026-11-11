@@ -4,6 +4,7 @@ import Foundation
 
 /// F51: Stop/abort flow test coverage
 /// Tests for stopGeneration and abort flow in ChatPanelView
+@MainActor
 @Suite("Stop Generation Flow")
 struct StopGenerationFlowTests {
     

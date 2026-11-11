@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("BoundedProcessRunner")
 struct BoundedProcessRunnerTests {
     @Test("вывод 200 КБ не вешает процесс")

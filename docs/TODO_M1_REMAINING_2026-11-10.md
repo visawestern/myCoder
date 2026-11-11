@@ -15,7 +15,7 @@
 | A4 | KeychainManager на деле UserDefaults | ⛔ Отменён владельцем | 10.11.2026: возвращено хранение ключей в UserDefaults; все 9 ключей перенесены обратно из связки, записи удалены; `KeychainManagerTests` удалён |
 | A5 | Full access: bash без защиты от разрушительных команд | ✅ Закрыт | `DestructiveCommandGuard` (rm -rf /~/system, mkfs/dd/diskutil, reboot/shutdown, fork-бомбы) встроен в ProjectShellRunner; 6 тестов GREEN |
 | B1 | API: одна очередь, ожидания до 11 минут, гонки | ✅ Закрыт (ядро) | тяжёлые POST/долгие GET вынесены на отдельную `actionQueue` (`isHeavyRoute`); быстрые чтения больше не блокируются на 660с; 3 новых теста; остаточная синхронность через semaphore сохранена намеренно |
-| B2 | AppState не @MainActor | ⏳ Открыт | массовый рефактор; требует отдельной большой сессии с GUI-прогоном |
+| B2 | AppState не @MainActor | ✅ Закрыт | 11.11.2026: `class AppState` помечен `@MainActor`; сервер читает состояние через `onMainRead` (переход на главный поток); все 580 тестовых наборов изолированы; 3 новых теста, полный прогон 3898/3898 |
 | B3 | God-файлы (ChatPanelView 5613 стр., performDirectSend 1563 стр.) | ✅ Закрыт | все исходники ≤600 строк: ChatPanelView, AppState, AppLocalization, WebChatDriver, ModelSettingsView и остальные разнесены на файлы-расширения; храповик `ModuleSizeRatchetTests` пуст; `swift test` 3895/3895 |
 | B4 | Две реализации БД | ✅ Факт-проверка | подтверждено НЕ две параллельные реализации, а слои: DatabaseManager (общий SQLite) + ProjectDatabaseManager (per-project) + DatabaseBridge (фасад для AppState); дублирование частичное, единой гонки нет |
 | C1 | Тесты читают исходники (33 файла) | ⏳ Открыт | осознанный стиль; частично сохраняем |
@@ -30,7 +30,7 @@
 - [x] `ChatPanelView+ToolLoop.swift` сохранён в репозиторий.
 - [x] Полный прогон тестов + коммит и отправка (3895/3895, `432c030`).
 - [x] Разбиение god-файлов (B3) — все исходники ≤600 строк.
-- [ ] B2 (@MainActor для AppState) — после разбиения.
+- [x] B2 (@MainActor для AppState) — класс изолирован, тесты-наборы тоже.
 - [ ] Сервер полностью асинхронный (B1 остаток: убрать 51 семафор).
 - [ ] Анализатор команд внутренней моделью поверх `DestructiveCommandGuard`.
 - [ ] Чистка остатков WebKit/куки (показ только через каст).

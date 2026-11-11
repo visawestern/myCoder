@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("CHAT-18: send persistence source contract")
 struct ChatSendPersistenceSourceTests {
     @Test("session preparation precedes first user-message append")

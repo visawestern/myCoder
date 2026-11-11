@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-04 skill update state preservation")
 struct SkillUpdateStateTests {
     private func makeTempHome() throws -> URL {

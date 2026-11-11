@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("WebModelListParser — Qwen effort parsing fixes")
 struct WebModelListParserQwenTests {
 
@@ -56,6 +57,7 @@ struct WebModelListParserQwenTests {
     }
 }
 
+@MainActor
 @Suite("WebModelDiscovery — Qwen model items parsing")
 struct WebModelDiscoveryQwenTests {
 

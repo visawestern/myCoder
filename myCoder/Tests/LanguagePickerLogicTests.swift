@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("i18n: languages + picker (plan Раздел 2)")
 struct LanguagePickerLogicTests {
 

@@ -4,6 +4,7 @@ import Foundation
 
 /// WebSessionSummarizer: token estimation, progressive thresholds, and
 /// summarized-seed construction for web-provider session restarts.
+@MainActor
 @Suite("WebSessionSummarizer — AI summary for session restarts")
 struct WebSessionSummarizerTests {
 

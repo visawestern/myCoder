@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("CHAT-18: failed first send persistence")
 struct SendPersistenceLogicTests {
     @Test("new project send requires a local session before first append")

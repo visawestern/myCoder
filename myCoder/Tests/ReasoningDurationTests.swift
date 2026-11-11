@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Message — reasoningDuration freezes at completion")
 struct ReasoningDurationTests {
 

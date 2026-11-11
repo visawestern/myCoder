@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Provider response validation")
 struct ProviderResponseValidationLogicTests {
     @Test("whitespace-only provider content is not a usable response")

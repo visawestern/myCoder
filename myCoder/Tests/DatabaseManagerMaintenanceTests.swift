@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Legacy database maintenance safety")
 struct DatabaseManagerMaintenanceTests {
     @Test("negative archive age fails closed instead of archiving current sessions")

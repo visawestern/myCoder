@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("ACP message builder — multimodal fix (plan Раздел 9 Блок 2)")
 struct ACPMessageBuilderTests {
 

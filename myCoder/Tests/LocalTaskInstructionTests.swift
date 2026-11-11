@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Task-specific procedure instructions from internal planner")
 struct LocalTaskInstructionTests {
     @Test func selectedProcedureSurvivesParsingAndResolution() throws {

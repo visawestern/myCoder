@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SID-06: workspace selection expansion")
 struct SidebarExpansionLogicTests {
     @Test("selecting another workspace expands its section")

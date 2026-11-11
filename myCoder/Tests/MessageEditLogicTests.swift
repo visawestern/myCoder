@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Message edit and resend")
 struct MessageEditLogicTests {
 

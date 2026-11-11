@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Harness-tax turn accounting C1 (eval harness-tax)")
 struct UsageHarnessProfileTests {
 

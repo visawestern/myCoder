@@ -5,6 +5,7 @@ import Testing
 /// Read notifications must go gray and disappear one hour after they were
 /// read (user directive 2026-10-29: "прочитанные уведомления делай серым
 /// цветом и через час убирай из уведомлений").
+@MainActor
 @Suite("Старение уведомлений")
 struct NotificationAgingTests {
 

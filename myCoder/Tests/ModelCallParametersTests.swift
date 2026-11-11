@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Model call parameters (plan Раздел 13 п.14)")
 struct ModelCallParametersTests {
 

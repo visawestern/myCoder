@@ -6,6 +6,7 @@ import Testing
 /// correct call syntax, so the model can retry instead of guessing again
 /// (user directive 2026-10-29: "при ошибке json в инструменте возвращалась
 /// не только ошибка но и пример вызова с правильным синтаксисом").
+@MainActor
 @Suite("Подсказка синтаксиса при ошибке инструмента")
 struct WebToolSyntaxExampleTests {
 

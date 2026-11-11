@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Mimo Serve API Models")
 struct MimoServeModelsTests {
 

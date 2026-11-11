@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("MimoServeClient Live Integration", .enabled(if: ProcessInfo.processInfo.environment["MIMO_LIVE_TESTS"] == "1"))
 struct LiveIntegrationTests {
 

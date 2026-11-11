@@ -7,6 +7,7 @@ import Testing
 /// is rendered twice (user directive 2026-10-29: "если пошла обработка тула
 /// то сразу его переноси из обычного текста в спойлер что бы небыло
 /// задвоения").
+@MainActor
 @Suite("Выноска вызовов инструментов из обычного текста")
 struct WebToolFenceStrippingTests {
 

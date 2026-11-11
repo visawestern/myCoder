@@ -7,6 +7,7 @@ import Foundation
 /// board + planner + impact) needs more time. This proves the *same* pipeline
 /// collects real context (status=compiled, included non-empty) when it is given
 /// a finite project, and pins the JSON surface the API returns.
+@MainActor
 @Suite("Context preview collects real context")
 struct ContextPreviewCollectsContextTests {
 

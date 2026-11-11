@@ -6,6 +6,7 @@ import Foundation
 /// to produce: `contextSummary`, the compiled point context and the raw wire
 /// responses never left the app. These tests pin the row contract so the
 /// context pipeline is verifiable over HTTP instead of by reading the UI.
+@MainActor
 @Suite("Строка /api/messages отдаёт контекст")
 struct MessageAPIRowTests {
 

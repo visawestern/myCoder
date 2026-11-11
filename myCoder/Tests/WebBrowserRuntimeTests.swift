@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Dynamic web browser runtime")
 struct WebBrowserRuntimeTests {
     @Test("Effort capabilities belong to the selected live model")

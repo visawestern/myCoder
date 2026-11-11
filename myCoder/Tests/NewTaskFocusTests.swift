@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("New Task Input Focus")
 struct NewTaskFocusTests {
 

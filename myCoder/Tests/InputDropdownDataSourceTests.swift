@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Input dropdown data source (plan Раздел 6 Блок 1/2/3)")
 struct InputDropdownDataSourceTests {
 

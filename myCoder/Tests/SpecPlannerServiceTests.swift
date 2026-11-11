@@ -19,6 +19,7 @@ private final class FakeSpecCompletionProvider: SpecCompletionProviding {
 
 private struct FakeSpecError: Error {}
 
+@MainActor
 @Suite("Spec planner service")
 struct SpecPlannerServiceTests {
 

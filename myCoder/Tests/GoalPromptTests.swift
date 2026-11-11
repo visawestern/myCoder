@@ -6,6 +6,7 @@ import Foundation
 /// the continuation instruction and the devil's-advocate verification prompt —
 /// both in the composer spoiler and in the right sidebar. A prompt longer
 /// than ten wrapped lines must scroll instead of pushing the panel away.
+@MainActor
 @Suite("Полный промпт цели")
 struct GoalPromptTests {
 

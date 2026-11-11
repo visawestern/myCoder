@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Engine discovery never launches the engine")
 struct EngineLocatorTests {
     private func fixture(version: String?) throws -> (root: URL, app: URL, marker: URL) {

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Spec wizard draft")
 struct SpecWizardDraftTests {
 

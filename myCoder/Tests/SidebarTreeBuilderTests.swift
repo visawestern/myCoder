@@ -5,6 +5,7 @@ import Foundation
 /// F71 — the sidebar is one tree: every project is a row with its chats as
 /// children, and every chat without a project is its own top-level row. No
 /// chat may appear twice, and pinned rows float to the top.
+@MainActor
 @Suite("Sidebar tree (F71)")
 struct SidebarTreeBuilderTests {
 

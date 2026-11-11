@@ -4,6 +4,7 @@ import Foundation
 
 /// Presentation logic for the ЦЕЛЬ card in the right sidebar. Pure, so the
 /// status/progress/action rules are verified without rendering SwiftUI.
+@MainActor
 @Suite("ЦЕЛЬ — представление карточки")
 struct GoalPresentationTests {
 

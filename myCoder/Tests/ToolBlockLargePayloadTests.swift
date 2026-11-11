@@ -7,6 +7,7 @@ import Foundation
 /// loop treated the response as a final answer and the model kept apologizing
 /// that "the system is not executing it". These tests pin the recovery and the
 /// honest error feedback for shapes that cannot be repaired.
+@MainActor
 @Suite("Tool block parsing — large payloads and damaged JSON")
 struct ToolBlockLargePayloadTests {
 

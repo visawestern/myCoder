@@ -4,6 +4,7 @@ import Foundation
 
 /// Снимки файлов для отката: создание, восстановление, удаление, список,
 /// размеры, чистка старых и честные ошибки метаданных.
+@MainActor
 @Suite("FileSnapshotManager")
 struct FileSnapshotManagerTests {
 

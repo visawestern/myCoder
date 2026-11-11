@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project file index logic (plan Раздел 7)")
 struct ProjectFileIndexLogicTests {
 

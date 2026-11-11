@@ -4,6 +4,7 @@ import Foundation
 
 /// Логика MCP-здоровья: классификация пробы (http/stdio/nil), разрешение
 /// stdio-команды по PATH и маппинг статуса с учётом свежести.
+@MainActor
 @Suite("MCP Health Check Logic")
 struct MCPHealthCheckLogicTests {
 

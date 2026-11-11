@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("UsageCapture — runtime usage value type (round 1)")
 struct UsageCaptureTests {
 

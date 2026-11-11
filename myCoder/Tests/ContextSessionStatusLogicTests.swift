@@ -7,6 +7,7 @@ import Foundation
 /// его строку и не мог отправить сообщение; шаги плана чата A появлялись в
 /// бейдже чата B. Здесь проверяется выбор per-session состояния и проводка
 /// через `AppState`.
+@MainActor
 @Suite("Статусы, привязанные к чату (C1/C2)")
 struct ContextSessionStatusLogicTests {
 

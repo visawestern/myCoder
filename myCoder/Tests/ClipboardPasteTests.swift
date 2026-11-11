@@ -4,6 +4,7 @@ import AppKit
 import SwiftUI
 @testable import myCoder
 
+@MainActor
 @Suite("Clipboard Paste", .serialized)
 struct ClipboardPasteTests {
 

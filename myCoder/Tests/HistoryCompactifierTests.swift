@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Компакция истории чата")
 struct HistoryCompactifierTests {
 
@@ -52,6 +53,7 @@ struct HistoryCompactifierTests {
     }
 }
 
+@MainActor
 @Suite("Новые дефолты контекста")
 struct ContextDefaultsTests {
 

@@ -6,6 +6,7 @@ import Foundation
 // every test's reset from the global `evictAll()` sledgehammer to scoped
 // `evictProject(ownPath)` — every test's path is a unique UUID, so evicting
 // your own path can never evict another suite's pooled connection.
+@MainActor
 @Suite("ProjectDatabaseManager — per-project SQLite storage", .serialized)
 struct ProjectDatabaseManagerTests {
 
@@ -279,6 +280,7 @@ struct ProjectDatabaseManagerTests {
 
 }
 
+@MainActor
 @Suite("ProjectDatabaseManager — project-scoped session maintenance")
 struct ProjectDatabaseMaintenanceTests {
     @Test("archives old sessions inside the owning project database")

@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Dropdown keyboard navigation (plan Раздел 6 Блок 2 п.14)")
 struct DropdownKeyboardLogicTests {
 

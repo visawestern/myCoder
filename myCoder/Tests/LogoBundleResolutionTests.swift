@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Logo resource bundle resolution (rename/mycoder R7b)")
 struct LogoBundleResolutionTests {
 

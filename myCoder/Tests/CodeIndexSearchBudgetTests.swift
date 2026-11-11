@@ -10,6 +10,7 @@ import Foundation
 /// handler's 60 s deadline. A read-only search must not write; indexing is
 /// event-driven (FSEvents watcher) and only a completely empty store needs a
 /// first build here.
+@MainActor
 @Suite("Поиск по графу не переиндексирует проект")
 struct CodeIndexSearchBudgetTests {
 

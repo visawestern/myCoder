@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("DatabaseManager.insertMessage writes usage (round 9)")
 struct DatabaseManagerInsertUsageTests {
 

@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("INP-10 send button activation")
 struct SendButtonActivationLogicTests {
     @Test("keyboard send is allowed when ready and idle")

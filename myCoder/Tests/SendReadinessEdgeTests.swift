@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Send readiness edge cases")
 struct SendReadinessEdgeTests {
     @Test("whitespace-only provider IDs are rejected even when Serve is connected")

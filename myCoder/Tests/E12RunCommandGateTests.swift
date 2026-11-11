@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("E12 — run_command gated by AccessLevel (Раздел 12 п.18): real execution at fullAccess, approval otherwise")
 struct E12RunCommandGateTests {
 

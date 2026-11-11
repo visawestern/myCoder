@@ -7,6 +7,7 @@ import Foundation
 /// каталога метаданных (например mercury-3 → low/medium/high).
 /// Директива 2026-10-30: «у mercury-3 несколько видов эффорта, а в
 /// панели нет селекта».
+@MainActor
 @Suite("Варианты модели: fallback на каталог метаданных")
 struct ProviderVariantCatalogFallbackTests {
 

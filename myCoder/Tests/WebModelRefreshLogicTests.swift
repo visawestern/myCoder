@@ -8,6 +8,7 @@ import Testing
 /// entries missing from the latest scan are demoted to unselectable (they
 /// may be context-hidden, not retired), and the explicit user selection is
 /// preserved whenever the model is still selectable.
+@MainActor
 @Suite("Web model refresh — merge semantics (audit 2026-09-06)")
 struct WebModelRefreshLogicTests {
 

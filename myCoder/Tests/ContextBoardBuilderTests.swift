@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Context board — структурная карта проекта для локальной модели")
 struct ContextBoardBuilderTests {
 

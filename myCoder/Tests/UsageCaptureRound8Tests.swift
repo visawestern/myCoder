@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("DatabaseBridge.saveMessage usage passthrough (round 8)", .serialized)
 struct DatabaseBridgeUsagePassthroughTests {
     private func makeTempProjectDir(_ name: String = UUID().uuidString) throws -> String {

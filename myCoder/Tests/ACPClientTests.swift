@@ -3,6 +3,7 @@ import Foundation
 @testable import myCoder
 
 /// F44: ACP Protocol Client tests
+@MainActor
 @Suite("ACP Protocol Client")
 struct ACPClientTests {
     

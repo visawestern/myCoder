@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Plus Button Menu")
 struct PlusMenuTests {
 
@@ -42,6 +43,7 @@ struct PlusMenuTests {
     }
 }
 
+@MainActor
 @Suite("API Response Handling")
 struct APIResponseTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Локальные модели компилятора — каталог и раннер")
 struct LocalModelDirectoryTests {
 

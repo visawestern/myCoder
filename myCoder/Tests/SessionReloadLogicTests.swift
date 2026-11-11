@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Session Reload Logic")
 struct SessionReloadLogicTests {
 

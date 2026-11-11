@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("WEB-CHAT-11: web tool access gate")
 struct WebToolAccessGateTests {
     @Test("ask-before-changes requires approval for every file mutation")

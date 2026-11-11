@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Tool approval center", .serialized)
 struct ToolApprovalCenterTests {
 

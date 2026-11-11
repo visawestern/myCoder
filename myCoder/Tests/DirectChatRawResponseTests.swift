@@ -5,6 +5,7 @@ import Foundation
 /// Сырые ответы сервера фиксируются в порядке прихода (кнопка
 /// «Сырой ответ»), а не-текстовые reasoning_details (например,
 /// `reasoning.encrypted` у mercury-3) не показываются вовсе.
+@MainActor
 @Suite("Сырые ответы сервера (rawEvents)")
 struct DirectChatRawResponseTests {
 

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Search palette")
 struct SearchPaletteLogicTests {
     private let sessions = [

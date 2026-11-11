@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("IDX-03 persistent project-file search")
 struct ProjectFileSearchLogicTests {
     private func record(_ path: String, _ text: String) -> FileIndexRecord {

@@ -3,6 +3,7 @@ import Foundation
 @testable import myCoder
 
 /// Адаптеры реального окружения отката: загрузка undo-записей и корзина.
+@MainActor
 @Suite("Откат — адаптеры окружения")
 struct RollbackAdaptersTests {
 

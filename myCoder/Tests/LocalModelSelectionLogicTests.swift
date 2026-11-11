@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-11: local provider model selection")
 struct LocalModelSelectionLogicTests {
     @Test("only the active provider's selected model is marked")

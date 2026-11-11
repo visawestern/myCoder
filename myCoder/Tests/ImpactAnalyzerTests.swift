@@ -7,6 +7,7 @@ import Testing
 /// decision for each one. The owner's example: frames moved from files on disk
 /// into memory — the folder picker in the UI is now dead code, and a plain
 /// model never raises that by itself.
+@MainActor
 @Suite("Харнесс-вопросы о зависимостях")
 struct ImpactAnalyzerTests {
 

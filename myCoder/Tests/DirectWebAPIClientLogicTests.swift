@@ -4,6 +4,7 @@ import Foundation
 
 /// Чистые хелперы DirectWebAPIClient: конвертация cookie, парсинг SSE,
 /// извлечение токенов из заголовков и cookie.
+@MainActor
 @Suite("DirectWebAPIClient чистые хелперы")
 struct DirectWebAPIClientLogicTests {
 

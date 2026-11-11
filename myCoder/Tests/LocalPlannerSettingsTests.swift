@@ -6,6 +6,7 @@ import Testing
 /// turns the user's words into a plan for context assembly. It must take part
 /// by default — an opt-in switch meant it never ran, and every pack silently
 /// fell back to the deterministic plan.
+@MainActor
 @Suite("Внутренняя модель: участие по умолчанию")
 struct LocalPlannerSettingsTests {
 

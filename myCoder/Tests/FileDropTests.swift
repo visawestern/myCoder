@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 @testable import myCoder
 
+@MainActor
 @Suite("File Drop", .serialized)
 struct FileDropTests {
 

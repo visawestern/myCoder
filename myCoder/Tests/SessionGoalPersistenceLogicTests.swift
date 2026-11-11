@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Session goal persistence routing")
 struct SessionGoalPersistenceLogicTests {
     @Test("restored project goal survives session hydration")

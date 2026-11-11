@@ -8,6 +8,7 @@ import Foundation
 /// compiled context listed project files — the model then answered "the project
 /// is not in the current directory" and went hunting across the whole disk
 /// (live run 2026-11-03). The send target must follow the open project.
+@MainActor
 @Suite("Цель отправки следует за открытым проектом")
 struct SendTargetProjectTests {
 

@@ -4,6 +4,7 @@ import Testing
 
 /// The blended "best of both harnesses" prompt quality: OpenCode's
 /// collaboration/communication core + Claude Code's structural checkpoint.
+@MainActor
 @Suite("Harness prompt quality — blended OpenCode + Claude Code")
 struct HarnessPromptQualityTests {
 

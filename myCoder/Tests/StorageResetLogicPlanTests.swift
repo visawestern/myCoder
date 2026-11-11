@@ -4,6 +4,7 @@ import Foundation
 
 /// Планирование сброса хранилища: состав путей для каждого сценария,
 /// дедупликация, сводка и нормализация идентификаторов проекта.
+@MainActor
 @Suite("План сброса хранилища (StorageResetLogic)")
 struct StorageResetLogicPlanTests {
 

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Project deletion planning")
 struct ProjectDeletionLogicTests {
     @Test("deletion work is split into bounded chunks")

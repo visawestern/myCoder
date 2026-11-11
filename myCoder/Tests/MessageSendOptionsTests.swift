@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Message Send Options")
 struct MessageSendOptionsTests {
 
@@ -88,6 +89,7 @@ struct MessageSendOptionsTests {
     }
 }
 
+@MainActor
 @Suite("Message Parts Builder")
 struct MessagePartsBuilderTests {
 
@@ -137,6 +139,7 @@ struct MessagePartsBuilderTests {
     }
 }
 
+@MainActor
 @Suite("Permission Mapping")
 struct PermissionMappingTests {
 
@@ -165,6 +168,7 @@ struct PermissionMappingTests {
     }
 }
 
+@MainActor
 @Suite("Provider Settings Logic")
 struct ProviderSettingsLogicTests {
 
@@ -228,6 +232,7 @@ struct ProviderSettingsLogicTests {
     }
 }
 
+@MainActor
 @Suite("Session Restore Selections")
 struct SessionRestoreTests {
 
@@ -258,6 +263,7 @@ struct SessionRestoreTests {
     }
 }
 
+@MainActor
 @Suite("Message ID Generator")
 struct MessageIDGeneratorTests {
     @Test("Generates msg prefixed IDs")

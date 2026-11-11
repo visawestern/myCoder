@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Undo action feedback")
 struct UndoActionFeedbackLogicTests {
     @Test("successful undo reports a clear completion message")

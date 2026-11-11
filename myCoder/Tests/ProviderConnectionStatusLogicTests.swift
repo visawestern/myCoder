@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Selected provider connection status")
 struct ProviderConnectionStatusLogicTests {
     @Test("Serve connectivity cannot masquerade as an expired web login")

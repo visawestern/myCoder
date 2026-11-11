@@ -4,6 +4,7 @@ import Testing
 
 /// A chat answer must keep its block order when fenced code is lifted out of
 /// the prose surface into its own spoiler (user report 2026-10-29).
+@MainActor
 @Suite("Разбиение сообщения на прозу и блоки кода")
 struct MarkdownCodeSegmentLogicTests {
 

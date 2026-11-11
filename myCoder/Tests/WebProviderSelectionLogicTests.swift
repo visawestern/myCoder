@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Web provider selection and send contract")
 struct WebProviderSelectionLogicTests {
     @Test("Selecting a web model updates the persisted config value")
@@ -106,6 +107,7 @@ struct WebProviderSelectionLogicTests {
     }
 }
 
+@MainActor
 @Suite("Web driver model and effort guard")
 struct WebDriverSelectionGuardTests {
     final class InjectionBridge: BrowserAutomationBridge, @unchecked Sendable {
@@ -297,6 +299,7 @@ struct WebDriverSelectionGuardTests {
     }
 }
 
+@MainActor
 @Suite("ChatGPT auto-model bypass (audit 2026-09-08)")
 struct ChatGPTAutoBypassTests {
     @Test("Missing switcher does not block send for ChatGPT Auto labels")

@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Project session routing")
 struct ProjectSessionRoutingLogicTests {
     @Test("explicit project ID wins over the currently selected workspace")

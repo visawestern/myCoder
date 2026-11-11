@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Notification Service")
 struct NotificationServiceTests {
     init() { LocalizationRuntime.currentLanguage = .english }

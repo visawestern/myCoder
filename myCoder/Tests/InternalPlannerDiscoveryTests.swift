@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Internal planner semantic discovery")
 struct InternalPlannerDiscoveryTests {
     private func board(paths: [String]) -> ContextBoard {

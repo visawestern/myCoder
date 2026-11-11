@@ -4,6 +4,7 @@ import Foundation
 
 /// Потоковый аккумулятор вывода subprocess + чистые части git-publish
 /// потока (one-time код, аргументы команд, описания ошибок).
+@MainActor
 @Suite("OutputAccumulator и GitPublishFlowLogic")
 struct OutputAccumulatorGitPublishTests {
 

@@ -7,6 +7,7 @@ import Foundation
 /// providers) because `DirectChatMessage.content` was a plain String and the
 /// builder never carried the real bytes. This is the same class of bug that
 /// was fixed for ACP (Раздел 9 п.2) — now for the direct path (п.10(c)).
+@MainActor
 @Suite("E01 — multimodal attachments on OpenAI-compatible path")
 struct E01MultimodalDirectChatTests {
 

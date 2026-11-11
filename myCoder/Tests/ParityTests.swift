@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Model Selector Parity", .serialized)
 struct ModelSelectorParityTests {
 
@@ -42,6 +43,7 @@ struct ModelSelectorParityTests {
     }
 }
 
+@MainActor
 @Suite("Access Level Parity")
 struct AccessLevelParityTests {
 
@@ -60,6 +62,7 @@ struct AccessLevelParityTests {
     }
 }
 
+@MainActor
 @Suite("Send Message Parity")
 struct SendMessageParityTests {
 
@@ -80,6 +83,7 @@ struct SendMessageParityTests {
     }
 }
 
+@MainActor
 @Suite("Workspace Dropdown Parity")
 struct WorkspaceDropdownParityTests {
 
@@ -117,6 +121,7 @@ struct WorkspaceDropdownParityTests {
     }
 }
 
+@MainActor
 @Suite("Workspace Chips Parity")
 struct WorkspaceChipsParityTests {
 
@@ -167,6 +172,7 @@ struct WorkspaceChipsParityTests {
     }
 }
 
+@MainActor
 @Suite("Sidebar Session Parity")
 struct SidebarSessionParityTests {
 
@@ -217,6 +223,7 @@ struct SidebarSessionParityTests {
     }
 }
 
+@MainActor
 @Suite("Agent Mode Parity", .serialized)
 struct AgentModeParityTests {
 
@@ -254,6 +261,7 @@ struct AgentModeParityTests {
     }
 }
 
+@MainActor
 @Suite("Settings Persistence Parity")
 struct SettingsPersistenceParityTests {
 
@@ -285,6 +293,7 @@ struct SettingsPersistenceParityTests {
     }
 }
 
+@MainActor
 @Suite("Navigation History Parity")
 struct NavigationHistoryParityTests {
 
@@ -344,6 +353,7 @@ struct NavigationHistoryParityTests {
     }
 }
 
+@MainActor
 @Suite("Sidebar Toggle Parity")
 struct SidebarToggleParityTests {
 
@@ -358,6 +368,7 @@ struct SidebarToggleParityTests {
     }
 }
 
+@MainActor
 @Suite("Input Bar Position Parity")
 struct InputBarPositionParityTests {
 

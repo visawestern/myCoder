@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Web send completion journal")
 struct WebSendCompletionLogicTests {
     @Test("visible final answer is the only successful completion event")

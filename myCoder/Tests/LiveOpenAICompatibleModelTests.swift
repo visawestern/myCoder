@@ -11,6 +11,7 @@ import Foundation
 ///
 /// Без этих переменных Suite отключена. STRATA сознательно не поддержана
 /// (пользователь: «мой ноутбук не потянет»).
+@MainActor
 @Suite("Live: OpenAI-совместимый провайдер",
        .enabled(if: ProcessInfo.processInfo.environment["OPENAI_COMPAT_BASE_URL"] != nil
                     && ProcessInfo.processInfo.environment["OPENAI_COMPAT_MODEL"] != nil))

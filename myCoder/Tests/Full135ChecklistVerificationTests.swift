@@ -10,6 +10,7 @@ import Foundation
 private func uid() -> String { UUID().uuidString }
 
 // MARK: - PART 1 (Items 1-20): Базы данных
+@MainActor
 @Suite("Part 1: DB (1-20)")
 struct DBTests {
     let db = DatabaseManager.shared
@@ -63,6 +64,7 @@ struct DBTests {
 }
 
 // MARK: - PART 2 (Items 21-45): Сессии и проекты  
+@MainActor
 @Suite("Part 2: Sessions (21-45)")
 struct SessTests {
     let db = DatabaseManager(inMemory: true)
@@ -103,6 +105,7 @@ struct SessTests {
 }
 
 // MARK: - PART 3 (Items 46-70): Сообщения
+@MainActor
 @Suite("Part 3: Messages (46-70)")
 struct MsgTests {
     let db = DatabaseManager(inMemory: true)
@@ -159,6 +162,7 @@ struct MsgTests {
 }
 
 // MARK: - PART 4 (Items 71-92): Tool calls
+@MainActor
 @Suite("Part 4: Tool calls (71-92)")
 struct TCTests {
     let db = DatabaseManager(inMemory: true)
@@ -192,6 +196,7 @@ struct TCTests {
 }
 
 // MARK: - PART 5 (Items 93-107): Провайдеры
+@MainActor
 @Suite("Part 5: Providers (93-107)")
 struct ProvTests {
     @Test("93-94. Options") func t93() {
@@ -230,6 +235,7 @@ struct ProvTests {
 }
 
 // MARK: - PART 6 (Items 108-117): Поиск
+@MainActor
 @Suite("Part 6: Search (108-117)")
 struct SearchT {
     @Test("108. FTS5 exists") func t108() throws {
@@ -245,6 +251,7 @@ struct SearchT {
 }
 
 // MARK: - PART 7 (Items 118-125): Безопасность
+@MainActor
 @Suite("Part 7: Security (118-125)")
 struct SecT {
     @Test("118. Keychain") func t118() throws {
@@ -255,6 +262,7 @@ struct SecT {
 }
 
 // MARK: - PART 8 (Items 126-135): Производительность
+@MainActor
 @Suite("Part 8: Perf (126-135)")
 struct PerfT {
     @Test("126. Singleton") func t126() { #expect(DatabaseManager.shared === DatabaseManager.shared) }

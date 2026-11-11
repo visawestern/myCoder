@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("STO-27 configuration transfer UX")
 struct AppConfigurationTransferLogicTests {
     @Test("global configuration import requires explicit replacement confirmation")

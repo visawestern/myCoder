@@ -23,6 +23,7 @@ private var routingLiveEnabled: Bool {
     ProcessInfo.processInfo.environment["MYCODER_LIVE_ROUTING"] == "1"
 }
 
+@MainActor
 @Suite("RoutingLive (M1)", .enabled(if: routingLiveEnabled))
 struct RoutingLiveTests {
 

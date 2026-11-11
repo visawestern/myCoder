@@ -6,6 +6,7 @@ import Testing
 /// (user directive 2026-11-03: «все проверяй через встроенное апи»).
 /// `POST /api/context-preview` returns exactly what the model would receive,
 /// split into the same tabs the viewer shows — so a live check needs no GUI.
+@MainActor
 @Suite("API предпросмотра контекста")
 struct ContextPreviewLogicTests {
 

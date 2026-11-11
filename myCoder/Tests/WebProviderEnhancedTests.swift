@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("WebProviderModel + FeatureMode structures")
 struct WebProviderModelTests {
 
@@ -27,6 +28,7 @@ struct WebProviderModelTests {
     }
 }
 
+@MainActor
 @Suite("WebProviderConfig enhanced model management")
 struct WebProviderConfigModelTests {
 
@@ -87,6 +89,7 @@ struct WebProviderConfigModelTests {
     }
 }
 
+@MainActor
 @Suite("WebEffort fromLabel mapping")
 struct WebEffortFromLabelTests {
 
@@ -123,6 +126,7 @@ struct WebEffortFromLabelTests {
     }
 }
 
+@MainActor
 @Suite("WebChatError descriptions")
 struct WebChatErrorTests {
 
@@ -142,6 +146,7 @@ struct WebChatErrorTests {
     }
 }
 
+@MainActor
 @Suite("WebProviderCatalog selectors with new fields")
 struct WebProviderCatalogEnhancedTests {
 

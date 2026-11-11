@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Project header context")
 struct ProjectHeaderContextLogicTests {
     @Test("active workspace drives branch visibility after project model migration")

@@ -11,6 +11,7 @@ import Foundation
 ///
 /// These are guardrails, not micro-benchmarks: they fail when the ranking
 /// becomes superlinear in files × terms again.
+@MainActor
 @Suite("Скорость отбора кандидатов")
 struct CandidateRankerPerformanceTests {
 

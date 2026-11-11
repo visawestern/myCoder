@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Screenshot 1 Parity")
 struct Screenshot1Tests {
 

@@ -5,6 +5,7 @@ import Foundation
 /// Project memory must survive a restart, stay inspectable, and really reach
 /// the model-bound pack. These tests use a real project database on disk where
 /// persistence matters and an in-memory one where it does not.
+@MainActor
 @Suite("Память проекта — SQLite, /remember и пакет контекста")
 struct ProjectMemoryStoreTests {
 

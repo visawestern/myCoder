@@ -4,6 +4,7 @@ import Foundation
 
 /// Контекст перед отправкой не должен содержать один и тот же файл дважды и
 /// повторять смыслы из диалога и из файлов.
+@MainActor
 @Suite("Дедупликация контекста")
 struct ContextDeduplicationTests {
 

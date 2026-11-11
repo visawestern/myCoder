@@ -5,6 +5,7 @@ import Foundation
 /// Compaction keeps the conversation usable inside a smaller window: earlier
 /// turns are replaced for the model by one factual summary, while the user
 /// still sees the full chat.
+@MainActor
 @Suite("Conversation compaction")
 struct ConversationCompactionLogicTests {
 

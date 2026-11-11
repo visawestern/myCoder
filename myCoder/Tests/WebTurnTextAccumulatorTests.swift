@@ -5,6 +5,7 @@ import Foundation
 /// WebTurnTextAccumulator: snapshot-streaming text accumulation for a web
 /// turn (user directive 2026-09-11 — nothing the model produced may be
 /// erased; earlier thinking and post-tool answers accumulate as blocks).
+@MainActor
 @Suite("WebTurnTextAccumulator — append-only turn text")
 struct WebTurnTextAccumulatorTests {
 

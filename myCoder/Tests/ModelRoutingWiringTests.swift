@@ -12,6 +12,7 @@ private actor CompletionFlag {
 /// BEFORE the route guard, with journaling helpers, planner passthrough,
 /// session cleanup and the routing menu. Source-inspection tests (audit B6
 /// pattern) plus one behavior test for the planner `complete:` passthrough.
+@MainActor
 @Suite("Model routing wiring (M1)")
 struct ModelRoutingWiringTests {
 

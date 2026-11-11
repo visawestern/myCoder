@@ -4,6 +4,7 @@ import Foundation
 
 /// A tool call that points outside the project folder must not dead-end: the
 /// user is asked for access, and an approved grant lets the call run.
+@MainActor
 @Suite("Out-of-project access")
 struct OutOfProjectAccessTests {
 

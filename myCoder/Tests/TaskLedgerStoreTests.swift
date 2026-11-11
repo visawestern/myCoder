@@ -4,6 +4,7 @@ import Foundation
 
 /// The ledger must capture the task state deterministically, survive a restart,
 /// and replace a long raw transcript in the model-bound text.
+@MainActor
 @Suite("Ledger задачи — состояние, персистентность и замена истории")
 struct TaskLedgerStoreTests {
 

@@ -5,6 +5,7 @@ import Foundation
 /// The interview screen keeps the live question above the history feed so the
 /// answer controls are the first thing on screen, while the feed lists the
 /// answered exchanges newest first.
+@MainActor
 @Suite("Spec wizard interview layout")
 struct SpecWizardInterviewLayoutTests {
 

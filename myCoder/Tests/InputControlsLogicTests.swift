@@ -4,6 +4,7 @@ import Foundation
 
 // MARK: - INP-13 / INP-03: InputLayout constants & layout
 
+@MainActor
 @Suite("InputLayout constants")
 struct InputLayoutConstantsTests {
 
@@ -61,6 +62,7 @@ struct InputLayoutConstantsTests {
 
 // MARK: - INP-03: WorkspaceDropdown logic
 
+@MainActor
 @Suite("WorkspaceDropdown state management and search filtering")
 struct WorkspaceDropdownLogicTests {
 
@@ -142,6 +144,7 @@ struct WorkspaceDropdownLogicTests {
 
 // MARK: - INP-04: AccessLevel model
 
+@MainActor
 @Suite("AccessLevel enum")
 struct AccessLevelModelTests {
 
@@ -208,6 +211,7 @@ struct AccessLevelModelTests {
 
 // MARK: - INP-05: AgentMode model
 
+@MainActor
 @Suite("AgentMode enum")
 struct AgentModeModelTests {
 
@@ -260,6 +264,7 @@ struct AgentModeModelTests {
 
 // MARK: - INP-05: Agent mode plan capability checking (ProviderCapabilityGates)
 
+@MainActor
 @Suite("Plan agent capability gates")
 struct PlanAgentCapabilityTests {
 
@@ -349,6 +354,7 @@ struct PlanAgentCapabilityTests {
 
 // MARK: - INP-06: Provider selector logic
 
+@MainActor
 @Suite("Provider selection and resolution logic")
 struct ProviderSelectionLogicTests {
 
@@ -598,6 +604,7 @@ struct ProviderSelectionLogicTests {
 
 // MARK: - INP-10: SendReadinessLogic
 
+@MainActor
 @Suite("SendReadinessLogic")
 struct SendReadinessLogicTests {
 
@@ -848,6 +855,7 @@ struct SendReadinessLogicTests {
 
 // MARK: - INP-04: AccessLevelPermissionLogic
 
+@MainActor
 @Suite("AccessLevelPermissionLogic")
 struct AccessLevelPermissionLogicCoverageTests {
 

@@ -92,23 +92,25 @@ extension MyCoderAPIServer {
     
     func chatsInfo() -> [String: Any] {
         guard let appState = __myCoderAppState else { return ["error": "app not ready"] }
-        let sessions = appState.sessions.map { session in
-            [
-                "id": session.id,
-                "title": session.title,
-                "directory": session.directory,
-                "updatedAt": session.updatedAt.timeIntervalSince1970
+        return Self.onMainRead {
+            let sessions = appState.sessions.map { session in
+                [
+                    "id": session.id,
+                    "title": session.title,
+                    "directory": session.directory,
+                    "updatedAt": session.updatedAt.timeIntervalSince1970
+                ]
+            }
+            return [
+                "sessions": sessions,
+                "selectedSessionId": appState.selectedSession?.id ?? "",
+                "selectedProviderId": appState.selectedProviderID,
+                "selectedModel": SendAPIResponseLogic.modelID(
+                    selectedModel: appState.selectedModel,
+                    effectiveModel: appState.effectiveSelectedModel()
+                )
             ]
         }
-        return [
-            "sessions": sessions,
-            "selectedSessionId": appState.selectedSession?.id ?? "",
-            "selectedProviderId": appState.selectedProviderID,
-            "selectedModel": SendAPIResponseLogic.modelID(
-                selectedModel: appState.selectedModel,
-                effectiveModel: appState.effectiveSelectedModel()
-            )
-        ]
     }
     
     func handleSend(body: String) -> String {
@@ -235,7 +237,9 @@ extension MyCoderAPIServer {
     
     func messagesInfo() -> [String: Any] {
         guard let appState = __myCoderAppState else { return ["error": "app not ready"] }
-        guard let sessionID = appState.selectedSession?.id else { return ["messages": []] }
+        guard let sessionID = Self.onMainRead({ appState.selectedSession?.id }) else {
+            return ["messages": []]
+        }
 
         let messages = DatabaseBridge.shared.loadMessages(sessionId: sessionID)
         let result = messages.map { msg -> [String: Any] in

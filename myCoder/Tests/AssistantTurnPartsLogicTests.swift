@@ -6,6 +6,7 @@ import Testing
 /// the answer only in `content`, which the row renders above the parts — a
 /// finished reply showed its reasoning block at the very end (user report
 /// 2026-10-29). These tests pin the display order.
+@MainActor
 @Suite("Порядок блоков ответа ассистента")
 struct AssistantTurnPartsLogicTests {
 

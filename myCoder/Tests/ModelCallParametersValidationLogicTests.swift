@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("INP-14 model parameter validation")
 struct ModelCallParametersValidationLogicTests {
     @Test("valid values produce a customized parameter set")

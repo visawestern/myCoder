@@ -6,6 +6,7 @@ import Testing
 /// was introduced are listed explicitly; the list may only shrink. A listed
 /// file that has become compliant must be removed from the list, otherwise the
 /// test fails — that prevents the allowlist from silently staying forever.
+@MainActor
 @Suite("Module size ratchet")
 struct ModuleSizeRatchetTests {
     /// Current over-budget files. Remove an entry as soon as the file is split.

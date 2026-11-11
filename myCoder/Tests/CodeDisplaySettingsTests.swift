@@ -5,6 +5,7 @@ import Testing
 /// The Code Preview settings existed in `AppSettings` and in the Settings
 /// screen but no renderer read them; these tests pin the mapping from the
 /// stored values to the palette actually used by chat code blocks.
+@MainActor
 @Suite("Палитра кода из настроек")
 struct CodeDisplaySettingsTests {
 

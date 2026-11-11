@@ -5,6 +5,7 @@ import Foundation
 /// Audit 2026-09-08 regression: `/api/send-and-wait` used to return
 /// "status":"answered" carrying internal UI status lines instead of the
 /// provider's real text ("Thinking… (K3)", "Sent via browserAutomation…").
+@MainActor
 @Suite("send-and-wait real-answer detection (audit 2026-09-08)")
 struct SendWaitAnswerLogicTests {
 
@@ -44,6 +45,7 @@ struct SendWaitAnswerLogicTests {
 
 /// Audit 2026-09-08 regression: the Kimi history page (/chat/history) was
 /// accepted as a conversation identity ("history") and bound sends to it.
+@MainActor
 @Suite("remote chat identity placeholders (audit 2026-09-08)")
 struct RemoteChatIdentityPlaceholderTests {
 

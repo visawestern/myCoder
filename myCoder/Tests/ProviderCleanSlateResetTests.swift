@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("Provider clean slate")
 struct ProviderCleanSlateResetTests {
     private func makeDefaults() -> UserDefaults {
@@ -46,6 +47,7 @@ struct ProviderCleanSlateResetTests {
     }
 }
 
+@MainActor
 @Suite("Provider enablement store")
 struct ProviderEnablementStoreTests {
     private func makeDefaults() -> UserDefaults {

@@ -8,6 +8,7 @@ import Foundation
 ///   1. the shared `emptyState` helper is defined ONCE, not copy-pasted into
 ///      every Settings sub-view;
 ///   2. no dead/unreferenced state variables were carried over by the split.
+@MainActor
 @Suite("Settings Split Quality")
 struct SettingsSplitQualityTests {
 

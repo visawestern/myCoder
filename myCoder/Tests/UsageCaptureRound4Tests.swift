@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("ACPClient response usage contract (round 4)")
 struct ACPUsageContractTests {
 

@@ -5,6 +5,7 @@ import Testing
 /// Tapping a tool-approval notification must land on the message that raised
 /// it, not merely open the chat at the newest message (user report
 /// 2026-10-29).
+@MainActor
 @Suite("Переход по уведомлению к сообщению с вызовом тула")
 struct MessageFocusLogicTests {
 

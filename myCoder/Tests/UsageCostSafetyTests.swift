@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("USG-03 cost provenance safety")
 struct UsageCostSafetyTests {
     @Test("negative cost is not shown as a charge")

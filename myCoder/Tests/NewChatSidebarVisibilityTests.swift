@@ -4,6 +4,7 @@ import Foundation
 
 /// A newly created chat must show up in the sidebar right away — in its
 /// project or, for a chat without a project, as its own top-level row.
+@MainActor
 @Suite("New chats appear in the sidebar")
 struct NewChatSidebarVisibilityTests {
 

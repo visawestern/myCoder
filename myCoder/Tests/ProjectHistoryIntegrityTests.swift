@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project history integrity — full dialog, point-in-time undo, export/import, rename resilience", .serialized)
 struct ProjectHistoryIntegrityTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Custom model list — rename survives refresh", .serialized)
 struct CustomModelListTests {
 

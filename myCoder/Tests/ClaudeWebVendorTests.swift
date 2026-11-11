@@ -6,6 +6,7 @@ import Foundation
 /// (used primarily for textual specs and atomic UI decomposition). Verifies
 /// vendor plumbing (enum, catalog entry, selectors, label parsing, effort
 /// semantics) through the same contracts the other three vendors follow.
+@MainActor
 @Suite("Claude Web vendor (audit 2026-09-06)")
 struct ClaudeWebVendorTests {
 

@@ -6,6 +6,7 @@ import Foundation
 /// (telemetry, relative URL) as a "chat API" and DirectWebAPIClient then failed
 /// with `unsupported URL` (-1002). Discovery must (a) ignore obvious non-chat
 /// endpoints and (b) only propose ABSOLUTE http(s) endpoints.
+@MainActor
 @Suite("Round 30 — network route discovery quality")
 struct NetworkInterceptorRouteQualityTests {
 

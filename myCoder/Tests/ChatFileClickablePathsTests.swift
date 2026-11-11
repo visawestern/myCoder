@@ -6,6 +6,7 @@ import AppKit
 /// Пути и имена файлов в обычном тексте ответа (не только в inline-коде)
 /// получают `.chatFilePath` и становятся кликабельными: клик открывает меню
 /// «Открыть с помощью / Показать в Finder» (user request 2026-10-31).
+@MainActor
 @Suite("Кликабельные пути в тексте ответа")
 struct ChatFileClickablePathsTests {
 

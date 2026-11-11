@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("APP-06 Serve response feedback")
 struct ServeResponseFeedbackLogicTests {
     @Test("blank direct Serve completion returns actionable failure")

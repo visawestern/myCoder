@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("ChatScrollMath — чистая математика прокрутки")
 struct ChatScrollMathTests {
 

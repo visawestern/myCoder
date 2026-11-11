@@ -6,6 +6,7 @@ import Foundation
 /// — corruption went undetected and there was no restore-from-backup offer
 /// (plan Раздел 8 п.48). This suite exercises the new open-time check + the
 /// restore-from-backup path against REAL temp project databases.
+@MainActor
 @Suite("E04 — integrity check on open + restore from backup", .serialized)
 struct E04ProjectOpenIntegrityTests {
 

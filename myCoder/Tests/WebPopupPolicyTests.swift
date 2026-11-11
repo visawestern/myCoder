@@ -6,6 +6,7 @@ import Foundation
 /// kimi.com asks to hand off to kimi.ai and the embedded webview appeared to
 /// forbid it; root cause: no WKUIDelegate, so window.open / target=_blank
 /// popups were silently dropped, and JS dialogs could hang the page).
+@MainActor
 @Suite("Round 30 — WebPopupPolicy pure decisions")
 struct WebPopupPolicyTests {
 

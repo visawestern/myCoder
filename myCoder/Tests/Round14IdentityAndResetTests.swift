@@ -11,6 +11,7 @@ import Foundation
 /// - plan Раздел 8 п.9/п.19: resetStorage must be injectable so tests (and
 ///   the StorageResetCrashTests that previously deleted the REAL user
 ///   ~/.mycoder/mycoder.db) never touch real user data.
+@MainActor
 @Suite("Round 14 — project identity + safe reset (devil's advocate)")
 struct Round14IdentityAndResetTests {
 

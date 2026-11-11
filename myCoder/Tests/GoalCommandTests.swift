@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("ЦЕЛЬ — разбор команды /goal")
 struct GoalCommandLogicTests {
 
@@ -34,6 +35,7 @@ struct GoalCommandLogicTests {
     }
 }
 
+@MainActor
 @Suite("ЦЕЛЬ — разбор вердикта адвоката дьявола")
 struct GoalVerdictParserTests {
 

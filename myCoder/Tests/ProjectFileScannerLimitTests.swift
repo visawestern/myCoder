@@ -5,6 +5,7 @@ import Foundation
 /// Сканер проекта не должен превращаться в бесконечную операцию:
 /// лимит количества записей срезает гигантские репозитории
 /// (user report 2026-10-30: «собирает контекст уже час»).
+@MainActor
 @Suite("ProjectFileScanner лимит индекса")
 struct ProjectFileScannerLimitTests {
 

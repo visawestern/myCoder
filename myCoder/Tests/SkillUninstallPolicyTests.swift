@@ -1,6 +1,7 @@
 import Testing
 @testable import myCoder
 
+@MainActor
 @Suite("SET-04 skill uninstall safety")
 struct SkillUninstallPolicyTests {
     @Test("confirmation identifies the skill and warns that uninstall is destructive")

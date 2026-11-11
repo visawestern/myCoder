@@ -7,6 +7,7 @@ import Foundation
 /// actually submitted. On a freshly-hydrated qwen.ai page the click lands before
 /// React attaches the submit handler → nothing is sent, yet downstream flow
 /// trusted the fake success (and the remote-chat gate later blocked honestly).
+@MainActor
 @Suite("Round 30 — send submission verification logic")
 struct SendSubmissionPolicyTests {
 

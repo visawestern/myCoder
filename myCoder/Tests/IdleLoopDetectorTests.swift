@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Idle-loop detector C3 (eval harness-tax)")
 struct IdleLoopDetectorTests {
 

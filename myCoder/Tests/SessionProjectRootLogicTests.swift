@@ -8,6 +8,7 @@ import Foundation
 /// the model answered about the wrong project (its AGENTS.md, files, plan).
 /// The session owns its project (`ChatSession.directory`); the workspace is
 /// only a fallback for chats without one (e.g. brand-new sessions).
+@MainActor
 @Suite("Корень проекта для сбора контекста")
 struct SessionProjectRootLogicTests {
 

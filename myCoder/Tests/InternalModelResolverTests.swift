@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Internal models — server/local routing and catalog")
 struct InternalModelResolverTests {
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import myCoder
 
+@MainActor
 @Suite("Project spec store")
 struct ProjectSpecStoreTests {
     private let now: Int64 = 1_700_000_000

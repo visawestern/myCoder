@@ -7,6 +7,7 @@ import Foundation
 /// `.compiledContext` part / `contextSummary`), never from transient view
 /// state: a re-created row, a session reload or sheet timing then cannot make
 /// a real pack disappear.
+@MainActor
 @Suite("Окно «Контекст» читает данные из сообщения")
 struct MessageContextSheetLogicTests {
 
