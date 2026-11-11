@@ -28,6 +28,57 @@ enum RepoRoot {
         try String(contentsOf: url.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
+    /// Root folder of the production sources.
+    static var sourcesURL: URL { url.appendingPathComponent("myCoder/Sources") }
+
+    /// Every Swift source file under `relativeDirectory` (recursive), sorted by
+    /// path. Source-inspection tests use this instead of walking `#filePath`
+    /// themselves, so a folder rename only changes this helper.
+    static func allSwiftSourceTexts(
+        in relativeDirectory: String = "myCoder/Sources"
+    ) throws -> [(path: String, contents: String)] {
+        let root = url.appendingPathComponent(relativeDirectory)
+        guard let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: nil
+        ) else { return [] }
+        var result: [(String, String)] = []
+        for case let file as URL in enumerator where file.pathExtension == "swift" {
+            result.append((file.path, try String(contentsOf: file, encoding: .utf8)))
+        }
+        return result.sorted { $0.0 < $1.0 }
+    }
+
+    /// Swift sources of one flat directory, keyed by file URL.
+    static func swiftSourceTexts(in relativeDirectory: String) throws -> [URL: String] {
+        let dir = url.appendingPathComponent(relativeDirectory)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasSuffix(".swift") }
+            .sorted()
+        var result: [URL: String] = [:]
+        for name in names {
+            let file = dir.appendingPathComponent(name)
+            result[file] = try String(contentsOf: file, encoding: .utf8)
+        }
+        return result
+    }
+
+    /// Concatenated Swift sources of one flat directory.
+    static func allSourceText(in relativeDirectory: String) throws -> String {
+        let sources = try swiftSourceTexts(in: relativeDirectory)
+        return sources.keys.sorted { $0.path < $1.path }
+            .map { sources[$0] ?? "" }
+            .joined(separator: "\n")
+    }
+
+    /// Root `SettingsView.swift` plus every file in the `Settings/` folder.
+    static var settingsSourceText: String {
+        get throws {
+            let root = try sourceText("myCoder/Sources/Views/SettingsView.swift")
+            let folder = try allSourceText(in: "myCoder/Sources/Views/Settings")
+            return root + "\n" + folder
+        }
+    }
+
     /// The whole chat panel source: the main file plus every focused
     /// `ChatPanelView+…` extension module (audit B3 split). Source-inspection
     /// tests assert on the panel as a unit, so moving code into an extension

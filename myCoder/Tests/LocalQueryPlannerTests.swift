@@ -324,12 +324,8 @@ struct LocalQueryPlannerTests {
         #expect(appSource.contains("LocalPlannerSettings.isEnabled"))
         #expect(appSource.contains("isLocalQueryPlannerEnabled"))
 
-        let settingsSource = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Sources/Views/Settings/IndexingSettingsView.swift"),
-            encoding: .utf8
+        let settingsSource = try RepoRoot.sourceText(
+            "myCoder/Sources/Views/Settings/IndexingSettingsView.swift"
         )
         #expect(settingsSource.contains("locLocalQueryPlanner"))
 

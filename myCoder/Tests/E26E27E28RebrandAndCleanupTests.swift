@@ -17,20 +17,7 @@ struct E26E27E28RebrandAndCleanupTests {
     /// so a rebrand check survives the Round 27 split (code moved out of the
     /// monolithic file into the Settings/ folder).
     private static func settingsSources() throws -> String {
-        let root = try RepoRoot.sourceText("myCoder/Sources/Views/SettingsView.swift")
-        let folder = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/Settings")
-        let fm = FileManager.default
-        guard let urls = fm.enumerator(at: folder, includingPropertiesForKeys: nil)?.allObjects as? [URL] else {
-            return root
-        }
-        var all = root
-        for url in urls where url.pathExtension == "swift" {
-            all += "\n" + ((try? String(contentsOf: url, encoding: .utf8)) ?? "")
-        }
-        return all
+        try RepoRoot.settingsSourceText
     }
 
     @Test("no 'MiMo Agent' command-file copy remains in Settings")

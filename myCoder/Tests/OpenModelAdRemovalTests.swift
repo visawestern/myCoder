@@ -6,24 +6,8 @@ import Foundation
 @Suite("OpenModel Advertising Removal")
 struct OpenModelAdRemovalTests {
 
-    private static var sourcesRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources")
-    }
-
     private static func allSwiftSources() throws -> [(path: String, contents: String)] {
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(at: sourcesRoot, includingPropertiesForKeys: nil) else {
-            return []
-        }
-        var result: [(String, String)] = []
-        for case let url as URL in enumerator where url.pathExtension == "swift" {
-            let contents = try String(contentsOf: url, encoding: .utf8)
-            result.append((url.path, contents))
-        }
-        return result
+        try RepoRoot.allSwiftSourceTexts()
     }
 
     @Test("No OpenModel promo strings remain anywhere in Sources")

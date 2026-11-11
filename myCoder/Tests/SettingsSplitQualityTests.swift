@@ -12,23 +12,8 @@ import Foundation
 @Suite("Settings Split Quality")
 struct SettingsSplitQualityTests {
 
-    private static let settingsFolder: URL = {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/Settings")
-    }()
-
     private static func settingsSwiftSources() throws -> [URL: String] {
-        let fm = FileManager.default
-        guard let urls = fm.enumerator(at: settingsFolder, includingPropertiesForKeys: nil)?.allObjects as? [URL] else {
-            return [:]
-        }
-        var out: [URL: String] = [:]
-        for url in urls where url.pathExtension == "swift" {
-            out[url] = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        }
-        return out
+        try RepoRoot.swiftSourceTexts(in: "myCoder/Sources/Views/Settings")
     }
 
     @Test("the shared emptyState helper is defined exactly once in the root SettingsView.swift, never duplicated in the Settings folder")

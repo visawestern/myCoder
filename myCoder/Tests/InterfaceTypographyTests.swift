@@ -29,11 +29,7 @@ struct InterfaceTypographyTests {
 
     @Test("ContentView does not use root scaleEffect for zoom")
     func contentViewSourceHasNoRootScaleEffect() throws {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Views/ContentView.swift")
-        let source = try String(contentsOf: url, encoding: .utf8)
+        let source = try RepoRoot.sourceText("myCoder/Sources/Views/ContentView.swift")
         #expect(!source.contains(".scaleEffect(appState.settings.zoom"))
     }
 }
