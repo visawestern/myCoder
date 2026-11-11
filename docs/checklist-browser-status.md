@@ -7,7 +7,7 @@
 - ✅ Клиент-мост `AntiBrowserAutomationBridge` — исключительно REST: действия `/act/*` (человеко-подобный ввод), страничные ручки `/tabs`, `/page/*`, `/cookies/*`.
 - ✅ На клиенте нет CDP/WebSocket: проверка готовности через `GET /version` (не CDP `/json/version`).
 - ✅ DevTools-протокол используется только внутри процесса браузера (`InternalDevToolsClient`) как реализация чтений/скриншотов — наружу не выставляется.
-- ✅ WKWebView функционально удалён: нет `WKWebViewBrowserBridge`, `WebComposerInputPolicy`, `PermissiveWebNavigationPolicy`, `WebBrowserHostWindow`, пула WK в `AppState`. В Sources остались только нейтральные `#if canImport(WebKit)` обёртки (12 шт.) и упоминания в комментариях.
+- ✅ WebKit удалён полностью (11.11.2026): нет ни `WKWebView`, ни `import WebKit`, ни `#if canImport(WebKit)` в `myCoder/Sources`. Единственный движок — AntiBrowser; страница показывается кастом (screencast).
 
 ## Страничные REST-ручки браузера (PageApi)
 

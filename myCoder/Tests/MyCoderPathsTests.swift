@@ -67,7 +67,6 @@ struct MyCoderPathsTests {
         #expect(MyCoderPaths.mcpConfigURL(homeDirectory: home).path == "/tmp/fake-home/.mycoder/mcp.json")
         #expect(MyCoderPaths.commandsDir(homeDirectory: home).path == "/tmp/fake-home/.mycoder/commands")
         #expect(MyCoderPaths.pluginsDir(homeDirectory: home).path == "/tmp/fake-home/.mycoder/plugins")
-        #expect(MyCoderPaths.webSessionsDir(providerId: "kimi", homeDirectory: home).path == "/tmp/fake-home/.mycoder/web-sessions/kimi")
         #expect(MyCoderPaths.logFile(name: "api-server.log", homeDirectory: home).path == "/tmp/fake-home/.mycoder/logs/api-server.log")
         #expect(MyCoderPaths.skillsRegistryRelativePath == ".mycoder/skills/registry.json")
         #expect(MyCoderPaths.mcpRegistryRelativePath == ".mycoder/mcp/registry.json")

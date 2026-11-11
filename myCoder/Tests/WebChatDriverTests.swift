@@ -381,53 +381,6 @@ struct WebChatDriverTests {
 }
 
 @MainActor
-@Suite("Web session manager — cookie persistence (plan Раздел 12 Блок 3)")
-struct WebSessionManagerTests {
-
-    private func makeTempHome() throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("mimo-websess-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }
-
-    @Test func persistAndRestoreRoundTrip() throws {
-        let home = try makeTempHome()
-        let store = WebSessionStore(
-            cookies: [BrowserCookie(name: "sid", value: "abc", domain: "kimi.com", expiresEpoch: 9_999_999_999)],
-            localStorage: ["theme": "dark"], savedAt: Date()
-        )
-        try WebSessionManager.persist(store, providerId: "p1", homeDirectory: home)
-        let restored = WebSessionManager.restore(providerId: "p1", homeDirectory: home)
-        #expect(restored?.cookies.first?.value == "abc")
-        #expect(restored?.localStorage["theme"] == "dark")
-    }
-
-    @Test func restoreReturnsNilWhenAbsent() throws {
-        let home = try makeTempHome()
-        #expect(WebSessionManager.restore(providerId: "none", homeDirectory: home) == nil)
-    }
-
-    @Test func clearRemovesStore() throws {
-        let home = try makeTempHome()
-        let store = WebSessionStore(cookies: [], localStorage: [:], savedAt: Date())
-        try WebSessionManager.persist(store, providerId: "p2", homeDirectory: home)
-        try WebSessionManager.clear(providerId: "p2", homeDirectory: home)
-        #expect(WebSessionManager.restore(providerId: "p2", homeDirectory: home) == nil)
-    }
-
-    @Test func expiredWhenAllCookiesPast() {
-        let store = WebSessionStore(
-            cookies: [BrowserCookie(name: "s", value: "v", domain: "d", expiresEpoch: 100)],
-            localStorage: [:], savedAt: Date(timeIntervalSince1970: 50)
-        )
-        #expect(WebSessionManager.isExpired(store, now: Date(timeIntervalSince1970: 200)))
-        #expect(!WebSessionManager.isExpired(store, now: Date(timeIntervalSince1970: 50)))
-    }
-}
-
-
-@MainActor
 @Suite("WEB-CHAT-12: approval interruption in web agent loop")
 struct WebChatApprovalInterruptionTests {
     final class ApprovalBridge: BrowserAutomationBridge, @unchecked Sendable {

@@ -5,17 +5,16 @@ extension ChatPanelView {
     /// Builds `[ACPRequestMessage]` from the user's text, file references and
     /// images. Uses ACPMessageBuilder so real image bytes (data URLs) are sent
     /// instead of a "[N image(s) attached]" placeholder (plan Раздел 9 Блок 2).
-    /// Run one turn against a web-chat provider through an in-app WKWebView
-    /// bridge + WebChatDriver, presenting events (streaming/tool/captcha/final)
+    /// Run one turn against a web provider through the AntiBrowser cast + WebChatDriver, presenting events (streaming/tool/captcha/final)
     /// into the chat so the message actually reaches the web model and shows a
-    /// real response (plan Раздел 12). Restores the captured session cookies.
+    /// real response (plan Раздел 12). The login lives in the persistent
+    /// AntiBrowser profile, so no cookie files are restored here.
     @MainActor
     func runWebChatTurn(config: WebProviderConfig,
                                 text: String,
                                 assistantID: String,
                                 chatID: String,
                                 preparedSystemPrompt: String? = nil) async {
-        #if canImport(WebKit)
         // Reconcile selections created before the unified web-selection contract
         // existed. The browser must use the same model and effort the composer
         // shows, even for an old config saved by a previous build.
@@ -67,21 +66,8 @@ extension ChatPanelView {
             stopButton: catalogEntry?.stopButton ?? ".send-button-container.stop, button[aria-label*='top'], button[data-testid='stop-button'], button[class*='stop']"
         )
 
-        // Restore cookies captured at login so the session is authenticated.
-        // Use the chatID (session ID) for cookie restoration to match the webview session.
-        let sessionID = chatID
-        var restorationPayload: WebSessionRestorationPayload?
-        if let store = WebSessionManager.restore(providerId: effectiveConfig.id,
-                                                 homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                 sessionID: sessionID) {
-            do {
-                let payload = WebSessionRestorationLogic.payload(from: store)
-                try await bridge.setCookies(payload.cookies)
-                restorationPayload = payload
-            } catch {
-                appendWebStatus(to: assistantID, line: "Failed to restore the saved session: \(error.localizedDescription)")
-            }
-        }
+        // AntiBrowser keeps the login in its persistent profile; the tab is
+        // already authenticated from the login screen. No cookie files exist.
         do {
             // Audit 2026-09-08/09: host-only matching kept turns running on
             // the wrong PRODUCT surface. Require the surface matching the
@@ -105,18 +91,8 @@ extension ChatPanelView {
                     selectedModel: effectiveConfig.selectedModel
                 ))
             }
-            if let payload = restorationPayload, !payload.localStorage.isEmpty {
-                do {
-                    try await bridge.setLocalStorage(payload.localStorage)
-                    let reloadURL = (try? await bridge.currentURL()) ?? effectiveConfig.chatURL
-                    try await bridge.navigate(to: reloadURL)
-                } catch {
-                    appendWebStatus(to: assistantID, line: "Saved cookies restored, but localStorage could not be restored: \(error.localizedDescription)")
-                }
-            }
-
             // Wait for chat interface to be ready (input element present).
-            // Some sites need extra time to hydrate the chat UI after auth restore.
+            // Some sites need extra time to hydrate the chat UI after login.
             var ready = false
             for _ in 0..<30 {
                 if (try? await bridge.exists(selector: selectors.input)) ?? false {
@@ -244,8 +220,8 @@ extension ChatPanelView {
                                         effort: appState.selectedWebEffort,
                                         remoteChatID: remoteMapping?.remoteChatID,
                                         detail: remoteMapping == nil
-                                            ? "WKWebView background send; remote chat id will be bound after the first message lands (SPA vendor)"
-                                            : "WKWebView background send bound to verified remote chat")
+                                            ? "AntiBrowser background send; remote chat id will be bound after the first message lands (SPA vendor)"
+                                            : "AntiBrowser background send bound to verified remote chat")
 
         // Send the tool-protocol preamble only on the first mapped conversation;
         // later turns continue exactly that remote conversation.
@@ -508,11 +484,6 @@ extension ChatPanelView {
             message.parts = routeParts
         }
         finishWebTurn()
-        #else
-        messageStore.update(id: assistantID) { m in
-            m.content = "Web providers require WebKit (macOS)."; m.isFinished = true; m.isStreaming = false
-        }
-        #endif
     }
 
 }

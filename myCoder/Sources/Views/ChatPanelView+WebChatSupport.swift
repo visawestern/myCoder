@@ -220,10 +220,8 @@ extension ChatPanelView {
         appState.isStreaming = false
         streamingText = ""
         currentAssistantMessageID = nil
-        #if canImport(WebKit)
         activeWebProviderID = nil
         activeWebChatID = nil
         captchaSolverContext = nil
-        #endif
     }
 }

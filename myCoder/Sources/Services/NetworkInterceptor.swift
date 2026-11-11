@@ -52,7 +52,8 @@ struct ChatAPIEndpoint: Codable, Equatable {
     let authToken: String?
 }
 
-/// Network request interceptor that captures XHR/fetch requests from WKWebView.
+/// Network request interceptor that captures XHR/fetch requests from the
+/// AntiBrowser page.
 ///
 /// Injects JavaScript to override `XMLHttpRequest.prototype.open/send` and
 /// `window.fetch`, capturing all network traffic for analysis.

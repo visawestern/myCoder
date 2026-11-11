@@ -67,17 +67,8 @@ extension AppState {
     func refreshWebEffort(for config: WebProviderConfig,
                           projectID: String? = nil,
                           chatID: String? = nil) async -> String {
-        #if canImport(WebKit)
         guard let effortSelector = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)?.effortDropdown else {
             return L.t(AppLocalizationKey.locWebEffortNoSelector)
-        }
-        let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-        guard let store = WebSessionManager.restore(providerId: config.id,
-                                                    homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                    sessionID: sessionID),
-              !store.cookies.isEmpty,
-              !WebSessionManager.isExpired(store) else {
-            return L.t(AppLocalizationKey.locWebEffortLoginFirst)
         }
 
         let selectors = WebVendorSelectors(
@@ -96,19 +87,8 @@ extension AppState {
         } catch {
             return error.localizedDescription
         }
-        var localStorageWarning: String?
         do {
-            let payload = WebSessionRestorationLogic.payload(from: store)
-            try await bridge.setCookies(payload.cookies)
             try await bridge.navigate(to: config.chatURL)
-            do {
-                try await bridge.setLocalStorage(payload.localStorage)
-                if !payload.localStorage.isEmpty {
-                    try await bridge.navigate(to: config.chatURL)
-                }
-            } catch {
-                localStorageWarning = " (localStorage restore unavailable: \(error.localizedDescription))"
-            }
             var inputFound = false
             for _ in 0..<30 {
                 if try await bridge.exists(selector: selectors.input) {
@@ -135,13 +115,10 @@ extension AppState {
             let count = efforts.count
             let plural = count == 1 ? "" : "s"
             let message = String(format: L.t(AppLocalizationKey.locWebLoadedEffort), count, plural, config.displayName)
-            return message + (localStorageWarning ?? "")
+            return message
         } catch {
             return String(format: L.t(AppLocalizationKey.locWebEffortRefreshFailed), error.localizedDescription)
         }
-        #else
-        return L.t(AppLocalizationKey.locWebRequiresWebKit)
-        #endif
     }
 
     /// Refresh the complete model capability snapshot. `refreshWebModels` already

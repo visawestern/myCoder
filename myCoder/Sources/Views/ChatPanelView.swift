@@ -122,7 +122,6 @@ struct ChatPanelView: View {
     @State var modelSwitchCompactionGeneration = 0
     /// Model that was selected before the last switch: the notice names both.
     @State var lastSelectedModel = ""
-    #if canImport(WebKit)
     @State var activeWebProviderID: String?
     @State var activeWebChatID: String?
     @State var webCatalogRefreshKeys: Set<String> = []
@@ -133,19 +132,17 @@ struct ChatPanelView: View {
     /// Minimap vs half-chat panel (user directive 2026-09-09: minimap by
     /// default, expand on tap). Persisted so the choice survives restarts.
     @AppStorage("mycoder.webBrowserPanelExpanded") var webBrowserPanelExpanded = false
-    #endif
     let sseClient = SSEClient()
     let db = DatabaseManager.shared
     
     var body: some View {
         VStack(spacing: 0) {
-            #if canImport(WebKit)
             // User directive 2026-09-09: for a web provider the live vendor
             // page is VISIBLE in the chat — a small minimap thumbnail by
             // default (bottom-trailing overlay, expands on tap), or the
-            // half-chat panel when expanded. Both re-parent the same pooled
-            // WKWebView, so the page — login, conversation, in-flight
-            // stream — survives across requests; switching chats moves the
+            // half-chat panel when expanded. Both show the AntiBrowser cast
+            // of the provider's tab, so the page — login, conversation,
+            // in-flight stream — survives across requests; switching chats moves the
             // panel to that chat's webview ("another tab of the same site").
             // Non-web providers leave the panel as is.
             if webBrowserPanelExpanded,
@@ -166,7 +163,6 @@ struct ChatPanelView: View {
                         .frame(width: size.width, height: size.height)
                 }
             }
-            #endif
 
             if ChatPanelLayoutLogic.shouldUseCenteredInput(messageCount: messageStore.messages.count) {
                 centeredInputState
@@ -385,7 +381,6 @@ struct ChatPanelView: View {
             }
         }
         .background(Color.mimo.background)
-        #if canImport(WebKit)
         .overlay(alignment: .bottomTrailing) {
             // Minimap mode: small live thumbnail floating at the chat's
             // bottom-trailing corner (user directive 2026-09-09). Tapping
@@ -416,7 +411,6 @@ struct ChatPanelView: View {
         .sheet(item: $captchaSolverContext) { context in
             WebCaptchaSolverView(context: context)
         }
-        #endif
         .onChange(of: appState.selectedSession?.id) { newSessionID in
             handleSelectedSessionChange(newSessionID)
         }

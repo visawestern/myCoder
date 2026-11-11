@@ -11,9 +11,9 @@ import AppKit
 /// - Expanded: the half-chat panel with the full page, resizable, with
 ///   buttons to collapse back to the minimap or hide entirely.
 ///
-/// Both modes re-parent the SAME pooled WKWebView — collapsing/hiding parks
-/// it in a hidden host window WITHOUT destroying it, so login, conversation
-/// and in-flight streams survive across requests and chats.
+/// Both modes show the same AntiBrowser tab cast — collapsing/hiding only
+/// stops showing the picture, it does NOT close the tab, so login,
+/// conversation and in-flight streams survive across requests and chats.
 struct WebProviderBrowserPanel<Content: View>: View {
     let config: WebBrowserPanelConfig
     let isExpanded: Bool

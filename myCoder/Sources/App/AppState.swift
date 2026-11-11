@@ -412,18 +412,17 @@ class AppState: ObservableObject {
     }
     
     /// Current session goal, shown in the TopBar (plan Раздел 5 Блок 1 п.9).
-    #if canImport(WebKit)
 
     @Published private(set) var webBrowserActionJournal: [WebBrowserActionRecord] = WebBrowserActionJournal.load()
 
     /// User directive 2026-09-09: the web provider's live browser page must be
     /// VISIBLE inside the chat as a mini-preview while a web provider is
-    /// selected — no hidden offscreen window. The panel re-parents the SAME
-    /// pooled WKWebView (never recreates it) so login state, the conversation
-    /// and in-flight streams survive across requests; switching chats moves
-    /// the panel by updating its key, exactly like opening another tab of the
-    /// same site. Non-web providers leave the panel untouched (it keeps
-    /// showing the last web provider's page).
+    /// selected — no hidden offscreen window. The panel shows the AntiBrowser
+    /// cast of the provider's tab, which keeps its login, conversation and
+    /// in-flight stream across requests; switching chats points the panel at
+    /// that chat's tab, exactly like opening another tab of the same site.
+    /// Non-web providers leave the panel untouched (it keeps showing the last
+    /// web provider's page).
     @Published var webBrowserPanelConfig: WebBrowserPanelConfig?
 
     @MainActor
@@ -448,7 +447,6 @@ class AppState: ObservableObject {
         )
         webBrowserActionJournal = WebBrowserActionJournal.append(record, defaults: defaults)
     }
-    #endif
 
     /// Web providers whose chat session has already been seeded with the tool
     /// preamble this app run — so we send the preamble only on the first turn

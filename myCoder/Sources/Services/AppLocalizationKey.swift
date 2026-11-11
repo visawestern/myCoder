@@ -121,7 +121,8 @@ enum AppLocalizationKey: String, CaseIterable {
     case locLeaveBlankDirect, locAll, locSelectProviderToBrowse, locStartLocalAgent
     case locYes, locNo, locSupported, locNotSupported
     case locPer1KTokens, locToolResultFixOn, locToolResultFixOff, locConnectionSuccess
-    case locWebLoginTitle, locWebDetectModels, locWebDetectModelsHelp, locWebCaptureSession
+    case locWebLoginTitle, locWebDetectModels, locWebDetectModelsHelp
+    case locWebConfirmLogin, locWebConfirmLoginHelp
     case locWebDetecting, locWebModelsFound, locWebNoSelector, locShowInFinder
     case locStop, locModelPlaceholder, locVariantPlaceholder, locManageModels
     case locManageProviders, locHost, locPort, locNoVariants
@@ -141,10 +142,10 @@ enum AppLocalizationKey: String, CaseIterable {
     case locAccessFull, locAccessAskBeforeDesc, locAccessEditAutoDesc, locAccessFullDesc
     case locModeBuild, locModePlan, locModeCompose, locToolCallDelay
     case locKeepalive, locTransport, locGitHubCliNotInstalled, locAddModel
-    case locWebNoSelectorYet, locWebLoginFirst, locWebInputNotFound, locWebModelListFailed
-    case locWebLoadedModels, locWebRefreshFailed, locWebEffortNoSelector, locWebEffortLoginFirst
+    case locWebNoSelectorYet, locWebInputNotFound, locWebModelListFailed
+    case locWebLoadedModels, locWebRefreshFailed, locWebEffortNoSelector
     case locWebEffortInputNotFound, locWebEffortReadFailed, locWebLoadedEffort, locWebEffortRefreshFailed
-    case locWebRequiresWebKit, locCaptchaSolveNote, locWebSessionExpired, locWebSessionTooLong
+    case locCaptchaSolveNote, locWebSessionExpired, locWebSessionTooLong
     case locWebNewSessionStarted, locWebModelNote, locWebEffortNote, locWebPromptSplit
     case locWebToolCall, locWebToolResult, locWebIterationLimit, locWebEmptyResponse
     case locWebProviderError, locWebModelInjectionFailed, locWebEffortNotFound, locWebModelNotFound
@@ -193,13 +194,13 @@ enum AppLocalizationKey: String, CaseIterable {
     case locParamContextLength, locParamPlanMode, locSelectProviderToBrowseModels, locStartLocalAgentOrCheck
     case locArchive, locRestore, locNoUserCommands, locNoPluginsInstalled
     case locNoSkillsInstalledYet, locNoMCPServersConfigured, locSearchLanguage, locOtherAnswer
-    case locCaptchaVerification, locCaptchaInstruction, locChooseSavedWebLogin, locChangeLoginSession
+    case locCaptchaVerification, locCaptchaInstruction, locChangeLoginSession
     case locDetectedCount, locDetectionFailed, locDetectModels, locDetectModelsHelp
     case locRefreshEffortHelp, locRemoveWebProvider, locRemoveWebProviderConfirm, locSavedSessionDeleted
     case locDetectedModelsCount, locDetectedModels, locHideDetectedModels, locShowDetectedModels
     case locRemoveUnavailableDetection, locEffort, locNoEffort, locParams
     case locEffortNotDetected, locSelectorAvailable, locInAppBrowser, locBuiltInBrowserDetection
-    case locBrowserDetectionHelp, locFastDOMDetectionHelp, locSaveSessionModels, locDetectModelsFirst
+    case locBrowserDetectionHelp, locFastDOMDetectionHelp
     case locNoSelectorFound, locNoModelsFound, locNoReadablePageText, locAIDetectionFailed
     case locNoModelNamesReturned, locAICandidateVerification, locProviderMetadata, locNoModelMetadata
     case locVisionInput, locImageGeneration, locEffortLevels, locManualMetadata
@@ -231,7 +232,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case locPreviousModel, locAnotherFreeModel, locProviderError, locFreeModelRateLimited
     case locServerDisconnected, locServerConnected, locSessionBusy, locNewBranchName
     case locFileAttached, locFilesAttached, locPhotoAttached, locPhotosAttached
-    case locCookiesCount, locWebModelsFoundCount, locApiEndpointURL, locInvalidEndpoint
+    case locWebModelsFoundCount, locApiEndpointURL, locInvalidEndpoint
     case locNoZenKeyDescription, locOpenCodeZen, locMessagesCount, locCustomProviders
     case locBuiltInProviders, locAddOrSelectOpenCodeZen, locOpenCodeZenApiKeyOptional, locSecretKeyPlaceholder
     case locFreeModelSwitched, locTaskComplete, locResponseStopped, locLocalAgentConnectionLost

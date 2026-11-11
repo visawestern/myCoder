@@ -58,8 +58,8 @@ private struct DirectWebAPIClientLogger {
 
 /// Direct API client for sending messages to web chat providers.
 ///
-/// Sends HTTP requests directly using URLSession with cookies from WKWebView,
-/// bypassing DOM automation entirely.
+/// Sends HTTP requests directly using URLSession with cookies from the
+/// AntiBrowser tab, bypassing DOM automation entirely.
 ///
 /// ## Usage
 /// ```swift
@@ -75,7 +75,7 @@ private struct DirectWebAPIClientLogger {
 /// ```
 ///
 /// ## Flow
-/// 1. Extract cookies from WKWebView
+/// 1. Extract cookies from the AntiBrowser tab
 /// 2. Build URLRequest from endpoint + cookies + message
 /// 3. Send via URLSession
 /// 4. Handle response (JSON, SSE, etc.)
@@ -277,7 +277,7 @@ enum DirectWebAPIClient {
 
     /// Convert BrowserCookie array to HTTPCookie array.
     ///
-    /// - Parameter browserCookies: Browser cookies from WKWebView
+    /// - Parameter browserCookies: Browser cookies from the AntiBrowser tab
     /// - Returns: HTTPCookie array for URLSession
     public static func convertCookies(_ browserCookies: [BrowserCookie]) -> [HTTPCookie] {
         browserCookies.compactMap { cookie in

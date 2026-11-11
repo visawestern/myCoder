@@ -88,11 +88,6 @@ enum MyCoderPaths {
         appDir(homeDirectory: homeDirectory).appendingPathComponent("plugins", isDirectory: true)
     }
 
-    static func webSessionsDir(providerId: String, homeDirectory: URL) -> URL {
-        appDir(homeDirectory: homeDirectory)
-            .appendingPathComponent("web-sessions/\(providerId)", isDirectory: true)
-    }
-
     static func logFile(name: String, homeDirectory: URL) -> URL {
         logsDir(homeDirectory: homeDirectory).appendingPathComponent(name)
     }

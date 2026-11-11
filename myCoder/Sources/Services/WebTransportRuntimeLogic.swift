@@ -1,9 +1,9 @@
 import Foundation
 
 /// Единственный производственный транспорт myCoder — AntiBrowser
-/// (CDP 9222 + REST 5390). Поле `WebTransport` в конфиге осталось от старой
-/// конфигурации WKWebView; фактический движок всегда один, поэтому метки
-/// честно отражают AntiBrowser.
+/// (CDP 9222 + REST 5390). Поле `WebTransport` в конфиге осталось от прежней
+/// конфигурации со встроенным браузером; фактический движок всегда один,
+/// поэтому метки честно отражают AntiBrowser.
 enum WebTransportRuntimeLogic {
     static func effectiveTransport(for requested: WebTransport) -> WebTransport {
         .cdpCookies

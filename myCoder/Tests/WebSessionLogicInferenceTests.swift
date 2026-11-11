@@ -35,25 +35,4 @@ struct WebSessionLogicInferenceTests {
         #expect(WebSessionLogic.inferState(currentURL: "https://x/chat", hasChatInput: false, pageText: "") == .loggedOut)
         #expect(WebSessionLogic.inferState(currentURL: "https://x/chat", hasChatInput: true, pageText: "") == .connected)
     }
-
-    @Test("Payload восстановления переносит cookies и localStorage")
-    func restorationPayloadCopiesStore() {
-        let store = WebSessionStore(
-            cookies: [BrowserCookie(name: "a", value: "b", domain: "x", path: "/")],
-            localStorage: ["k": "v"],
-            savedAt: Date()
-        )
-        let payload = WebSessionRestorationLogic.payload(from: store)
-        #expect(payload.cookies.count == 1)
-        #expect(payload.localStorage == ["k": "v"])
-    }
-
-    @Test("Шаги восстановления: с localStorage добавляются setLocalStorage + reload")
-    func restorationStepsIncludeLocalStorage() {
-        let without = WebSessionStore(cookies: [], localStorage: [:], savedAt: Date())
-        #expect(WebSessionRestorationLogic.steps(from: without) == [.setCookies, .navigateToTarget])
-
-        let with = WebSessionStore(cookies: [], localStorage: ["k": "v"], savedAt: Date())
-        #expect(WebSessionRestorationLogic.steps(from: with) == [.setCookies, .navigateToTarget, .setLocalStorage, .reloadTarget])
-    }
 }

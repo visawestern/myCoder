@@ -326,14 +326,12 @@ extension ChatPanelView {
             // streaming into this chat.
             messageStore.currentSessionID = sessionID
         }
-        #if canImport(WebKit)
         // User directive 2026-09-09: moving to another chat/project surfaces
         // THAT chat's pooled webview ("another tab of the same site") when one
         // exists; otherwise the panel keeps showing whatever it showed.
         let projectID = appState.selectedWorkspace?.id
             ?? appState.selectedWorkspace?.path ?? "global"
         appState.showPanelForChatIfPooled(projectID: projectID, chatID: sessionID)
-        #endif
     }
 
     /// Prewarming only pays off when it uses exactly the render profile of the

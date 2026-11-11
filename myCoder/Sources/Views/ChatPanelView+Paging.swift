@@ -32,7 +32,6 @@ extension ChatPanelView {
             messageQueue.resume()
         }
 
-        #if canImport(WebKit)
         if let providerID = activeWebProviderID {
             let projectID = appState.selectedWorkspace?.id
                 ?? appState.selectedWorkspace?.path
@@ -49,7 +48,6 @@ extension ChatPanelView {
                 )
             }
         }
-        #endif
 
         if let sessionID = turnSessionID {
             Task {

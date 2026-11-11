@@ -129,8 +129,6 @@ extension ModelSettingsProviderColumns {
             var configs = WebProviderStore.load()
             configs.removeAll { $0.id == web.id }
             WebProviderStore.save(configs)
-            try? WebSessionManager.clear(providerId: web.id,
-                                         homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
             if appState.selectedProviderID == option.id { appState.selectProvider("") }
         }
     }

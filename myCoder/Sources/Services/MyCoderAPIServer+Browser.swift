@@ -125,6 +125,9 @@ extension MyCoderAPIServer {
         return jsonResponse(result)
     }
 
+    /// POST /api/save-session — живая проверка вкладки провайдера. Раньше здесь
+    /// копировались cookie в файлы; теперь сохраняется только отметка
+    /// подтверждённого входа, а сессию хранит постоянный профиль AntiBrowser.
     func handleSaveSession(body: String) async -> String {
         guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
@@ -142,31 +145,23 @@ extension MyCoderAPIServer {
                                                    projectID: "global",
                                                    chatID: "provider-default")
         let bridge = await AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-        var cookies: [BrowserCookie] = []
         do {
-            cookies = try await bridge.cookies()
-        } catch {
-            return jsonResponse(["error": "failed to get cookies: \(error.localizedDescription)"])
-        }
-        guard !cookies.isEmpty else {
-            return jsonResponse(["error": "no cookies found in browser"])
-        }
-        let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-        let store = WebSessionStore(
-            cookies: cookies,
-            localStorage: [:],
-            savedAt: Date()
-        )
-        do {
-            try WebSessionManager.persist(
-                store,
-                providerId: config.id,
-                homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                sessionID: sessionID
+            let cookies = try await bridge.cookies()
+            let pageText = (try? await bridge.pageText()) ?? ""
+            let verdict = WebLoginVerificationLogic.verdict(
+                vendor: config.vendor,
+                cookies: cookies,
+                pageText: pageText
             )
-            return jsonResponse(["status": "saved", "cookieCount": cookies.count])
+            guard verdict == .confirmed else {
+                return jsonResponse(["error": WebLoginVerificationLogic.message(for: verdict)])
+            }
+            var updated = config
+            updated.loginConfirmedAt = Date()
+            WebProviderStore.save(WebProviderStore.upsert(updated, in: configs))
+            return jsonResponse(["status": "confirmed", "cookieCount": cookies.count])
         } catch {
-            return jsonResponse(["error": "failed to save session: \(error.localizedDescription)"])
+            return jsonResponse(["error": "failed to verify login: \(error.localizedDescription)"])
         }
     }
 
@@ -205,20 +200,11 @@ extension MyCoderAPIServer {
                 stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
             )
             
-            // Restore cookies and navigate
-            let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-            if let store = WebSessionManager.restore(providerId: config.id,
-                                                     homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                     sessionID: sessionID),
-               !store.cookies.isEmpty,
-               !WebSessionManager.isExpired(store) {
-                let payload = WebSessionRestorationLogic.payload(from: store)
-                try await bridge.setCookies(payload.cookies)
+            // The login lives in the persistent AntiBrowser profile; make sure
+            // the tab shows the provider's page instead of restoring cookies.
+            let currentURL = (try? await bridge.currentURL()) ?? ""
+            if currentURL.isEmpty || currentURL == "about:blank" {
                 try await bridge.navigate(to: config.chatURL)
-                if !payload.localStorage.isEmpty {
-                    try await bridge.setLocalStorage(payload.localStorage)
-                    try await bridge.navigate(to: config.chatURL)
-                }
             }
             
             // Wait for input to be ready

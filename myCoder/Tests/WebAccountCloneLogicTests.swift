@@ -23,8 +23,7 @@ struct WebAccountCloneLogicTests {
         var source = WebProviderConfig(vendor: .qwen)
         source.displayName = "Qwen"
         source.selectedModel = "Qwen3.8-Max"
-        source.activeSessionID = "sess-old"
-        source.activeSessionName = "old login"
+        source.loginConfirmedAt = Date(timeIntervalSince1970: 100)
         source.discoveredModels = [WebProviderModel(name: "Qwen3.7-Plus")]
 
         let outcome = WebAccountCloneLogic.next(for: .qwen, in: [source])
@@ -36,8 +35,8 @@ struct WebAccountCloneLogicTests {
         #expect(clone.transport == source.transport)
         #expect(clone.displayName == "Qwen (Account 2)", "got \(clone.displayName)")
         #expect(clone.selectedModel.isEmpty, "new account starts unbound")
-        #expect(clone.activeSessionID == nil && clone.activeSessionName == nil,
-                "session/cookies must NOT be copied to the new account")
+        #expect(clone.loginConfirmedAt == nil,
+                "the confirmed login must NOT be copied to the new account")
     }
 
     @Test("n-th clone numbering follows existing accounts")

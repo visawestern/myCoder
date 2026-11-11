@@ -218,10 +218,7 @@ extension AppActionRouter {
                 "id": "web:\(web.id)",
                 "name": web.displayName,
                 "models": web.allModels,
-                "isConnected": WebProviderConnectivity.isConnected(
-                    web,
-                    homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-                )
+                "isConnected": WebProviderConnectivity.isConnected(web)
             ])
         }
         return rows

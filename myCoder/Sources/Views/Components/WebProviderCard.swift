@@ -8,11 +8,9 @@ struct WebProviderCard: View {
     let onSave: () -> Void
     let onLogin: () -> Void
     let onChangeLogin: () -> Void
-    let onSelectSession: (String) -> Void
     let onRemove: () -> Void
     let onRefreshModels: () async -> String?
     let onRefreshEffort: () async -> String?
-    let homeDirectory: URL
 
     @State private var isRefreshing = false
     @State private var lastRefreshError: String?
@@ -20,10 +18,9 @@ struct WebProviderCard: View {
     @State private var showDiscoveredModels = false
     @State private var systemPromptHeight: CGFloat = 24
     @State private var showRemoveConfirmation = false
-    @State private var storedSessions: [WebStoredLoginSession] = []
 
     private var isConnected: Bool {
-        WebProviderConnectivity.isConnected(config, homeDirectory: homeDirectory)
+        WebProviderConnectivity.isConnected(config)
     }
 
     // System prompt templates with tool-specific instructions
@@ -152,28 +149,6 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                         .help(L.t(AppLocalizationKey.locLogin))
                 } else {
                     HStack(spacing: 8) {
-                        if !storedSessions.isEmpty {
-                            Menu {
-                                ForEach(storedSessions) { session in
-                                    Button {
-                                        onSelectSession(session.id)
-                                    } label: {
-                                        HStack {
-                                            Text(session.name)
-                                            if session.id == config.activeSessionID { Image(systemName: "checkmark") }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Label(config.activeSessionName ?? L.t(AppLocalizationKey.locLogin), systemImage: "person.crop.circle")
-                                    .interfaceFont(size: 10)
-                                    .foregroundColor(Color.mimo.textSecondary)
-                            }
-                            .menuStyle(.borderlessButton)
-                            .fixedSize()
-                            .help(L.t(AppLocalizationKey.locChooseSavedWebLogin))
-                        }
-
                         Button(action: onChangeLogin) {
                             Image(systemName: "person.crop.circle.badge.arrow.forward")
                                 .interfaceFont(size: 12)
@@ -461,11 +436,7 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
         .background(Color.mimo.surface)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.mimo.border, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .onAppear {
-            storedSessions = WebSessionManager.list(providerId: config.id, homeDirectory: homeDirectory)
-        }
         .onChange(of: config) { _ in
-            storedSessions = WebSessionManager.list(providerId: config.id, homeDirectory: homeDirectory)
             onSave()
         }
     }

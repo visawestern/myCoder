@@ -51,10 +51,9 @@ extension AppState {
             from: LocalProviderLogic.load(),
             includeDisabled: includeDisabled
         )
-        // Connected web providers (only after cookies captured) — plan Раздел 13 п.4.
+        // Connected web providers (only after a confirmed browser login) — plan Раздел 13 п.4.
         options += WebProviderConnectivity.providerOptions(
-            WebProviderStore.load(),
-            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+            WebProviderStore.load()
         ).filter { includeDisabled || !ProviderEnablementStore.isDisabled($0.id, defaults: defaults) }
         return options
     }

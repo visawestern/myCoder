@@ -100,10 +100,7 @@ extension AppState {
         }
         if let webID = WebProviderConnectivity.configID(fromOptionID: providerID),
            let config = WebProviderStore.load(defaults: defaults).first(where: { $0.id == webID }) {
-            providerConnectivity[providerID] = WebProviderConnectivity.isConnected(
-                config,
-                homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-            )
+            providerConnectivity[providerID] = WebProviderConnectivity.isConnected(config)
             return
         }
         if let local = LocalProviderLogic.load().first(where: { $0.id == providerID && $0.isEnabled }) {

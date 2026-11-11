@@ -60,7 +60,7 @@ extension MyCoderAPIServer {
                 "id": "web:\(config.id)",
                 "name": config.displayName,
                 "vendor": config.vendor.id,
-                "isConnected": WebProviderConnectivity.isConnected(config, homeDirectory: FileManager.default.homeDirectoryForCurrentUser),
+                "isConnected": WebProviderConnectivity.isConnected(config),
                 "models": config.allModels,
                 "selectedModel": config.selectedModel
             ])

@@ -56,10 +56,7 @@ extension MyCoderAPIServer {
         guard let config = webConfig(for: providerId) else {
             return jsonResponse(["error": "web provider not found", "providerId": providerId])
         }
-        let connected = WebProviderConnectivity.isConnected(
-            config,
-            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-        )
+        let connected = WebProviderConnectivity.isConnected(config)
         let vendorConfigured = WebProviderStore.load().contains { $0.vendor == config.vendor }
         return jsonResponse([
             "providerId": "web:\(config.id)",
@@ -70,10 +67,7 @@ extension MyCoderAPIServer {
             "chatURL": config.chatURL,
             "selectedModel": config.selectedModel,
             "models": config.allModels,
-            "sessionSaved": WebSessionManager.list(
-                providerId: config.id,
-                homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-            ).map { ["id": $0.id, "name": $0.name] },
+            "loginConfirmedAt": config.loginConfirmedAt.map { ISO8601DateFormatter().string(from: $0) } as Any,
             "action": connected ? "ready" : "open /api/open-login, log in inside the app, then POST /api/save-session"
         ])
     }
@@ -89,10 +83,7 @@ extension MyCoderAPIServer {
                 "providerId": "web:\(config.id)",
                 "vendor": config.vendor.rawValue,
                 "displayName": config.displayName,
-                "connected": WebProviderConnectivity.isConnected(
-                    config,
-                    homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-                ),
+                "connected": WebProviderConnectivity.isConnected(config),
                 "selectedModel": config.selectedModel,
                 "modelCount": config.allModels.count
             ])
@@ -122,15 +113,8 @@ extension MyCoderAPIServer {
         var opened = false
         var url = ""
         do {
-            // Restore saved cookies first, then land on the login page.
-            let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-            if let store = WebSessionManager.restore(providerId: config.id,
-                                                     homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                     sessionID: sessionID),
-               !store.cookies.isEmpty {
-                let payload = WebSessionRestorationLogic.payload(from: store)
-                try await bridge.setCookies(payload.cookies)
-            }
+            // The persistent AntiBrowser profile already holds the login; just
+            // land on the vendor's login page.
             let loginURL = (try? WebProviderCatalog.loadBundled().loginURL(for: config.vendor.id))
                 ?? config.chatURL
             try await bridge.navigate(to: loginURL)

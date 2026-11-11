@@ -7,7 +7,7 @@ extension AppState {
     var selectedProviderConnected: Bool {
         // Audit 2026-09-10: this getter runs on EVERY body evaluation
         // (StatusBar, chat input, send readiness) and used to redo JSON
-        // decode + model-label regex + cookie-file reads per pass — with a
+        // decode + model-label regex + config reads per pass — with a
         // ticking parent that saturates the main thread and starves MainActor
         // API work. Cache briefly: connectivity is session-scoped and flips
         // on minute timescales (login/logout/session expiry), never within
@@ -33,10 +33,7 @@ extension AppState {
         let webConnected: Bool?
         if let webID = WebProviderConnectivity.configID(fromOptionID: selectedProviderID),
            let config = WebProviderStore.load(defaults: defaults).first(where: { $0.id == webID }) {
-            webConnected = WebProviderConnectivity.isConnected(
-                config,
-                homeDirectory: FileManager.default.homeDirectoryForCurrentUser
-            )
+            webConnected = WebProviderConnectivity.isConnected(config)
         } else {
             webConnected = nil
         }

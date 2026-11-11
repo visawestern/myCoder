@@ -195,10 +195,10 @@ struct WebProviderConfig: Identifiable, Codable, Equatable {
     /// User-picked CSS selector for the model dropdown (element picker).
     /// Overrides catalog selector when set.
     var customModelSelector: String?
-    /// Active named login session. The actual cookies are stored separately by
-    /// WebSessionManager under providerID/sessionID.
-    var activeSessionID: String?
-    var activeSessionName: String?
+    /// Когда вход в этот сайт последний раз подтверждён живой проверкой
+    /// страницы AntiBrowser. nil — вход не подтверждён. Файлы cookie больше
+    /// не создаются: постоянный профиль AntiBrowser хранит сессию сам.
+    var loginConfirmedAt: Date?
 
     init(id: String = UUID().uuidString,
          vendor: WebChatVendor,
@@ -221,8 +221,7 @@ struct WebProviderConfig: Identifiable, Codable, Equatable {
          discoveredFeatureModes: [FeatureMode] = [],
          effortDropdown: String? = nil,
          customModelSelector: String? = nil,
-         activeSessionID: String? = nil,
-         activeSessionName: String? = nil) {
+         loginConfirmedAt: Date? = nil) {
         self.id = id
         self.vendor = vendor
         self.displayName = displayName ?? vendor.displayName
@@ -244,8 +243,7 @@ struct WebProviderConfig: Identifiable, Codable, Equatable {
         self.discoveredFeatureModes = discoveredFeatureModes
         self.effortDropdown = effortDropdown
         self.customModelSelector = customModelSelector
-        self.activeSessionID = activeSessionID
-        self.activeSessionName = activeSessionName
+        self.loginConfirmedAt = loginConfirmedAt
     }
 
     /// A web provider's runtime readiness is determined by its captured session,
