@@ -35,6 +35,20 @@ struct DatabaseManagerMaintenanceTests {
         #expect(try db.getAllSessionsAcrossProjects().count == 1)
     }
 
+    @Test("session directory is readable by session id alone")
+    func sessionDirectoryByID() throws {
+        let db = DatabaseManager.createInMemory()
+        try db.insertSession(
+            id: "session-dir",
+            projectId: "/tmp/project-dir",
+            title: "Directory",
+            directory: "/tmp/project-dir"
+        )
+
+        #expect(try db.getSessionDirectory(sessionId: "session-dir") == "/tmp/project-dir")
+        #expect(try db.getSessionDirectory(sessionId: "missing") == nil)
+    }
+
     @Test("rename reports affected rows and persists the new title")
     func renameSessionUpdatesTitle() throws {
         let db = DatabaseManager.createInMemory()

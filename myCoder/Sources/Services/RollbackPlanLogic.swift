@@ -33,8 +33,25 @@ enum RollbackPlanLogic {
         let target = messages[targetIndex]
 
         // 1. Шаги отката файлов: undo-записи после целевого запроса.
+        //
+        // Основная связь — номер сообщения модели, во время которого сделана
+        // правка: он не зависит от точности часов и однозначно относит правку
+        // к ходу диалога. Старые записи без номера сравниваются по времени;
+        // оно хранится целыми секундами, поэтому запись в секунду запроса
+        // считается «после» (правка физически не могла появиться раньше
+        // только что отправленного запроса).
+        let targetSecond = floor(target.createdAt)
         let steps = undoEntries
-            .filter { $0.createdAt > target.createdAt }
+            .filter { entry in
+                if let messageID = entry.messageID {
+                    guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
+                        // Сообщение уже удалено/сжато — честный запасной путь.
+                        return entry.createdAt >= targetSecond
+                    }
+                    return index > targetIndex
+                }
+                return entry.createdAt >= targetSecond
+            }
             .map { entry -> RollbackStep in
                 if entry.canUndo, entry.snapshotID != nil {
                     return RollbackStep(entryID: entry.id, snapshotID: entry.snapshotID,

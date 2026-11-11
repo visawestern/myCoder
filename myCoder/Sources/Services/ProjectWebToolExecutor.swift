@@ -15,6 +15,9 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     let fileManager: FileManager
     let undoManager: ProjectUndoManager?
     let sessionId: String?
+    /// Номер сообщения модели, во время которого выполняется инструмент:
+    /// правки файлов привязываются к нему для точного отката диалога.
+    let messageId: String?
     let accessLevel: AccessLevel
     /// Home directory for user-global reads (installed skills). Defaults to
     /// the real home; injectable so skill tests use a temp sandbox.
@@ -26,12 +29,14 @@ struct ProjectWebToolExecutor: WebToolExecutor {
          fileManager: FileManager = .default,
          undoManager: ProjectUndoManager? = nil,
          sessionId: String? = nil,
+         messageId: String? = nil,
          accessLevel: AccessLevel = .askBeforeChanges,
          homeDirectory: URL? = nil) {
         self.projectRoot = projectRoot
         self.fileManager = fileManager
         self.undoManager = undoManager
         self.sessionId = sessionId
+        self.messageId = messageId
         self.accessLevel = accessLevel
         self.homeDirectory = homeDirectory ?? fileManager.homeDirectoryForCurrentUser
     }
@@ -48,10 +53,13 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     static func bridged(projectRoot: String,
                         accessLevel: AccessLevel = .askBeforeChanges,
                         sessionId: String? = nil,
+                        messageId: String? = nil,
                         tabKey: String = "tools") -> ProjectWebToolExecutor {
         var executor = ProjectWebToolExecutor(
             projectRoot: projectRoot,
+            undoManager: (try? ProjectUndoManager(projectPath: projectRoot)),
             sessionId: sessionId,
+            messageId: messageId,
             accessLevel: accessLevel
         )
         executor.bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
@@ -428,7 +436,9 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             try execute()
             return
         }
-        try undoManager.executeWithUndo(operation: operation, filePath: fileURL.path, sessionId: sessionId, execute: execute)
+        try undoManager.executeWithUndo(operation: operation, filePath: fileURL.path,
+                                        sessionId: sessionId, messageId: messageId,
+                                        execute: execute)
         try undoManager.db.recordRequestHistory(
             sessionId: sessionId,
             type: "file_edit",

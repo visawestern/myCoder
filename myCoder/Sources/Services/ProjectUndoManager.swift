@@ -35,6 +35,7 @@ final class ProjectUndoManager {
         operation: String,
         filePath: String,
         sessionId: String,
+        messageId: String? = nil,
         execute: () throws -> Void
     ) throws {
         let snapshotId = try snapshotManager.snapshotFile(at: filePath, operation: operation, sessionId: sessionId)
@@ -44,12 +45,21 @@ final class ProjectUndoManager {
             snapshotManager.deleteSnapshot(snapshotId: snapshotId)
             throw error
         }
+        // Привязка к сообщению модели: откат диалога удаляет и правки этого
+        // хода, не полагаясь на секундную точность времени.
+        var metadata: String?
+        if let messageId, !messageId.isEmpty,
+           let data = try? JSONSerialization.data(withJSONObject: ["messageId": messageId]),
+           let text = String(data: data, encoding: .utf8) {
+            metadata = text
+        }
         try db.insertUndoEntry(
             id: UUID().uuidString,
             sessionId: sessionId,
             actionType: operation,
             targetPath: filePath,
-            snapshotId: snapshotId
+            snapshotId: snapshotId,
+            metadata: metadata
         )
     }
 

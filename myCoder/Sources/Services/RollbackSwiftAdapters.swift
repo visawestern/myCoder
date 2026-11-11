@@ -80,7 +80,8 @@ enum RollbackUndoLoader {
             snapshotID: record.snapshotId,
             actionType: record.actionType,
             canUndo: record.canUndo,
-            createdAt: record.createdAt.timeIntervalSince1970
+            createdAt: record.createdAt.timeIntervalSince1970,
+            messageID: record.messageId
         )
     }
 

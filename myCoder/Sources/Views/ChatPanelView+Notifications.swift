@@ -51,7 +51,16 @@ extension ChatPanelView {
         )
         guard !messages.isEmpty else { return }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let projectPath = appState.selectedWorkspace?.path
+        // Проект отката определяется сессией, а не тем, что открыто в
+        // сайдбаре: API-откат может относиться к другому чату. Для чата без
+        // проекта рабочий каталог — домашний, как и при выполнении
+        // инструментов (`ProjectlessWorkspaceLogic`).
+        let sessionDirectory = DatabaseBridge.shared.sessionDirectory(forSessionID: sessionID)
+        let projectPath = ProjectlessWorkspaceLogic.workingDirectory(
+            sessionDirectory: sessionDirectory,
+            workspacePath: appState.selectedWorkspace?.path,
+            homeDirectory: home.path
+        )
 
         let input = RollbackContextBuilder.build(from: messages)
         let entries = RollbackUndoLoader.load(

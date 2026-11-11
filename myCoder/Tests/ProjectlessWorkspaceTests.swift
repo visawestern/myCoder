@@ -18,6 +18,16 @@ struct ProjectlessWorkspaceTests {
         #expect(root == "/Users/apple/projects/demo")
     }
 
+    @Test("A chat of another project uses that project's folder, not the selected one")
+    func otherProjectChatUsesItsOwnFolder() {
+        let root = ProjectlessWorkspaceLogic.workingDirectory(
+            sessionDirectory: "/Users/apple/projects/other",
+            workspacePath: "/Users/apple/projects/selected",
+            homeDirectory: "/Users/apple"
+        )
+        #expect(root == "/Users/apple/projects/other")
+    }
+
     @Test("A project-less chat uses the home folder")
     func projectlessChatUsesHomeFolder() {
         let root = ProjectlessWorkspaceLogic.workingDirectory(

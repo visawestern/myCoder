@@ -15,8 +15,10 @@ struct RollbackCoreTests {
         RollbackMessageRef(id: id, createdAt: t, role: role, content: content)
     }
 
-    private func undo(_ id: String, path: String, at t: Double, snapshot: String? = "snap", canUndo: Bool = true) -> RollbackUndoEntryRef {
-        RollbackUndoEntryRef(id: id, path: path, snapshotID: snapshot, actionType: "edit_file", canUndo: canUndo, createdAt: t)
+    private func undo(_ id: String, path: String, at t: Double, snapshot: String? = "snap",
+                      canUndo: Bool = true, messageID: String? = nil) -> RollbackUndoEntryRef {
+        RollbackUndoEntryRef(id: id, path: path, snapshotID: snapshot, actionType: "edit_file",
+                             canUndo: canUndo, createdAt: t, messageID: messageID)
     }
 
     private func action(messageID: String, tool: String) -> IrreversibleAgentAction {
@@ -54,6 +56,69 @@ struct RollbackCoreTests {
         #expect(plan.full)
         #expect(plan.steps.isEmpty)
         #expect(plan.visibilityCutMessageID == "q1")
+    }
+
+    // MARK: - План: правки привязаны к сообщению
+
+    @Test("Правка файла в том же ходе входит в откат по номеру сообщения, а не по секунде")
+    func editInSameSecondRolledBackByMessageAssociation() {
+        // Пользователь и ответ модели созданы в одну секунду; правка тоже
+        // записана в эту секунду. Раньше сравнение времени теряло её.
+        let messages = [message("q1", at: 10),
+                        message("a1", at: 10, role: "assistant")]
+        let entries = [undo("u1", path: "src/a.swift", at: 10, messageID: "a1")]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q1",
+            messages: messages,
+            undoEntries: entries,
+            irreversibleActions: [])
+        #expect(plan.full)
+        #expect(plan.steps.count == 1)
+        #expect(plan.steps[0].status == .done)
+        #expect(plan.steps[0].path == "src/a.swift")
+    }
+
+    @Test("Правка прошлого хода не входит в откат, даже если её время позже запроса")
+    func editFromEarlierTurnExcludedByMessageAssociation() {
+        let messages = [message("q1", at: 1),
+                        message("a1", at: 2, role: "assistant"),
+                        message("q2", at: 3),
+                        message("a2", at: 4, role: "assistant")]
+        // Время записи (9) больше времени q2 (3), но правка принадлежит a1 —
+        // это состояние ДО запроса q2, откатывать его нельзя.
+        let entries = [undo("u1", path: "src/a.swift", at: 9, messageID: "a1")]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q2",
+            messages: messages,
+            undoEntries: entries,
+            irreversibleActions: [])
+        #expect(plan.full)
+        #expect(plan.steps.isEmpty)
+    }
+
+    @Test("Старая правка без номера сообщения в ту же секунду не теряется")
+    func legacyEntryInSameSecondIncluded() {
+        let messages = [message("q1", at: 10.8)]
+        let entries = [undo("u1", path: "src/a.swift", at: 10)]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q1",
+            messages: messages,
+            undoEntries: entries,
+            irreversibleActions: [])
+        #expect(plan.steps.count == 1)
+        #expect(plan.steps[0].status == .done)
+    }
+
+    @Test("Старая правка без номера сообщения до запроса не входит")
+    func legacyEntryBeforeTargetExcluded() {
+        let messages = [message("q1", at: 10.2)]
+        let entries = [undo("u1", path: "src/a.swift", at: 9)]
+        let plan = RollbackPlanLogic.makePlan(
+            targetMessageID: "q1",
+            messages: messages,
+            undoEntries: entries,
+            irreversibleActions: [])
+        #expect(plan.steps.isEmpty)
     }
 
     // MARK: - План: частичный откат (блокер)

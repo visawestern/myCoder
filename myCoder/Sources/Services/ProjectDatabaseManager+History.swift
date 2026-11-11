@@ -60,6 +60,17 @@ extension ProjectDatabaseManager {
         ))
     }
 
+    /// Номер сообщения из метаданных undo-записи. Старые записи метаданных не
+    /// имеют — для них возвращается nil, и откат использует время.
+    static func undoMessageId(fromMetadata raw: String?) -> String? {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = object["messageId"] as? String,
+              !id.isEmpty else { return nil }
+        return id
+    }
+
     /// Returns undo entries newest-first, matching how a rollback list is
     /// presented to the user (most recent action on top).
     func getUndoStack(sessionId sessionIdValue: String, onlyUsable: Bool = false) throws -> [ProjectUndoEntryRecord] {
@@ -76,7 +87,8 @@ extension ProjectDatabaseManager {
                 targetPath: row[undoTargetPath],
                 snapshotId: row[undoSnapshotId],
                 createdAt: Date(timeIntervalSince1970: TimeInterval(row[undoCreatedAt])),
-                canUndo: row[undoCanUndo]
+                canUndo: row[undoCanUndo],
+                messageId: Self.undoMessageId(fromMetadata: row[undoMetadata])
             )
         }
     }
@@ -100,7 +112,8 @@ extension ProjectDatabaseManager {
             targetPath: row[undoTargetPath],
             snapshotId: row[undoSnapshotId],
             createdAt: Date(timeIntervalSince1970: TimeInterval(row[undoCreatedAt])),
-            canUndo: row[undoCanUndo]
+            canUndo: row[undoCanUndo],
+            messageId: Self.undoMessageId(fromMetadata: row[undoMetadata])
         )
     }
 

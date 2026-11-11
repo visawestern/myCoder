@@ -411,7 +411,8 @@ extension ChatPanelView {
                 let loopExecutor = ProjectWebToolExecutor.bridged(
                     projectRoot: appState.toolWorkingDirectory,
                     accessLevel: appState.accessLevel,
-                    sessionId: sessionID
+                    sessionId: sessionID,
+                    messageId: assistantID
                 )
                 let loopResult = await AgentToolLoopLogic.run(
                     initialText: firstResponse.textContent,

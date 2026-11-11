@@ -76,7 +76,8 @@ extension ChatPanelView {
         var executor = ProjectWebToolExecutor.bridged(
             projectRoot: projectRoot,
             accessLevel: appState.accessLevel,
-            sessionId: sendSessionID
+            sessionId: sendSessionID,
+            messageId: assistantID
         )
         executor.subagentLauncher = subagentLauncher(
             projectRoot: projectRoot,

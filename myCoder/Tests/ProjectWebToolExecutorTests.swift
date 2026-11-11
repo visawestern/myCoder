@@ -26,6 +26,48 @@ struct ProjectWebToolExecutorTests {
         #expect(r == "hello")
     }
 
+    @Test func fileWriteRecordsTheAssistantMessageThatProducedIt() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        ProjectDatabaseManager.evictProject(projectPath: root.path)
+
+        let undoManager = try ProjectUndoManager(projectPath: root.path)
+        try undoManager.db.insertSession(id: "s1", title: "Editing", directory: root.path)
+        let exec = ProjectWebToolExecutor(
+            projectRoot: root.path,
+            undoManager: undoManager,
+            sessionId: "s1",
+            messageId: "assistant-9",
+            accessLevel: .fullAccess
+        )
+        let result = await exec.execute(WebToolCall(name: "write_file",
+                                                    arguments: ["path": "a.txt", "content": "hello"]))
+        #expect(result.hasPrefix("ok"))
+        let entry = try undoManager.history(sessionId: "s1").first
+        #expect(entry?.messageId == "assistant-9")
+    }
+
+    @Test func bridgedExecutorRecordsUndoWithMessageAssociation() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        ProjectDatabaseManager.evictProject(projectPath: root.path)
+
+        let manager = try ProjectUndoManager(projectPath: root.path)
+        try manager.db.insertSession(id: "s-bridged", title: "Editing", directory: root.path)
+
+        let exec = ProjectWebToolExecutor.bridged(
+            projectRoot: root.path,
+            accessLevel: .fullAccess,
+            sessionId: "s-bridged",
+            messageId: "assistant-bridged"
+        )
+        let result = await exec.execute(WebToolCall(name: "write_file",
+                                                    arguments: ["path": "b.txt", "content": "hello"]))
+        #expect(result.hasPrefix("ok"))
+        let entry = try manager.history(sessionId: "s-bridged").first
+        #expect(entry?.messageId == "assistant-bridged")
+    }
+
     @Test func editFileReplaces() async throws {
         let root = try makeRoot()
         let exec = makeExecutor(root: root)

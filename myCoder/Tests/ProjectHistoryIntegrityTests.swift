@@ -65,6 +65,48 @@ struct ProjectHistoryIntegrityTests {
         #expect(try String(contentsOfFile: fileB, encoding: .utf8) == "edited B", "unrelated newer edit must not be reverted")
     }
 
+    @Test("Undo entry stores the assistant message that produced the edit")
+    func undoEntryStoresMessageAssociation() throws {
+        let projectPath = try makeTempProjectDir()
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
+        ProjectDatabaseManager.evictProject(projectPath: projectPath)
+
+        let fileA = (projectPath as NSString).appendingPathComponent("a.txt")
+        try "v1".write(toFile: fileA, atomically: true, encoding: .utf8)
+
+        let undoManager = try ProjectUndoManager(projectPath: projectPath)
+        try undoManager.db.insertSession(id: "s1", title: "Editing", directory: projectPath)
+        try undoManager.executeWithUndo(
+            operation: "edit_file",
+            filePath: fileA,
+            sessionId: "s1",
+            messageId: "assistant-7"
+        ) {
+            try "v2".write(toFile: fileA, atomically: true, encoding: .utf8)
+        }
+
+        let entry = try undoManager.history(sessionId: "s1").first
+        #expect(entry?.messageId == "assistant-7")
+    }
+
+    @Test("Undo entry without a message association stays legacy-compatible")
+    func undoEntryWithoutMessageAssociation() throws {
+        let projectPath = try makeTempProjectDir()
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
+        ProjectDatabaseManager.evictProject(projectPath: projectPath)
+
+        let fileA = (projectPath as NSString).appendingPathComponent("a.txt")
+        try "v1".write(toFile: fileA, atomically: true, encoding: .utf8)
+
+        let undoManager = try ProjectUndoManager(projectPath: projectPath)
+        try undoManager.db.insertSession(id: "s1", title: "Editing", directory: projectPath)
+        try undoManager.executeWithUndo(operation: "edit_file", filePath: fileA, sessionId: "s1") {
+            try "v2".write(toFile: fileA, atomically: true, encoding: .utf8)
+        }
+
+        #expect(try undoManager.history(sessionId: "s1").first?.messageId == nil)
+    }
+
     @Test("Undoing an already-used entry fails instead of silently double-restoring")
     func undoingUsedEntryFails() throws {
         let projectPath = try makeTempProjectDir()

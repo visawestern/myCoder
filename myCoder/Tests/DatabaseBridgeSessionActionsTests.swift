@@ -20,9 +20,21 @@ struct DatabaseBridgeSessionActionsTests {
         )
     }
 
-    @Test("Rename/delete живут в базе программы и возвращают реальные изменения")
-    func renameAndDeleteProjectSession() throws {
+    @Test("Каталог чата читается по номеру сессии — даже для невыбранного чата")
+    func sessionDirectoryBySessionID() throws {
         let projectPath = try makeTempProjectDir()
+        defer { try? FileManager.default.removeItem(atPath: projectPath) }
+        let sessionID = "s-dir-\(UUID().uuidString)"
+
+        let bridge = DatabaseBridge()
+        bridge.createSession(id: sessionID, projectId: projectPath, title: "Chat", directory: projectPath)
+
+        #expect(bridge.sessionDirectory(forSessionID: sessionID) == projectPath)
+        #expect(bridge.sessionDirectory(forSessionID: "missing-\(UUID().uuidString)") == nil)
+    }
+
+    @Test("Rename/delete живут в базе программы и возвращают реальные изменения")
+    func renameAndDeleteProjectSession() throws {        let projectPath = try makeTempProjectDir()
         defer { try? FileManager.default.removeItem(atPath: projectPath) }
         let sessionID = "s1-\(UUID().uuidString)"
 

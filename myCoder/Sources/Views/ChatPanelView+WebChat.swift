@@ -172,6 +172,7 @@ extension ChatPanelView {
             projectRoot: workspacePath,
             undoManager: (try? ProjectUndoManager(projectPath: workspacePath)),
             sessionId: messageStore.currentSessionID,
+            messageId: assistantID,
             accessLevel: appState.accessLevel
         )
         executor.bridge = bridge

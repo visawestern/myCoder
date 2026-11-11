@@ -20,6 +20,20 @@ struct RollbackUndoEntryRef: Equatable, Sendable, Codable {
     let actionType: String
     let canUndo: Bool
     let createdAt: Double
+    /// Номер сообщения модели, во время которого сделана правка. nil — старая
+    /// запись без привязки; для неё остаётся сравнение по времени.
+    let messageID: String?
+
+    init(id: String, path: String, snapshotID: String?, actionType: String,
+         canUndo: Bool, createdAt: Double, messageID: String? = nil) {
+        self.id = id
+        self.path = path
+        self.snapshotID = snapshotID
+        self.actionType = actionType
+        self.canUndo = canUndo
+        self.createdAt = createdAt
+        self.messageID = messageID
+    }
 }
 
 /// Необратимое действие агента (например, run_command), случившееся после

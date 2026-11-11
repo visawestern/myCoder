@@ -74,6 +74,14 @@ extension DatabaseManager {
         return try db.pluck(sessions.filter(sessionId == id)) != nil
     }
 
+    /// Каталог сессии по её номеру — нужен откату, чтобы найти проектные
+    /// undo-записи и снапшоты даже для чата, который сейчас не выбран.
+    func getSessionDirectory(sessionId id: String) throws -> String? {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        guard let row = try db.pluck(sessions.filter(sessionId == id)) else { return nil }
+        return row[sessionDirectory]
+    }
+
     /// Read a session's persisted goal.
     func getSessionGoal(sessionId id: String) throws -> String? {
         guard let db = db else { throw DatabaseError.notInitialized }

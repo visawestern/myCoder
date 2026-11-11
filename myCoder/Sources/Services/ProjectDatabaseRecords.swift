@@ -82,4 +82,19 @@ struct ProjectUndoEntryRecord {
     let snapshotId: String?
     let createdAt: Date
     let canUndo: Bool
+    /// Номер сообщения модели, во время которого сделана правка. nil — запись
+    /// создана старой версией или вне хода модели.
+    let messageId: String?
+
+    init(id: String, sessionId: String, actionType: String, targetPath: String?,
+         snapshotId: String?, createdAt: Date, canUndo: Bool, messageId: String? = nil) {
+        self.id = id
+        self.sessionId = sessionId
+        self.actionType = actionType
+        self.targetPath = targetPath
+        self.snapshotId = snapshotId
+        self.createdAt = createdAt
+        self.canUndo = canUndo
+        self.messageId = messageId
+    }
 }

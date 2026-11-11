@@ -165,6 +165,12 @@ class DatabaseBridge: ObservableObject {
         }
     }
 
+    /// Каталог чата по номеру сессии. Нужен откату: чат может быть не
+    /// выбран в интерфейсе, поэтому проект нельзя брать из сайдбара.
+    func sessionDirectory(forSessionID sessionID: String) -> String? {
+        try? db.getSessionDirectory(sessionId: sessionID)
+    }
+
     /// Create a sub-agent chat owned by `parentID` in the program database.
     /// The child is marked "running" and is excluded from the sidebar by the
     /// parent filter — it surfaces in the right panel instead.
