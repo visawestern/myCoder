@@ -94,8 +94,12 @@
   (`swift test --no-parallel`).
 - **Сборка приложения:** `./build-app.sh --skip-tests` — зелёная;
   `myCoder.app` v2.119.15 (build 132), подпись Apple Development проверена.
-- **Живой API:** `GET /api/state` — HTTP 200; `POST /api/context-preview` —
-  HTTP 200, стадии собраны, вкладки и системная инструкция на месте.
+- **Живой API:** `GET /api/state` — HTTP 200 (~0,1 с). `POST /api/context-preview`
+  — HTTP 200, `status: compiled`, 4 стадии, вкладки и системная инструкция на
+  месте. На пустом проекте — 1,9 с; на реальном проекте myCoder (1260 файлов)
+  время зависит от планировщика: 69 с (внутренняя модель вернула план) и
+  167 с (модель вернула не-JSON → честный fallback). Нестабильность — внешний
+  сетевой вызов `mercury-3`, не детерминированная часть конвейера.
 - **Живой тест DOM-обнаружения:** `WebModelLLMDiscoveryLiveTests` проходит при
   `MYCODER_LIVE_TESTS=1`.
 
