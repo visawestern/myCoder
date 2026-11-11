@@ -424,7 +424,7 @@ Follow any repository instructions in AGENTS.md or miagents.md. If it instructs 
                         .interfaceFont(size: 10)
                         .foregroundColor(Color.mimo.warning)
                 case .idle:
-                    Button("Запустить AntiBrowser") {
+                    Button(L.t("Start AntiBrowser")) {
                         Task { await EngineStatusCenter.shared.start() }
                     }
                     .buttonStyle(HandCursorButtonStyle())

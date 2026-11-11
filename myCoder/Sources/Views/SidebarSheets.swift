@@ -108,7 +108,7 @@ struct SearchPaletteView: View {
                         .foregroundColor(Color.mimo.textMuted)
                 }
                 .buttonStyle(HandCursorButtonStyle())
-                .help("Close (Esc)")
+                .help(L.t("Close (Esc)"))
             }
 
             TextField(L.t(AppLocalizationKey.locSearchTasks), text: $query)

@@ -21,7 +21,7 @@ struct RollbackChipView: View {
                     .interfaceFont(size: 13)
                     .foregroundColor(.white)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(data.full ? "Откат выполнен" : "Откат частичный")
+                    Text(data.full ? L.t("Rollback complete") : L.t("Rollback partial"))
                         .interfaceFont(size: 12, weight: .semibold)
                         .foregroundColor(.white)
                     Text(data.summary)
@@ -43,7 +43,7 @@ struct RollbackChipView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .help("Открыть отчёт отката: стадии, проблемы и диффы файлов")
+        .help(L.t("Open rollback report: stages, problems and file diffs"))
         .sheet(isPresented: $showReport) {
             RollbackReportSheet(report: data.report)
         }

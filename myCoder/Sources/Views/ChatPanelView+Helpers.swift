@@ -24,7 +24,7 @@ struct ScrollToBottomButton: View {
         }
         .buttonStyle(HandCursorButtonStyle())
         .onHover { isHovering = $0 }
-        .accessibilityLabel("Scroll to latest message")
+        .accessibilityLabel(L.t("Scroll to latest message"))
     }
 }
 

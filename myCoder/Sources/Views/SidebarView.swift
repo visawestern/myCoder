@@ -20,7 +20,7 @@ struct SidebarView: View {
                     panel.canChooseFiles = false
                     panel.canChooseDirectories = true
                     panel.allowsMultipleSelection = false
-                    panel.prompt = "Open"
+                    panel.prompt = L.t("Open")
                     panel.message = L.t(AppLocalizationKey.locSelectFolder)
                     if panel.runModal() == .OK, let url = panel.url {
                         appState.addWorkspace(path: url.path)

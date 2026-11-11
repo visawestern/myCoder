@@ -27,6 +27,9 @@ enum TurnDelivery {
                     tools: tools, agentMode: agentMode,
                     skillIDs: skillIDs, mcpServerIDs: mcpServerIDs
                 )
+                // Fable-style conduct on one line: the full block would push
+                // emulated web pastes over vendor budgets (Kimi ~4000B).
+                + "\n\n" + HarnessPromptQuality.compactConductLine
         default:
             // Blended: OpenCode-style collaboration core + Claude Code evidence
             // discipline, on top of the native tool contract.

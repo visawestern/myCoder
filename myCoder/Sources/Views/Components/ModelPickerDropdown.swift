@@ -209,7 +209,7 @@ struct ModelPickerDropdown: View {
                                         .padding(.vertical, 1)
                                         .background(Color.mimo.textMuted.opacity(0.12))
                                         .clipShape(RoundedRectangle(cornerRadius: 3))
-                                        .help("Context window: \(ModelCapabilityLogic.contextLabel(for: context))")
+                                        .help(L.t("Context window: %@", ModelCapabilityLogic.contextLabel(for: context)))
                                 }
                             }
                         }

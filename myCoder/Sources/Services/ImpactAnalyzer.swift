@@ -267,7 +267,25 @@ enum ImpactAnalyzer {
         if (try? store.counts().symbols == 0) == true {
             _ = try CodeIndexService.ensureIndexed(projectPath: projectPath, records: records)
         }
-        let graph = ImpactGraph.build(extractions: try store.allActiveExtractions())
+        // Reuse the persisted graph instead of decoding every extraction and
+        // rebuilding all edges. On myCoder that second build alone took tens
+        // of seconds per preview (live audit 2026-11-11); the edges are built
+        // once by `ensureIndexed`, where writes happen. Unresolved links are
+        // not persisted, which matches this pass's rule that they are never
+        // evidence.
+        let symbols = try store.allActiveSymbols()
+        let symbolsByID = Dictionary(symbols.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Stale rows keep their old edges until the file is indexed again.
+        // Those edges describe previous content, so they are not evidence:
+        // only files whose status is active may appear in an impact report.
+        // Symbol endpoints outside `symbolsByID` are stale by construction;
+        // file endpoints need the explicit active-path check.
+        let activeFiles = Set(try store.fileStates().values.filter { !$0.isStale }.map(\.path))
+        let edges = try store.allEdges().filter {
+            Self.isActiveNode($0.from, symbolsByID: symbolsByID, activeFiles: activeFiles)
+                && Self.isActiveNode($0.to, symbolsByID: symbolsByID, activeFiles: activeFiles)
+        }
+        let graph = ImpactGraph(symbolsByID: symbolsByID, edges: edges)
         let searchQuery = ([query] + semanticTerms).joined(separator: " ")
         let seeds = try store.search(query: searchQuery, limit: 6)
         return analyze(message: message, seeds: seeds, graph: graph, intent: intent, depth: depth, maxDependents: maxDependents)
@@ -283,6 +301,17 @@ enum ImpactAnalyzer {
             guard let startLine, let endLine else { return "\(path) \(name)" }
             return "\(path):\(startLine)-\(endLine) \(name)"
         }
+    }
+
+    /// Edges may outlive a file's active row. A symbol node is current only
+    /// when its symbol is in the active set; a file node is current only when
+    /// its path is active. Anything else is stale and never becomes evidence.
+    private static func isActiveNode(_ id: String,
+                                     symbolsByID: [String: CodeSymbol],
+                                     activeFiles: Set<String>) -> Bool {
+        if symbolsByID[id] != nil { return true }
+        guard let path = CodeNode.filePath(of: id) else { return false }
+        return activeFiles.contains(path)
     }
 
     private static func node(_ id: String, graph: ImpactGraph) -> GraphNode? {

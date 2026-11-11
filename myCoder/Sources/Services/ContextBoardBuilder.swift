@@ -74,8 +74,13 @@ enum ContextBoardBuilder {
         // what source code is — at a fraction of the cost.
         var result = Set<String>()
         result.reserveCapacity(min(limit, 256))
-        var current = ""
+        // Accumulate bytes and decode once per token. Appending `Character`
+        // per byte was measurable on a 12 MB project index (live audit
+        // 2026-11-11). Scalars are counted explicitly because `count` here
+        // would be bytes, not characters.
+        var current: [UInt8] = []
         current.reserveCapacity(32)
+        var scalarCount = 0
         for byte in text.utf8 {
             let isWord = (byte >= 48 && byte <= 57)      // 0-9
                 || (byte >= 65 && byte <= 90)            // A-Z
@@ -83,14 +88,20 @@ enum ContextBoardBuilder {
                 || byte == 95                            // _
                 || byte >= 128                           // non-ASCII identifier part
             if isWord {
-                current.append(Character(UnicodeScalar(byte)))
+                current.append(byte)
+                if byte & 0xC0 != 0x80 { scalarCount += 1 }
             } else if !current.isEmpty {
-                if current.count >= 3 { result.insert(current.lowercased()) }
+                if scalarCount >= 3 {
+                    result.insert(String(decoding: current, as: UTF8.self).lowercased())
+                }
                 current.removeAll(keepingCapacity: true)
+                scalarCount = 0
                 if result.count >= limit { return result }
             }
         }
-        if !current.isEmpty, current.count >= 3 { result.insert(current.lowercased()) }
+        if !current.isEmpty, scalarCount >= 3 {
+            result.insert(String(decoding: current, as: UTF8.self).lowercased())
+        }
         return result
     }
 
@@ -121,6 +132,10 @@ enum ContextBoardBuilder {
     // MARK: - Imports
 
     static func imports(in text: String, language: String) -> [String] {
+        // Markdown, JSON, images-as-text and other non-code files have no
+        // import syntax; skipping them avoids splitting every line of the
+        // whole index for a nil result (live audit 2026-11-11).
+        guard supportsImports(language: language) else { return [] }
         var result: [String] = []
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -130,6 +145,15 @@ enum ContextBoardBuilder {
             }
         }
         return result
+    }
+
+    private static func supportsImports(language: String) -> Bool {
+        switch language {
+        case "swift", "python", "javascript", "typescript", "go", "rust", "java":
+            return true
+        default:
+            return false
+        }
     }
 
     private static func importModule(_ line: String, language: String) -> String? {

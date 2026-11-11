@@ -1,5 +1,11 @@
 # Полный checklist качества функций
 
+> **Архив, 2026-11-11.** Чеклист исторический: Auto Free и WebKit удалены
+> (см. `docs/verification/2026-11-11/FINAL_CLOSURE.md`). Строки про Auto Free,
+> cookie/WebKit и «Live ChatGPT discovery» относятся к снятому коду и не являются
+> открытой работой. Актуальное обнаружение моделей — селекторы каталога, при
+> изменении разметки — снимок DOM и `mercury-3` (`WebModelLLMDiscovery`).
+
 Статусы: `PASS` = функция проверена цепочкой и тестом; `PARTIAL` = внешний
 ресурс отсутствует; `FIXED` = найден разрыв и исправлен этим циклом.
 
@@ -106,7 +112,7 @@
 - [x] Full `swift test` passes: 1858 tests, 265 suites.
 - [x] Live Kimi model menu verified: K3, K3 Swarm.
 - [x] Live Qwen refresh verified: Qwen3.7-Max, Qwen3.7-Plus, Qwen3.8-Max.
-- [ ] Live ChatGPT discovery remains PARTIAL: page/cookies work, model result did not appear.
+- [x] Live ChatGPT discovery remains PARTIAL: page/cookies work, model result did not appear. — **закрыто 2026-11-11:** заменено универсальным обнаружением (селекторы каталога → снимок DOM → `mercury-3` строгим JSON); живая проверка ChatGPT требует сессии владельца и вынесена в FINAL_CLOSURE.
 
 ```text
 /goal go over every single feature in this file create a user story with expected behaviour based on the code keep a single canonical spreadsheet tracking the features status

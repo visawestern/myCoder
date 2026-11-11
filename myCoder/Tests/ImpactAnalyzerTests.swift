@@ -355,4 +355,38 @@ struct ImpactAnalyzerTests {
         #expect(!report.refs.contains { $0.path == seed.path && $0.symbol == seed.name && $0.startLine == seed.startLine && $0.endLine == seed.endLine })
     }
 
+    @Test("Связи устаревшего файла не выдаются за действующие зависимости")
+    func staleFileEdgesAreNotEvidence() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("impact-stale-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let storeText = "func saveFrame() {}\n"
+        let importerText = "import Store\nfunc chooseFolder() { saveFrame() }\n"
+        try storeText.write(to: root.appendingPathComponent("Store.swift"), atomically: true, encoding: .utf8)
+        try importerText.write(to: root.appendingPathComponent("Settings.swift"), atomically: true, encoding: .utf8)
+        let records = [
+            FileIndexRecord(path: "Store.swift", hash: "store-1", size: storeText.utf8.count,
+                            lastModified: 0, language: "swift", searchableText: storeText),
+            FileIndexRecord(path: "Settings.swift", hash: "settings-1", size: importerText.utf8.count,
+                            lastModified: 0, language: "swift", searchableText: importerText)
+        ]
+        _ = try CodeIndexService.ensureIndexed(projectPath: root.path, records: records)
+        let index = try CodeIndexStore.open(projectPath: root.path)
+        try index.markStale(paths: ["Settings.swift"])
+
+        let report = try #require(try ImpactAnalyzer.report(
+            projectPath: root.path,
+            message: "переделай saveFrame",
+            query: "saveFrame",
+            records: records
+        ))
+        #expect(report.affected.contains { $0.name == "saveFrame" })
+        // The stale file still has persisted import edges. They describe the
+        // old content and must not be presented as current dependencies.
+        #expect(!report.dependents.contains { $0.path == "Settings.swift" })
+        #expect(!report.refs.contains { $0.path == "Settings.swift" })
+    }
+
 }

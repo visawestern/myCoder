@@ -242,18 +242,22 @@ struct NotificationServiceTests {
     
     // MARK: - Thread Safety
     
-    @Test("Concurrent notifications maintain order")
-    func concurrentAdditions() {
+    @Test("Concurrent requests all land on the main actor")
+    func concurrentAdditions() async {
         let service = NotificationService()
-        let group = DispatchGroup()
-        
-        for i in 0..<10 {
-            DispatchQueue.global().async(group: group) {
-                service.add(AppNotification(title: "N\(i)", message: ""))
+        // The service is main-actor isolated, so concurrent callers queue
+        // their mutations instead of racing on `@Published` storage. The
+        // previous version called it from ten global queues and crashed the
+        // suite with SIGSEGV (2026-11-11). Exactly ten notifications also
+        // prove that no request was lost.
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<10 {
+                group.addTask { @MainActor in
+                    service.add(AppNotification(title: "N\(index)", message: ""))
+                }
             }
         }
-        
-        group.wait()
-        #expect(service.notifications.count <= 10)
+        #expect(service.notifications.count == 10)
+        #expect(service.unreadCount == 10)
     }
 }

@@ -242,6 +242,39 @@ struct CodeIndexStore {
         return rows.compactMap(decodeSymbol)
     }
 
+    /// Symbols of files that are not stale — the same set `allActiveExtractions`
+    /// would yield, without decoding every extraction JSON.
+    func allActiveSymbols() throws -> [CodeSymbol] {
+        let rows = try SQLiteSafeQuery.rows(db.prepare(
+            """
+            SELECT s.path, s.name, s.kind, s.start_line, s.end_line
+            FROM code_symbols s
+            JOIN code_files f ON f.path = s.path
+            WHERE f.status = 'active'
+            ORDER BY s.path, s.start_line, s.name
+            """
+        ))
+        return rows.compactMap(decodeSymbol)
+    }
+
+    /// Every persisted edge (unresolved edges are never stored). Reusing the
+    /// persisted graph keeps read-only impact analysis from rebuilding it on
+    /// each turn; the rebuild stays in `ensureIndexed`, where writes happen.
+    func allEdges() throws -> [CodeEdge] {
+        let rows = try SQLiteSafeQuery.rows(db.prepare(
+            "SELECT from_id, to_id, kind, confidence FROM code_edges ORDER BY from_id, to_id, kind"
+        ))
+        return rows.compactMap { row in
+            guard let from = row[0] as? String,
+                  let to = row[1] as? String,
+                  let kind = (row[2] as? String).flatMap(CodeEdgeKind.init(rawValue:)),
+                  let confidence = (row[3] as? String).flatMap(CodeEdgeConfidence.init(rawValue:)) else {
+                return nil
+            }
+            return CodeEdge(from: from, to: to, kind: kind, confidence: confidence)
+        }
+    }
+
     func symbol(id: String) throws -> CodeSymbol? {
         let rows = try SQLiteSafeQuery.rows(db.prepare(
             "SELECT path, name, kind, start_line, end_line FROM code_symbols WHERE id = ? LIMIT 1",

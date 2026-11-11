@@ -46,7 +46,7 @@ struct SidebarFooterView: View {
                 }
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help("Notifications (\(appState.notificationService.unreadCount) unread)")
+            .help(L.t("Notifications (%d unread)", appState.notificationService.unreadCount))
             
             Button(action: { appState.openSettings() }) {
                 Image(systemName: "gearshape")
@@ -54,7 +54,7 @@ struct SidebarFooterView: View {
                     .foregroundColor(Color.mimo.textSecondary)
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help("Settings")
+            .help(L.t("Settings"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

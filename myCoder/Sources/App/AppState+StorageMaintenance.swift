@@ -313,7 +313,7 @@ extension AppState {
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.nameFieldStringValue = SessionTranscriptLogic.fileName(title: session.title)
         panel.canCreateDirectories = true
-        panel.prompt = "Export"
+        panel.prompt = L.t("Export")
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
             try markdown.write(to: url, atomically: true, encoding: .utf8)

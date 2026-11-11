@@ -201,27 +201,22 @@ extension ChatPanelView {
         }
     }
 
-    /// Sub-agent transport for per-role mode: sub-agents are research work, so
-    /// they run on the .research role — but only when it resolves to a direct
-    /// OpenAI-compatible model. Anything else (serve/web/ACP/unresolved) is an
-    /// explicit `.unsupported` with the honest reason, never a detour to the
-    /// composer's model.
+    /// Sub-agent transport: single mode inherits the caller's transport;
+    /// per-role mode delegates to the pure `SubagentTransportResolver`, which
+    /// runs sub-agents on the `.research` role — but only when it resolves to
+    /// a direct OpenAI-compatible model. Anything else
+    /// (serve/web/ACP/unresolved) is an explicit `.unsupported` with the
+    /// honest reason, never a detour to the composer's model.
     ///
     /// Вход: транспорт одиночного режима (используется в single). Выход: транспорт.
-    /// Зависимости: `ModelRouteResolver`, `RoleTransportResolver`.
+    /// Зависимости: `SubagentTransportResolver`, `AppState`.
     @MainActor
     func routedSubagentTransport(fallback: SubagentRunner.Transport) -> SubagentRunner.Transport {
-        guard appState.modelRoutingConfiguration.mode == .perRole else { return fallback }
-        let configuration = appState.modelRoutingConfiguration
-        let primary = appState.primaryModelAssignment()
-        let context = appState.roleTransportContext()
-        let resolver = ModelRouteResolver(configuration: configuration, primary: primary)
-        guard let assignment = resolver.assignment(for: .research),
-              case .openAICompatible(let baseURL, let apiKey, let model) =
-                RoleTransportResolver.kind(for: assignment, context: context),
-              let url = URL(string: baseURL) else {
-            return .unsupported(reason: "Субагентам в режиме маршрутов нужна прямая OpenAI-совместимая модель для роли «Context research». Текущее назначение роли не поддерживает такой транспорт.")
-        }
-        return .openAICompatible(baseURL: url, apiKey: apiKey ?? "", model: model)
+        SubagentTransportResolver.transport(
+            configuration: appState.modelRoutingConfiguration,
+            primary: appState.primaryModelAssignment(),
+            context: appState.roleTransportContext(),
+            fallback: fallback
+        )
     }
 }

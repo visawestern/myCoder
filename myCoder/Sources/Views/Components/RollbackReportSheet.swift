@@ -48,7 +48,7 @@ struct RollbackReportSheet: View {
                     .background(Color.mimo.controlBackground, in: Circle())
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Закрыть")
+            .help(L.t(AppLocalizationKey.locClose))
         }
         .padding(16)
         .background(Color.mimo.controlBackground.opacity(0.5))
@@ -56,7 +56,7 @@ struct RollbackReportSheet: View {
 
     private var stagesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Стадии").interfaceFont(size: 13, weight: .semibold)
+            Text(L.t("Stages")).interfaceFont(size: 13, weight: .semibold)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(report.stages.enumerated()), id: \.offset) { _, stage in
                     HStack(alignment: .top, spacing: 8) {
@@ -86,7 +86,7 @@ struct RollbackReportSheet: View {
 
     private var diffsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Диффы файлов").interfaceFont(size: 13, weight: .semibold)
+            Text(L.t("File diffs")).interfaceFont(size: 13, weight: .semibold)
             ForEach(Array(report.diffs.enumerated()), id: \.offset) { _, diff in
                 RollbackDiffRow(diff: diff)
             }

@@ -48,12 +48,12 @@ struct GoalVerdictCard: View {
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help(expanded ? "Свернуть вердикт" : "Показать, что не готово")
+            .help(expanded ? L.t("Collapse verdict") : L.t("Show what is not ready"))
 
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
                     if !presentation.notDone.isEmpty {
-                        Text("Не готово")
+                        Text(L.t("Not ready"))
                             .interfaceFont(size: 11, weight: .semibold)
                             .foregroundColor(Color.mimo.textSecondary)
                         ForEach(Array(presentation.notDone.enumerated()), id: \.offset) { _, item in
@@ -69,7 +69,7 @@ struct GoalVerdictCard: View {
                         }
                     }
                     if !presentation.reason.isEmpty {
-                        Text("Причина")
+                        Text(L.t("Reason"))
                             .interfaceFont(size: 11, weight: .semibold)
                             .foregroundColor(Color.mimo.textSecondary)
                             .padding(.top, presentation.notDone.isEmpty ? 0 : 2)

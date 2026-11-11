@@ -312,6 +312,10 @@ enum CodeGraphBuilder {
     static func build(files: [CodeFileExtraction]) -> [CodeEdge] {
         let files = files.sorted { $0.path < $1.path }
         let allSymbols = files.flatMap(\.symbols)
+        // `isTestPath` parses/lowercases the path and builds arrays; calling it
+        // once per edge made the graph rebuild the top cost of a preview
+        // (live audit 2026-11-11). Classify every path exactly once.
+        let testPaths = Set(files.lazy.map(\.path).filter { CodeIndexExtractor.isTestPath($0) })
         var byName: [String: [CodeSymbol]] = [:]
         for symbol in allSymbols {
             byName[symbol.name.lowercased(), default: []].append(symbol)
@@ -401,11 +405,11 @@ enum CodeGraphBuilder {
 
         // tests — exact when a test symbol really calls a production symbol.
         for edge in edges where edge.kind == .calls && edge.confidence != .unresolved {
-            guard let target = symbolByID[edge.to], !CodeIndexExtractor.isTestPath(target.path) else {
+            guard let target = symbolByID[edge.to], !testPaths.contains(target.path) else {
                 continue
             }
             let fromPath = symbolByID[edge.from]?.path ?? CodeNode.filePath(of: edge.from)
-            guard let fromPath, CodeIndexExtractor.isTestPath(fromPath) else { continue }
+            guard let fromPath, testPaths.contains(fromPath) else { continue }
             edges.append(CodeEdge(
                 from: edge.from,
                 to: edge.to,
@@ -417,19 +421,35 @@ enum CodeGraphBuilder {
         // tests — heuristic from the `testFoo` naming convention. Only a
         // unique production symbol may receive it; an ambiguous name is not
         // guessed at.
-        let production = allSymbols.filter { !CodeIndexExtractor.isTestPath($0.path) }
-        for file in files where CodeIndexExtractor.isTestPath(file.path) {
+        //
+        // The old loop normalized every production name inside a filter that
+        // ran once per test function: on myCoder itself that was millions of
+        // lowercased/filtered string allocations per graph rebuild (live
+        // audit 2026-11-11). Normalize each production name once instead.
+        let production: [(symbol: CodeSymbol, normalized: String)] = allSymbols
+            .filter { !testPaths.contains($0.path) }
+            .map { ($0, normalizeName($0.name)) }
+            .filter { $0.normalized.count >= 3 }
+        var exactTestEdges = Set<String>()
+        for edge in edges where edge.kind == .tests {
+            exactTestEdges.insert("\(edge.from)\u{1}\(edge.to)")
+        }
+        for file in files where testPaths.contains(file.path) {
             for testSymbol in file.symbols where testSymbol.kind == "func" {
                 guard let token = testToken(testSymbol.name) else { continue }
-                let matches = production.filter { symbol in
-                    let normalized = normalizeName(symbol.name)
-                    return normalized.count >= 3 && token.contains(normalized)
+                var match: CodeSymbol?
+                var ambiguous = false
+                for candidate in production where token.contains(candidate.normalized) {
+                    if match == nil {
+                        match = candidate.symbol
+                    } else {
+                        ambiguous = true
+                        break
+                    }
                 }
-                guard matches.count == 1, let target = matches.first else { continue }
-                let alreadyExact = edges.contains {
-                    $0.kind == .tests && $0.from == testSymbol.id && $0.to == target.id
-                }
-                guard !alreadyExact else { continue }
+                guard !ambiguous, let target = match else { continue }
+                guard !exactTestEdges.contains("\(testSymbol.id)\u{1}\(target.id)") else { continue }
+                exactTestEdges.insert("\(testSymbol.id)\u{1}\(target.id)")
                 edges.append(CodeEdge(
                     from: testSymbol.id,
                     to: target.id,

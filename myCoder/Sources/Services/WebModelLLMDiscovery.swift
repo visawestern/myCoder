@@ -80,9 +80,13 @@ enum WebModelLLMDiscovery {
         3. Exclude headings ("Model", "Models", "All models"), effort or thinking labels
            ("Fast", "Auto", "Thinking", "Reasoning", "Effort"), plan or upgrade text,
            navigation, buttons, marketing prose, and chat titles.
-        4. If the model menu is closed, include the model name(s) visible in the current
-           model button or header.
-        5. If no model names are visible, return {"models":[]}.
+        4. Include every distinct model name present anywhere in the snapshot: the current
+           model button, header, and every model item or menu entry — even if the menu
+           appears closed or the snapshot does not mark the item as expanded. Use bodyText
+           as supporting evidence when the controls list is ambiguous.
+        5. Do not return only the active model when other model names are present. Do not
+           duplicate a name that appears in several places.
+        6. If no model names are visible, return {"models":[]}.
         """
         let user = "Vendor: \(vendor.displayName) (\(vendor.rawValue))\nDOM snapshot:\n\(domSnapshot)"
         return [DirectChatMessage(role: "system", content: system),

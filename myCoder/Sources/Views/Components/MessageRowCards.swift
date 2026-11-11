@@ -68,7 +68,7 @@ struct WebToolApprovalCardView: View {
                 Image(systemName: "exclamationmark.shield")
                     .interfaceFont(size: 14)
                     .foregroundColor(Color.mimo.warning)
-                Text("myCoder wants to run a restricted tool")
+                Text(L.t("myCoder wants to run a restricted tool"))
                     .interfaceFont(size: 13, weight: .semibold)
                     .foregroundColor(Color.mimo.textPrimary)
                 Spacer()
@@ -85,7 +85,7 @@ struct WebToolApprovalCardView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "checkmark")
                             .interfaceFont(size: 11, weight: .bold)
-                        Text("Allow")
+                        Text(L.t("Allow"))
                             .interfaceFont(size: 12, weight: .semibold)
                     }
                     .foregroundColor(Color.white)
@@ -102,7 +102,7 @@ struct WebToolApprovalCardView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "xmark")
                             .interfaceFont(size: 11, weight: .bold)
-                        Text("Deny")
+                        Text(L.t("Deny"))
                             .interfaceFont(size: 12, weight: .semibold)
                     }
                     .foregroundColor(Color.mimo.error)
@@ -297,18 +297,18 @@ struct MessageSendInfoCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Message details")
+            Text(L.t("Message details"))
                 .interfaceFont(size: 13, weight: .semibold)
                 .foregroundColor(Color.mimo.textPrimary)
-            row("Sent", info.sentAt.formatted(date: .abbreviated, time: .standard))
-            row("Provider", info.providerID ?? "—")
-            row("Model", info.modelID ?? "—")
-            if let variant = info.variant { row("Variant", variant) }
-            if let temperature = info.temperature { row("Temperature", String(format: "%.2f", temperature)) }
-            if let topP = info.topP { row("Top-p", String(format: "%.2f", topP)) }
-            if let maxTokens = info.maxTokens { row("Max tokens", "\(maxTokens)") }
+            row(L.t("Sent"), info.sentAt.formatted(date: .abbreviated, time: .standard))
+            row(L.t(AppLocalizationKey.locProvider), info.providerID ?? "—")
+            row(L.t("Model"), info.modelID ?? "—")
+            if let variant = info.variant { row(L.t("Variant"), variant) }
+            if let temperature = info.temperature { row(L.t(AppLocalizationKey.locTemperature), String(format: "%.2f", temperature)) }
+            if let topP = info.topP { row(L.t(AppLocalizationKey.locTopP), String(format: "%.2f", topP)) }
+            if let maxTokens = info.maxTokens { row(L.t(AppLocalizationKey.locMaxTokens), "\(maxTokens)") }
             if let system = info.systemPrompt, !system.isEmpty {
-                row("System", system)
+                row(L.t("System"), system)
             }
         }
         .padding(14)

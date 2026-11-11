@@ -20,7 +20,7 @@ struct AttentionBlinkDot: View {
                 }
             }
             .help(L.t(AppLocalizationKey.locGoalNoneInChat))
-            .accessibilityLabel("attention")
+            .accessibilityLabel(L.t("Attention"))
     }
 }
 

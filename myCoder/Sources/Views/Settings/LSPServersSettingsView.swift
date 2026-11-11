@@ -18,40 +18,40 @@ struct LSPServersSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Text("Языковые серверы (LSP)")
+            Text(L.t("Language Servers (LSP)"))
                 .interfaceFont(size: 24, weight: .bold)
                 .foregroundColor(Color.mimo.textPrimary)
 
-            Text("Локальные языковые серверы, которые агент может выбрать. Показываются только те, чей бинарник найден на PATH.")
+            Text(L.t("Local language servers the agent can choose from. Only servers whose binary is found on PATH are shown."))
                 .interfaceFont(size: 14)
                 .foregroundColor(Color.mimo.textSecondary)
 
             // Custom server form.
             SettingsCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Добавить свой сервер").interfaceFont(size: 13, weight: .semibold)
+                    Text(L.t("Add a custom server")).interfaceFont(size: 13, weight: .semibold)
                     HStack(spacing: 8) {
-                        TextField("id (напр. my-lsp)", text: $customID)
+                        TextField(L.t("id (e.g. my-lsp)"), text: $customID)
                             .zcodeTextFieldStyle()
                             .frame(maxWidth: 160)
-                        TextField("команда", text: $customCommand)
+                        TextField(L.t("command"), text: $customCommand)
                             .zcodeTextFieldStyle()
-                        TextField("языки (через запятую)", text: $customLanguages)
+                        TextField(L.t("languages (comma-separated)"), text: $customLanguages)
                             .zcodeTextFieldStyle()
                             .frame(maxWidth: 200)
-                        Button("Добавить") { addCustom() }
+                        Button(L.t(AppLocalizationKey.locAdd)) { addCustom() }
                             .buttonStyle(HandCursorButtonStyle())
                             .disabled(customID.trimmingCharacters(in: .whitespaces).isEmpty || customCommand.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }
 
-            Text("Обнаружено \(rows.filter { !$0.isCustom }.count), всего \(rows.count)")
+            Text(L.t("Found %d of %d", rows.filter { !$0.isCustom }.count, rows.count))
                 .interfaceFont(size: 12, weight: .semibold)
                 .foregroundColor(Color.mimo.textMuted)
 
             if rows.isEmpty {
-                settingsEmptyState("Языковые серверы не найдены", subtitle: "Установите один из стандартных серверов (sourcekit-lsp, typescript-language-server, pyright и т.д.) или добавьте свой.")
+                settingsEmptyState(L.t("No language servers found"), subtitle: L.t("Install one of the standard servers (sourcekit-lsp, typescript-language-server, pyright, etc.) or add your own."))
             } else {
                 ForEach($rows) { $row in
                     LSPServerRowView(row: $row, onChanged: reload)
@@ -155,7 +155,7 @@ struct LSPServerRowView: View {
                     Text(row.name).interfaceFont(size: 13, weight: .medium)
                         .foregroundColor(Color.mimo.textPrimary)
                     if row.isCustom {
-                        Text("свой").interfaceFont(size: 10)
+                        Text(L.t("custom")).interfaceFont(size: 10)
                             .foregroundColor(Color.mimo.textMuted)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Color.mimo.backgroundAlt)
@@ -176,7 +176,7 @@ struct LSPServerRowView: View {
                 }
             }
             Spacer()
-            Button(row.isEnabled ? "Отключить" : "Включить") {
+            Button(row.isEnabled ? L.t(AppLocalizationKey.locDisable) : L.t(AppLocalizationKey.locEnable)) {
                 toggle()
             }
             .interfaceFont(size: 11)
@@ -188,7 +188,7 @@ struct LSPServerRowView: View {
                     Image(systemName: "trash").interfaceFont(size: 12).foregroundColor(Color.mimo.error)
                 }
                 .buttonStyle(HandCursorButtonStyle())
-                .help("Удалить")
+                .help(L.t(AppLocalizationKey.locDelete))
             }
         }
         .padding(12)
@@ -224,7 +224,7 @@ struct LSPServerRowView: View {
             row.isEnabled = newEnabled
             onChanged()
         } catch {
-            mutationError = "Не удалось изменить состояние: \(error.localizedDescription)"
+            mutationError = L.t("Could not change state: %@", error.localizedDescription)
         }
     }
 
@@ -237,7 +237,7 @@ struct LSPServerRowView: View {
             _ = try LSPRegistryManager.remove(id: row.id, homeDirectory: home)
             onChanged()
         } catch {
-            mutationError = "Не удалось удалить: \(error.localizedDescription)"
+            mutationError = L.t("Could not delete: %@", error.localizedDescription)
         }
     }
 }

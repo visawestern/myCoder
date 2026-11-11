@@ -412,7 +412,7 @@ struct ContextAssemblyEntryRow: View {
                         .foregroundColor(statusColor)
                     Spacer(minLength: 4)
                     if let duration = entry.durationMilliseconds {
-                        Text("\(duration) мс")
+                        Text(L.t("%d ms", duration))
                             .interfaceFont(size: 10)
                             .foregroundColor(Color.mimo.textMuted)
                     }

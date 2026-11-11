@@ -129,7 +129,7 @@ struct TerminalView: View {
                             .foregroundColor(Color.mimo.error)
                     }
                     .buttonStyle(HandCursorButtonStyle())
-                    .help("Stop (⌃C)")
+                    .help(L.t("Stop (⌃C)"))
                 }
             }
             .padding(.horizontal, 10)

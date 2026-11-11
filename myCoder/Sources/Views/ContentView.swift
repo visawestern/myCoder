@@ -204,8 +204,8 @@ struct SidebarResizeHandle: View {
             .onTapGesture(count: 2) {
                 width = defaultWidth
             }
-            .accessibilityLabel("Sidebar resizer")
-            .accessibilityHint("Drag to resize the sidebar; double-click to reset.")
+            .accessibilityLabel(L.t("Sidebar resizer"))
+            .accessibilityHint(L.t("Drag to resize the sidebar; double-click to reset."))
     }
 }
 

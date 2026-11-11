@@ -55,7 +55,7 @@ struct WebProviderBrowserPanel<Content: View>: View {
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .foregroundColor(Color.mimo.textMuted)
-                .help("Expand the browser panel")
+                .help(L.t("Expand the browser panel"))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -102,14 +102,14 @@ struct WebProviderBrowserPanel<Content: View>: View {
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .foregroundColor(Color.mimo.textMuted)
-                .help("Collapse to minimap (the page stays alive)")
+                .help(L.t("Collapse to minimap (the page stays alive)"))
                 Button(action: onHide) {
                     Image(systemName: "xmark")
                         .interfaceFont(size: 11, weight: .medium)
                 }
                 .buttonStyle(HandCursorButtonStyle())
                 .foregroundColor(Color.mimo.textMuted)
-                .help("Hide the browser panel (the page stays alive)")
+                .help(L.t("Hide the browser panel (the page stays alive)"))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

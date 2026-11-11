@@ -1,5 +1,14 @@
 # Hardcoded Strings — Localization Checklist
 
+> **Архив, 2026-11-11.** Список от 2026-08-09 устарел: номера строк и часть
+> подписей с тех пор изменились. Действующая проверка — автоматическая:
+> `myCoder/Tests/HardcodedStringAuditTests.swift` сканирует исходники и падает
+> на новой захардкоженной английской подписи; полноту таблицы переводов держат
+> тесты `AppLocalization` (все ключи, отсутствие пересечений английских значений,
+> поздние строки). Технические токены (`/compact`, `MI`, `/name`,
+> `localhost:11434 or 192.168.1.10:4096`, `R`, `T`, `⌘⇧P`) — белый список
+> сканера, это не пользовательские подписи. Ниже — история, а не открытая работа.
+
 > Generated: 2026-08-09
 > Total hardcoded strings found: ~66
 > Status: 🔴 = not translated, 🟢 = translated (via L.t)
@@ -21,95 +30,95 @@
 ---
 
 ## ChatPanelView.swift
-- [ ] 🔴 Line 52: `Button("Load earlier messages")` → use `L.t(AppLocalizationKey.locLoadingOlderMessages)` ✅ exists
-- [ ] 🔴 Line 857: `msg.content = "Generation stopped"` → add `locGenerationStopped`
-- [ ] 🔴 Line 1285: `msg.content = "Task completed"` → add `locTaskCompleted`
+- [x] 🟢 Line 52: `Button("Load earlier messages")` → use `L.t(AppLocalizationKey.locLoadingOlderMessages)` ✅ exists
+- [x] 🟢 Line 857: `msg.content = "Generation stopped"` → add `locGenerationStopped`
+- [x] 🟢 Line 1285: `msg.content = "Task completed"` → add `locTaskCompleted`
 
 ## MessageRowView.swift
-- [ ] 🔴 Line 544: `label: "Result"` → add `locResult`
-- [ ] 🔴 Line 537: `label: "Arguments"` → add `locArguments`
-- [ ] 🔴 Line 464: `Text(isComplete ? "Completed" : "Running")` → add `locCompleted`, `locRunning`
-- [ ] 🔴 Line 488: `tooltip: "Retry"` → use `locRetry` ✅ exists
-- [ ] 🔴 Line 479: `tooltip: "Stop"` → use `locStop` ✅ exists
-- [ ] 🔴 Line 223: `tooltip: message.role == .user ? "Resend" : "Retry"` → add `locResend`, use `locRetry`
-- [ ] 🔴 Line 199: `tooltip: copied ? "Copied" : "Copy"` → add `locCopied`, use `locCopyAll`
+- [x] 🟢 Line 544: `label: "Result"` → add `locResult`
+- [x] 🟢 Line 537: `label: "Arguments"` → add `locArguments`
+- [x] 🟢 Line 464: `Text(isComplete ? "Completed" : "Running")` → add `locCompleted`, `locRunning`
+- [x] 🟢 Line 488: `tooltip: "Retry"` → use `locRetry` ✅ exists
+- [x] 🟢 Line 479: `tooltip: "Stop"` → use `locStop` ✅ exists
+- [x] 🟢 Line 223: `tooltip: message.role == .user ? "Resend" : "Retry"` → add `locResend`, use `locRetry`
+- [x] 🟢 Line 199: `tooltip: copied ? "Copied" : "Copy"` → add `locCopied`, use `locCopyAll`
 
 ## SidebarView.swift
-- [ ] 🔴 Line 785: `Button("New task")` → add `locNewTaskSidebar`
-- [ ] 🔴 Line 782: `Button("Open in Finder")` → use `locShowInFinder`
-- [ ] 🔴 Line 939: `Button("Restore")` → use `locRestore` ✅ exists
-- [ ] 🔴 Line 349: `Button("Mark All Read")` → add `locMarkAllRead`
-- [ ] 🔴 Line 24: `panel.message = "Select a folder to open as a project"` → add `locSelectFolder`
-- [ ] 🔴 Line 23: `panel.prompt = "Open"` → use `locOpen` ✅ exists
+- [x] 🟢 Line 785: `Button("New task")` → add `locNewTaskSidebar`
+- [x] 🟢 Line 782: `Button("Open in Finder")` → use `locShowInFinder`
+- [x] 🟢 Line 939: `Button("Restore")` → use `locRestore` ✅ exists
+- [x] 🟢 Line 349: `Button("Mark All Read")` → add `locMarkAllRead`
+- [x] 🟢 Line 24: `panel.message = "Select a folder to open as a project"` → add `locSelectFolder`
+- [x] 🟢 Line 23: `panel.prompt = "Open"` → use `locOpen` ✅ exists
 
 ## WebProvidersSection.swift
-- [ ] 🔴 Line 38: `Text(... ? "Configured" : "Add")` → add `locConfigured`, use `locAdd`
-- [ ] 🔴 Line 184: `Button("Log in")` → add `locLogin`
-- [ ] 🔴 Lines 224, 469: help strings → already mostly translated
-- [ ] 🔴 Line 730: `Button("Cancel")` → use `locCancel` ✅ exists
-- [ ] 🔴 Line 732: `Button("Use as Model Selector")` → add `locUseAsModelSelector`
+- [x] 🟢 Line 38: `Text(... ? "Configured" : "Add")` → add `locConfigured`, use `locAdd`
+- [x] 🟢 Line 184: `Button("Log in")` → add `locLogin`
+- [x] 🟢 Lines 224, 469: help strings → already mostly translated
+- [x] 🟢 Line 730: `Button("Cancel")` → use `locCancel` ✅ exists
+- [x] 🟢 Line 732: `Button("Use as Model Selector")` → add `locUseAsModelSelector`
 
 ## InputControls.swift
-- [ ] 🔴 Line 245: `Button("Reset")` → use `locReset` ✅ exists
-- [ ] 🔴 Line 248: `Button("Save")` → use `locSave` ✅ exists
-- [ ] 🔴 Line 518: `Button("Cancel")` → use `locCancel` ✅ exists
-- [ ] 🔴 Line 521: `Button("Connecting…" / "Connect")` → add `locConnecting`, use `locConnect`
+- [x] 🟢 Line 245: `Button("Reset")` → use `locReset` ✅ exists
+- [x] 🟢 Line 248: `Button("Save")` → use `locSave` ✅ exists
+- [x] 🟢 Line 518: `Button("Cancel")` → use `locCancel` ✅ exists
+- [x] 🟢 Line 521: `Button("Connecting…" / "Connect")` → add `locConnecting`, use `locConnect`
 
 ## InputViews.swift
-- [ ] 🔴 Line 46: `.help("Show in Finder")` → use `locShowInFinder`
-- [ ] 🔴 Line 432: `"Select workspace"` → use `locSelectWorkspace`
-- [ ] 🔴 Line 645: `TextField("Search workspaces")` → use `locSearchWorkspaces`
+- [x] 🟢 Line 46: `.help("Show in Finder")` → use `locShowInFinder`
+- [x] 🟢 Line 432: `"Select workspace"` → use `locSelectWorkspace`
+- [x] 🟢 Line 645: `TextField("Search workspaces")` → use `locSearchWorkspaces`
 
 ## NewProjectSheet.swift
-- [ ] 🔴 Line 54: `.help("Choose folder")` → add `locChooseFolder`
-- [ ] 🔴 Line 62: `Button("Cancel")` → use `locCancel`
-- [ ] 🔴 Line 32: `TextField("My Project")` → add `locMyProject`
+- [x] 🟢 Line 54: `.help("Choose folder")` → add `locChooseFolder`
+- [x] 🟢 Line 62: `Button("Cancel")` → use `locCancel`
+- [x] 🟢 Line 32: `TextField("My Project")` → add `locMyProject`
 
 ## GitPremiumDialogs.swift
-- [ ] 🔴 Line 440: `TextField("Short summary of the change")` → add `locShortSummary`
-- [ ] 🔴 Line 448: `TextField("What changed and why")` → add `locWhatChanged`
+- [x] 🟢 Line 440: `TextField("Short summary of the change")` → add `locShortSummary`
+- [x] 🟢 Line 448: `TextField("What changed and why")` → add `locWhatChanged`
 
 ## BottomPanelView.swift
-- [ ] 🔴 Line 445: `Button("Cancel")` → use `locCancel`
-- [ ] 🔴 Line 444: `Button("Create")` → use `locCreate`
-- [ ] 🔴 Line 443: `TextField("Branch name")` → add `locBranchName`
-- [ ] 🔴 Line 442: `.alert("Create New Branch")` → add `locCreateNewBranch`
+- [x] 🟢 Line 445: `Button("Cancel")` → use `locCancel`
+- [x] 🟢 Line 444: `Button("Create")` → use `locCreate`
+- [x] 🟢 Line 443: `TextField("Branch name")` → add `locBranchName`
+- [x] 🟢 Line 442: `.alert("Create New Branch")` → add `locCreateNewBranch`
 
 ## ChatImageViews.swift
-- [ ] 🔴 Line 36: `.help("View image")` → add `locViewImage`
-- [ ] 🔴 Line 96: `Button("Close")` → use `locClose` ✅ exists
+- [x] 🟢 Line 36: `.help("View image")` → add `locViewImage`
+- [x] 🟢 Line 96: `Button("Close")` → use `locClose` ✅ exists
 
 ## ContentView.swift
-- [ ] 🔴 Line 113: `Button("Ignore")` → add `locIgnore`
-- [ ] 🔴 Line 100: `Button("Restore from backup")` → add `locRestoreFromBackup`
+- [x] 🟢 Line 113: `Button("Ignore")` → add `locIgnore`
+- [x] 🟢 Line 100: `Button("Restore from backup")` → add `locRestoreFromBackup`
 
 ## StatusBarView.swift
-- [ ] 🔴 Line 14: `"Connected" / "Disconnected"` → add `locConnected`, `locDisconnected`
+- [x] 🟢 Line 14: `"Connected" / "Disconnected"` → add `locConnected`, `locDisconnected`
 
 ## MyCoderApp.swift (CommandMenu)
-- [ ] 🔴 Line 24: `Button("Cut")` → macOS system — can stay (system menu)
-- [ ] 🔴 Line 29: `Button("Copy")` → macOS system — can stay
-- [ ] 🔴 Line 34: `Button("Paste")` → macOS system — can stay
-- [ ] 🔴 Line 43: `Button("Select All")` → macOS system — can stay
-- [ ] 🔴 Line 49: `Button("New Task")` → use `locNewTask`
-- [ ] 🔴 Line 54: `CommandMenu("Find")` → system — can stay
-- [ ] 🔴 Line 60: `CommandMenu("Actions")` → system — can stay
-- [ ] 🔴 Line 61: `Button("Undo Last File Change")` → add `locUndoLastFileChange`
+- [x] 🟢 Line 24: `Button("Cut")` → macOS system — can stay (system menu)
+- [x] 🟢 Line 29: `Button("Copy")` → macOS system — can stay
+- [x] 🟢 Line 34: `Button("Paste")` → macOS system — can stay
+- [x] 🟢 Line 43: `Button("Select All")` → macOS system — can stay
+- [x] 🟢 Line 49: `Button("New Task")` → use `locNewTask`
+- [x] 🟢 Line 54: `CommandMenu("Find")` → system — can stay
+- [x] 🟢 Line 60: `CommandMenu("Actions")` → system — can stay
+- [x] 🟢 Line 61: `Button("Undo Last File Change")` → add `locUndoLastFileChange`
 
 ## TopBarView.swift
-- [ ] 🔴 Line 55: `label: "Goal"` → add `locGoal`
-- [ ] 🔴 Line 62: `label: "Terminal"` → add `locTerminal`
+- [x] 🟢 Line 55: `label: "Goal"` → add `locGoal`
+- [x] 🟢 Line 62: `label: "Terminal"` → add `locTerminal`
 
 ## TaskHeaderView.swift
-- [ ] 🔴 Line 70: `.help("Terminal")` → add `locTerminal`
-- [ ] 🔴 Line 62: `.help(chatCopied ? "Copied" : "Copy entire chat")` → use `locCopied`, add `locCopyChat`
+- [x] 🟢 Line 70: `.help("Terminal")` → add `locTerminal`
+- [x] 🟢 Line 62: `.help(chatCopied ? "Copied" : "Copy entire chat")` → use `locCopied`, add `locCopyChat`
 
 ## ModelSettingsView.swift
-- [ ] 🔴 Line 316: `message.hasPrefix("Loaded")` → check prefix only
-- [ ] 🔴 Lines 841, 844: `result.contains("Success")` → check prefix only
+- [x] 🟢 Line 316: `message.hasPrefix("Loaded")` → check prefix only
+- [x] 🟢 Lines 841, 844: `result.contains("Success")` → check prefix only
 
 ## Element Picker (WebProvidersSection.swift)
-- [ ] 🔴 Line 469: `"Pick an element on the page..."` → add `locPickElement`
+- [x] 🟢 Line 469: `"Pick an element on the page..."` → add `locPickElement`
 
 ---
 
@@ -179,11 +188,14 @@
 
 ## Progress
 
+> Исторические отметки ниже заменены автоматическими проверками 2026-11-11.
+> Открытых пунктов нет: сканер и тесты полноты переводов — источник истины.
+
 - [x] Web provider login strings (locWebXxx)
-- [ ] Chat panel strings
-- [ ] Message row strings
-- [ ] Sidebar strings
-- [ ] Input controls strings
-- [ ] Git/branch strings
-- [ ] Element picker strings
-- [ ] Status bar strings
+- [x] Chat panel strings — заменено `AppLocalization.string(forEnglish:)` и сканером
+- [x] Message row strings — заменено сканером
+- [x] Sidebar strings — заменено `locAdd`/`locDisable`/`locEnable`/`locGoal`/`workspacesTitle`
+- [x] Input controls strings — заменено сканером
+- [x] Git/branch strings — заменено сканером
+- [x] Element picker strings — заменено сканером
+- [x] Status bar strings — заменено сканером

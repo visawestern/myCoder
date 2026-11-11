@@ -61,6 +61,7 @@ struct WebModelLLMDiscoveryTests {
         #expect(messages[0].role == "system")
         #expect(messages[0].content.contains("JSON"))
         #expect(messages[0].content.contains("models"))
+        #expect(messages[0].content.contains("every distinct model name"))
         #expect(messages[1].content.contains("Kimi K3"))
     }
 

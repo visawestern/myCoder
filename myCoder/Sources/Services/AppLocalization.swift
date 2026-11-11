@@ -2,26 +2,40 @@ import Foundation
 
 enum AppLocalization {
     static func string(forEnglish english: String, language: AppLanguage) -> String {
-        if let key = translations.first(where: { $0.value["en"] == english }).flatMap({ AppLocalizationKey(rawValue: $0.key) }) {
-            return string(key, language: language)
+        let matches = translations.filter { $0.value["en"] == english }
+        // Several keys can share the same English label. Prefer a real
+        // AppLocalizationKey (the canonical translation) and break ties by
+        // key name so the result never depends on dictionary order.
+        guard let entry = matches
+            .min(by: { rank($0.key) < rank($1.key) })?
+            .value else {
+            return english
         }
-        return english
+        return value(in: entry, language: language) ?? entry["en"] ?? english
+    }
+
+    private static func rank(_ key: String) -> (Int, String) {
+        (AppLocalizationKey(rawValue: key) == nil ? 1 : 0, key)
+    }
+
+    private static func value(in entry: [String: String], language: AppLanguage) -> String? {
+        switch language {
+        case .english: return entry["en"]
+        case .russian: return entry["ru"] ?? entry["en"]
+        case .spanish: return entry["es"] ?? entry["en"]
+        case .french: return entry["fr"] ?? entry["en"]
+        case .german: return entry["de"] ?? entry["en"]
+        case .chineseSimplified: return entry["zh"] ?? entry["en"]
+        case .japanese: return entry["ja"] ?? entry["en"]
+        case .korean: return entry["ko"] ?? entry["en"]
+        case .portuguese: return entry["pt"] ?? entry["en"]
+        case .arabic: return entry["ar"] ?? entry["en"]
+        }
     }
 
     static func string(_ key: AppLocalizationKey, language: AppLanguage) -> String {
         guard let entry = translations[key.rawValue] else { return key.rawValue }
-        switch language {
-        case .english: return entry["en"] ?? key.rawValue
-        case .russian: return entry["ru"] ?? entry["en"] ?? key.rawValue
-        case .spanish: return entry["es"] ?? entry["en"] ?? key.rawValue
-        case .french: return entry["fr"] ?? entry["en"] ?? key.rawValue
-        case .german: return entry["de"] ?? entry["en"] ?? key.rawValue
-        case .chineseSimplified: return entry["zh"] ?? entry["en"] ?? key.rawValue
-        case .japanese: return entry["ja"] ?? entry["en"] ?? key.rawValue
-        case .korean: return entry["ko"] ?? entry["en"] ?? key.rawValue
-        case .portuguese: return entry["pt"] ?? entry["en"] ?? key.rawValue
-        case .arabic: return entry["ar"] ?? entry["en"] ?? key.rawValue
-        }
+        return value(in: entry, language: language) ?? key.rawValue
     }
 
     static func settingsTabName(_ tab: SettingsTab, language: AppLanguage) -> String {
@@ -69,7 +83,7 @@ enum AppLocalization {
     @_optimize(none)
     private static func makeTranslations() -> [String: [String: String]] {
         var merged: [String: [String: String]] = [:]
-        for part in [translationsPart1(), translationsPart2()] {
+        for part in [translationsPart1(), translationsPart2(), translationsPart3()] {
             for (key, value) in part { merged[key] = value }
         }
         return merged

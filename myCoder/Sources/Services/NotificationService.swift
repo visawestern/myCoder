@@ -95,6 +95,12 @@ enum NotificationAction: Equatable {
 
 // MARK: - Notification Service
 
+/// UI-facing notification list. `@Published` is not thread-safe, so the
+/// whole service is main-actor isolated: every mutation happens on the main
+/// thread and the compiler rejects background calls. A test that mutated it
+/// from `DispatchQueue.global()` crashed the full suite with SIGSEGV
+/// (2026-11-11); that race was the test's, not the model's.
+@MainActor
 final class NotificationService: ObservableObject {
     @Published var notifications: [AppNotification] = []
     @Published private(set) var unreadCount: Int = 0
@@ -155,7 +161,11 @@ final class NotificationService: ObservableObject {
     
     private func startPruneTimer() {
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            self?.pruneExpiredRead()
+            // The timer is scheduled from a main-actor init on the main run
+            // loop, but the closure itself is nonisolated; hop explicitly.
+            Task { @MainActor in
+                self?.pruneExpiredRead()
+            }
         }
     }
     

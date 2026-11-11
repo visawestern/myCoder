@@ -44,10 +44,10 @@ struct LocalProvidersSection: View {
             // Optional basic-auth for locked servers (`opencode serve`
             // answers 401 on every endpoint without it).
             HStack(spacing: 8) {
-                TextField("Username (optional)", text: $detectUsername)
+                TextField(L.t("Username (optional)"), text: $detectUsername)
                     .zcodeTextFieldStyle()
                     .interfaceFont(size: 12)
-                SecureField("Password (optional)", text: $detectPassword)
+                SecureField(L.t("Password (optional)"), text: $detectPassword)
                     .zcodeTextFieldStyle()
                     .interfaceFont(size: 12)
             }
@@ -340,11 +340,11 @@ struct LocalProviderRow: View {
             // (verified live) — credentials live here, password in Keychain.
             if config.kind == .openCode {
                 HStack(spacing: 8) {
-                    TextField("Username (default: opencode)", text: $username)
+                    TextField(L.t("Username (default: opencode)"), text: $username)
                         .zcodeTextFieldStyle()
                         .interfaceFont(size: 12)
                         .onSubmit { commitCredentials() }
-                    SecureField("Password (OPENCODE_SERVER_PASSWORD)", text: $password)
+                    SecureField(L.t("Password (OPENCODE_SERVER_PASSWORD)"), text: $password)
                         .zcodeTextFieldStyle()
                         .interfaceFont(size: 12)
                         .onSubmit { commitCredentials() }

@@ -99,13 +99,13 @@ struct ModelRoutingMenu: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Режим маршрутизации")
+            Text(L.t("Routing mode"))
                 .interfaceFont(size: 10, weight: .semibold)
                 .foregroundColor(Color.mimo.textMuted)
-            modeRow(.single, title: "Единая модель",
-                    subtitle: "Все роли выполняет модель из селектора рядом.")
-            modeRow(.perRole, title: "Маршруты по ролям",
-                    subtitle: "Для каждой роли — свой провайдер и модель; скрытый fallback запрещён.")
+            modeRow(.single, title: L.t("Single model"),
+                    subtitle: L.t("Every role uses the model from the selector next to it."))
+            modeRow(.perRole, title: L.t("Per-role routes"),
+                    subtitle: L.t("Each role gets its own provider and model; hidden fallback is forbidden."))
         }
     }
 
@@ -136,11 +136,11 @@ struct ModelRoutingMenu: View {
 
     private var scopeSection: some View {
         HStack(spacing: 6) {
-            Text("Область:")
+            Text(L.t("Scope:"))
                 .interfaceFont(size: 10)
                 .foregroundColor(Color.mimo.textMuted)
-            scopeButton("Проект", isChat: false)
-            scopeButton("Чат", isChat: true)
+            scopeButton(L.t(AppLocalizationKey.locGoal), isChat: false)
+            scopeButton(L.t("Chat"), isChat: true)
             Spacer()
         }
         .padding(.top, 2)
@@ -163,7 +163,7 @@ struct ModelRoutingMenu: View {
         }
         .buttonStyle(HandCursorButtonStyle())
         .disabled(isChat && sessionID() == nil)
-        .help(isChat && sessionID() == nil ? "Сначала выберите чат" : "")
+        .help(isChat && sessionID() == nil ? L.t("Select a chat first") : "")
     }
 
     private var bulkSection: some View {
@@ -176,7 +176,7 @@ struct ModelRoutingMenu: View {
                 }
                 save()
             } label: {
-                Text("Применить ко всем")
+                Text(L.t("Apply to all"))
                     .interfaceFont(size: 10, weight: .medium)
                     .foregroundColor(Color.mimo.brand)
             }
@@ -186,7 +186,7 @@ struct ModelRoutingMenu: View {
                 appState.modelRoutingConfiguration = appState.modelRoutingConfiguration.changingMode(to: .single)
                 save()
             } label: {
-                Text("Сбросить к единой")
+                Text(L.t("Reset to single"))
                     .interfaceFont(size: 10, weight: .medium)
                     .foregroundColor(Color.mimo.textSecondary)
             }
@@ -202,7 +202,7 @@ struct ModelRoutingMenu: View {
             primary: appState.primaryModelAssignment()
         )
         return VStack(alignment: .leading, spacing: 3) {
-            Text("Цепочка хода (\(appState.agentMode.rawValue)):")
+            Text(L.t("Turn chain (%@):", appState.agentMode.rawValue))
                 .interfaceFont(size: 10, weight: .semibold)
                 .foregroundColor(Color.mimo.textMuted)
             Text(graph.chainPreview)
@@ -216,7 +216,7 @@ struct ModelRoutingMenu: View {
                 }
             }
             if appState.modelRoutingUsesMultipleProviders() {
-                Label("Цепочка отправляет данные нескольким провайдерам. Проверьте, что это допустимо для вашего кода и данных.",
+                Label(L.t("The chain sends data to several providers. Check that this is allowed for your code and data."),
                       systemImage: "exclamationmark.triangle.fill")
                     .interfaceFont(size: 9)
                     .foregroundColor(.orange)
@@ -277,11 +277,11 @@ struct ModelRoutingMenu: View {
                             .foregroundColor(Color.mimo.textMuted)
                     }
                     .buttonStyle(HandCursorButtonStyle())
-                    .help("Сбросить роль к единой модели")
+                    .help(L.t("Reset role to a single model"))
                 }
             }
             if override == nil {
-                Text("= единая (\(effective.providerID)/\(effective.modelID))")
+                Text(L.t("= single (%@/%@)", effective.providerID, effective.modelID))
                     .interfaceFont(size: 9)
                     .foregroundColor(Color.mimo.textMuted)
             }
@@ -330,7 +330,7 @@ struct ModelRoutingMenu: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(override.map { "\($0.providerID)/\($0.modelID)" } ?? "Выбрать…")
+                Text(override.map { "\($0.providerID)/\($0.modelID)" } ?? L.t("Select…"))
                     .interfaceFont(size: 10)
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
@@ -353,23 +353,23 @@ struct ModelRoutingMenu: View {
     /// Зависимости: `RoleTransportResolver`, `CustomProvider.getSecureAPIKey`.
     private func assignmentWarning(for assignment: ModelAssignment, available: [String: [String]]) -> String? {
         guard assignment.isComplete else {
-            return "Модель не выбрана — отправка завершится честной ошибкой."
+            return L.t("No model selected — sending will end with an honest error.")
         }
         let context = appState.roleTransportContext()
         switch RoleTransportResolver.kind(for: assignment, context: context) {
         case .webUnsupported(let configID):
-            return "Веб-провайдер «\(configID)» не умеет одноразовые запросы ролей. Назначьте прямой провайдер/модель."
+            return L.t("Web provider “%@” cannot make one-shot role requests. Assign a direct provider/model.", configID)
         case .unresolved:
-            return "Провайдер «\(assignment.providerID)» недоступен, отключён или модель удалена."
+            return L.t("Provider “%@” is unavailable, disabled, or its model was removed.", assignment.providerID)
         case .openAICompatible, .openCodeServe, .mimoServe, .acp:
             break
         }
         if !(available[assignment.providerID]?.contains(assignment.modelID) ?? false) {
-            return "Модели \(assignment.modelID) нет в каталоге провайдера \(assignment.providerID)."
+            return L.t("Model %@ is not in the provider %@ catalog.", assignment.modelID, assignment.providerID)
         }
         if let custom = appState.customProviders.first(where: { $0.id == assignment.providerID }),
            (custom.getSecureAPIKey() ?? "").isEmpty {
-            return "У провайдера \(custom.name) не задан API-ключ — отправка завершится ошибкой."
+            return L.t("Provider %@ has no API key — sending will fail.", custom.name)
         }
         return nil
     }
@@ -379,12 +379,12 @@ struct ModelRoutingMenu: View {
     private var journalSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Журнал выполненного маршрута")
+                Text(L.t("Routing journal"))
                     .interfaceFont(size: 10, weight: .semibold)
                     .foregroundColor(Color.mimo.textMuted)
                 Spacer()
                 if !appState.modelRouteJournal.isEmpty {
-                    Button("Очистить") {
+                    Button(L.t("Clear")) {
                         if let sessionID = sessionID() {
                             ModelRouteJournalStore().clear(sessionID: sessionID)
                         }
@@ -395,7 +395,7 @@ struct ModelRoutingMenu: View {
                 }
             }
             if appState.modelRouteJournal.isEmpty {
-                Text("Пусто: выполненные узлы появятся здесь после routed-хода.")
+                Text(L.t("Empty: completed nodes will appear here after a routed turn."))
                     .interfaceFont(size: 9)
                     .foregroundColor(Color.mimo.textMuted)
             } else {

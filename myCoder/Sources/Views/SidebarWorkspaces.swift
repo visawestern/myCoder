@@ -165,7 +165,7 @@ struct WorkspacesSectionHeader: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Filter: \(appState.workspaceFilterPreset.rawValue)")
+        .help(L.t("Filter: %@", appState.workspaceFilterPreset.rawValue))
     }
 
     private var searchButton: some View {
@@ -194,7 +194,7 @@ struct WorkspacesSectionHeader: View {
                 .foregroundColor(Color.mimo.textMuted)
         }
         .buttonStyle(HandCursorButtonStyle())
-        .help("Toggle list/grid view")
+        .help(L.t("Toggle list/grid view"))
     }
 }
 

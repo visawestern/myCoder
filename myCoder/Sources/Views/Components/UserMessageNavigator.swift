@@ -28,7 +28,7 @@ struct UserMessageNavigator: View {
                            enabled: currentIndex != nil && currentIndex != 0) {
                     jump(direction: .up)
                 }
-                .accessibilityLabel("Previous message")
+                .accessibilityLabel(L.t("Previous message"))
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(.vertical, showsIndicators: false) {
@@ -57,7 +57,7 @@ struct UserMessageNavigator: View {
                            enabled: currentIndex != nil && currentIndex != userMessages.count - 1) {
                     jump(direction: .down)
                 }
-                .accessibilityLabel("Next message")
+                .accessibilityLabel(L.t("Next message"))
             }
             .frame(width: 24)
             .frame(maxHeight: 280)
@@ -86,7 +86,7 @@ struct UserMessageNavigator: View {
                 .allowsHitTesting(false)
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Your messages")
+            .accessibilityLabel(L.t("Your messages"))
         }
     }
 
@@ -185,7 +185,7 @@ struct UserMessageNavigator: View {
             key: UserMessageNavigatorAnchors.self,
             value: .bounds
         ) { [message.id: $0] }
-        .accessibilityLabel("Your message \(index + offset + 1)")
+        .accessibilityLabel(L.t("Your message %d", index + offset + 1))
         .accessibilityValue(UserMessageNavigatorLogic.preview(for: message))
     }
 

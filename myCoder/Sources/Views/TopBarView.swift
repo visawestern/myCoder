@@ -19,7 +19,7 @@ struct TopBarView: View {
                     .foregroundColor(appState.sidebarVisible ? Color.mimo.brand : Color.mimo.textSecondary)
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help("Workspaces")
+            .help(L.t(AppLocalizationKey.workspacesTitle))
 
             // Session title — only when session is selected
             if let session = appState.selectedSession {
@@ -251,7 +251,7 @@ struct ChatPanelCompactHeader: View {
                     .foregroundColor(appState.sidebarVisible ? Color.mimo.brand : Color.mimo.textSecondary)
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help("Workspaces")
+            .help(L.t(AppLocalizationKey.workspacesTitle))
 
             Spacer()
 
@@ -261,7 +261,7 @@ struct ChatPanelCompactHeader: View {
                     .foregroundColor(appState.showGoal ? Color.mimo.brand : Color.mimo.textSecondary)
             }
             .buttonStyle(HandCursorButtonStyle())
-            .help("Git tools & progress")
+            .help(L.t("Git tools & progress"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

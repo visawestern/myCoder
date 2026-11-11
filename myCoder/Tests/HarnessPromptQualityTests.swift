@@ -194,4 +194,79 @@ struct HarnessPromptQualityTests {
         #expect(guidance.contains("contradict"))
         #expect(guidance.contains("before you build") || guidance.contains("before building"))
     }
+
+    // MARK: - Claude Fable 5.2-style response conduct (merged)
+
+    @Test("Стиль ответов из Claude Fable 5.2 попадает в нативный системный промпт")
+    func responseConductAppearsInNativeSystem() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        // Bottom-line-first, честность, автономность, отсутствие навязчивости.
+        #expect(lower.contains("main point first"))
+        #expect(lower.contains("never claim"))
+        #expect(lower.contains("own mistakes"))
+        #expect(lower.contains("autonomously"))
+        #expect(lower.contains("do not urge"))
+        #expect(lower.contains("do not invent"))
+    }
+
+    @Test("Блок поведения остаётся компактным")
+    func responseConductIsCompact() {
+        #expect(HarnessPromptQuality.responseConduct.utf8.count <= 1_200,
+                "responseConduct разросся: \(HarnessPromptQuality.responseConduct.utf8.count)")
+    }
+
+    @Test("Web/OpenAI-совместимая ветка несёт компактную строку поведения")
+    func webRouteCarriesCompactConduct() {
+        let prompt = TurnDelivery.systemInstruction(
+            route: .openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = prompt.lowercased()
+        #expect(lower.contains("state the main point first"))
+        #expect(lower.contains("never claim a result before its tool result"))
+        #expect(lower.contains("bypass host safety"))
+    }
+
+    @Test("Промпт субагента честен и не выходит за границы роли")
+    func subagentSystemCarriesHonestyAndScope() {
+        let prompt = HarnessPromptQuality.subagentSystem(description: "Trace the parser")
+        let lower = prompt.lowercased()
+        #expect(lower.contains("do not invent"))
+        #expect(lower.contains("read-only"))
+        #expect(lower.contains("parent"))
+    }
+
+    // MARK: - Compactness guards
+
+    @Test("Нативный базовый промпт не раздувается")
+    func nativeBaseStaysCompact() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: false, agentMode: .build)
+        #expect(native.utf8.count <= 12_000,
+                "нативный базовый системный промпт слишком большой: \(native.utf8.count)")
+    }
+
+    @Test("Минимальный профиль веб-промпта остаётся компактным")
+    func minimalProfileStaysCompact() {
+        let prompt = TurnDelivery.systemInstruction(
+            route: .openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            userRules: "", projectRoot: "/project",
+            isProject: false, agentMode: .build, profile: .minimal)
+        #expect(prompt.utf8.count <= 18_000,
+                "минимальный профиль слишком большой: \(prompt.utf8.count)")
+    }
+
+    @Test("Полный веб-промпт существенно меньше целевых 65 000")
+    func fullWebPromptStaysUnderBudget() {
+        let prompt = TurnDelivery.systemInstruction(
+            route: .openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            userRules: "", projectRoot: "/project",
+            isProject: false, agentMode: .build)
+        #expect(prompt.utf8.count <= 42_000,
+                "полный системный промпт превысил бюджет: \(prompt.utf8.count)")
+    }
 }

@@ -237,7 +237,7 @@ extension StorageSettingsView {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "mycoder-app-configuration.json"
         panel.canCreateDirectories = true
-        panel.prompt = "Export"
+        panel.prompt = L.t("Export")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let succeeded = AppConfigurationBackupStore.export(
             defaults: appState.defaults,
@@ -255,7 +255,7 @@ extension StorageSettingsView {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.json]
-        panel.prompt = "Import"
+        panel.prompt = L.t("Import")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard AppConfigurationTransferLogic.importRequiresConfirmation else {
             performAppConfigurationImport(from: url)

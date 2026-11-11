@@ -298,56 +298,66 @@ enum SymbolNameExtractor {
     /// mentioned inside a comment or a string literal is not reported.
     /// Newlines are preserved, so line numbers of real code do not shift.
     private static func mask(_ text: String, language: String) -> String {
-        let chars = Array(text)
-        guard !chars.isEmpty else { return text }
-        var out = chars
-        let lineTokens = lineCommentTokens(for: language)
-        let blockTokens = blockCommentTokens(for: language)
-        let quotes = quoteCharacters(for: language)
-        let tripleQuoted = language == "python"
+        // Byte-level walk. The board is rebuilt on every send and preview, so
+        // this runs over the whole indexed project (12 MB on myCoder itself).
+        // Building `Array(token)` inside `matches` per character made the walk
+        // allocate millions of tiny arrays: masking one 700 KB file took 1.2 s
+        // and the real board needed 22.8 s (live preview audit 2026-11-11).
+        // Tokens are converted to bytes once; replacing a non-newline byte
+        // with a space keeps the output valid UTF-8.
+        let bytes = Array(text.utf8)
+        guard !bytes.isEmpty else { return text }
+        var out = bytes
+        let lineTokens = lineCommentTokens(for: language).map { Array($0.utf8) }
+        let blockTokens = blockCommentTokens(for: language).map {
+            (Array($0.0.utf8), Array($0.1.utf8))
+        }
+        let quotes = Set(quoteCharacters(for: language).compactMap { $0.asciiValue })
+        let tripleTokens: [[UInt8]] = language == "python"
+            ? [Array("\"\"\"".utf8), Array("'''".utf8)]
+            : []
 
         var index = 0
-        let count = chars.count
+        let count = bytes.count
         while index < count {
-            let character = chars[index]
-            if character == "\n" {
+            let byte = bytes[index]
+            if byte == 10 { // "\n"
                 index += 1
                 continue
             }
             // Block comment.
-            if let token = blockTokens.first(where: { matches(chars, at: index, token: $0.0) }) {
-                let end = find(chars, from: index + token.0.count, token: token.1) ?? count
+            if let token = blockTokens.first(where: { matches(bytes, at: index, token: $0.0) }) {
+                let end = find(bytes, from: index + token.0.count, token: token.1) ?? count
                 blank(&out, from: index, to: end)
                 index = end
                 continue
             }
             // Line comment.
-            if let token = lineTokens.first(where: { matches(chars, at: index, token: $0) }) {
+            if let token = lineTokens.first(where: { matches(bytes, at: index, token: $0) }) {
                 var end = index
-                while end < count && chars[end] != "\n" { end += 1 }
+                while end < count && bytes[end] != 10 { end += 1 }
                 blank(&out, from: index, to: end)
                 index = end
                 continue
             }
             // Triple-quoted string (python).
-            if tripleQuoted,
-               let token = ["\"\"\"", "'''"].first(where: { matches(chars, at: index, token: $0) }) {
+            if let token = tripleTokens.first(where: { matches(bytes, at: index, token: $0) }) {
                 var end = index + token.count
-                while end < count && !matches(chars, at: end, token: token) { end += 1 }
+                while end < count && !matches(bytes, at: end, token: token) { end += 1 }
                 end = min(end + token.count, count)
                 blank(&out, from: index, to: end)
                 index = end
                 continue
             }
             // Single-line string.
-            if quotes.contains(character) {
+            if quotes.contains(byte) {
                 var end = index + 1
-                while end < count && chars[end] != "\n" {
-                    if chars[end] == "\\" {
+                while end < count && bytes[end] != 10 {
+                    if bytes[end] == 92 { // "\\"
                         end += 2
                         continue
                     }
-                    if chars[end] == character {
+                    if bytes[end] == byte {
                         end += 1
                         break
                     }
@@ -360,7 +370,7 @@ enum SymbolNameExtractor {
             }
             index += 1
         }
-        return String(out)
+        return String(decoding: out, as: UTF8.self)
     }
 
     private static func lineCommentTokens(for language: String) -> [String] {
@@ -394,29 +404,29 @@ enum SymbolNameExtractor {
         }
     }
 
-    private static func matches(_ chars: [Character], at index: Int, token: String) -> Bool {
-        let tokenChars = Array(token)
-        guard index + tokenChars.count <= chars.count else { return false }
-        for offset in 0..<tokenChars.count where chars[index + offset] != tokenChars[offset] {
+    private static func matches(_ bytes: [UInt8], at index: Int, token: [UInt8]) -> Bool {
+        guard !token.isEmpty, index >= 0, index + token.count <= bytes.count else { return false }
+        for offset in 0..<token.count where bytes[index + offset] != token[offset] {
             return false
         }
         return true
     }
 
-    private static func find(_ chars: [Character], from start: Int, token: String) -> Int? {
-        var index = start
-        while index < chars.count {
-            if matches(chars, at: index, token: token) { return index }
+    private static func find(_ bytes: [UInt8], from start: Int, token: [UInt8]) -> Int? {
+        guard !token.isEmpty else { return nil }
+        var index = max(0, start)
+        while index + token.count <= bytes.count {
+            if matches(bytes, at: index, token: token) { return index }
             index += 1
         }
         return nil
     }
 
-    private static func blank(_ chars: inout [Character], from start: Int, to end: Int) {
+    private static func blank(_ bytes: inout [UInt8], from start: Int, to end: Int) {
         var index = max(0, start)
-        let stop = min(end, chars.count)
+        let stop = min(end, bytes.count)
         while index < stop {
-            if chars[index] != "\n" { chars[index] = " " }
+            if bytes[index] != 10 { bytes[index] = 32 }
             index += 1
         }
     }

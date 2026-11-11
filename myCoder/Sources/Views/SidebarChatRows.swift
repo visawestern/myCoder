@@ -143,7 +143,7 @@ struct SessionTaskRow: View {
             // Session content
             if isRenaming {
                 HStack(spacing: 6) {
-                    TextField("Chat title", text: $renameText)
+                    TextField(L.t("Chat title"), text: $renameText)
                         .textFieldStyle(.plain)
                         .interfaceFont(size: 12)
                         .foregroundColor(Color.mimo.textPrimary)
@@ -161,7 +161,7 @@ struct SessionTaskRow: View {
                             .foregroundColor(Color.mimo.cyan)
                     }
                     .buttonStyle(HandCursorButtonStyle())
-                    .help("Save title")
+                    .help(L.t("Save title"))
 
                     Button(action: { isRenaming = false }) {
                         Image(systemName: "xmark")
@@ -169,7 +169,7 @@ struct SessionTaskRow: View {
                             .foregroundColor(Color.mimo.textMuted)
                     }
                     .buttonStyle(HandCursorButtonStyle())
-                    .help("Cancel rename")
+                    .help(L.t("Cancel rename"))
                 }
             } else {
                 Button(action: { appState.selectSession(session) }) {
@@ -216,14 +216,14 @@ struct SessionTaskRow: View {
                     .buttonStyle(HandCursorButtonStyle())
                     
                     Menu {
-                        Button("Rename…") {
+                        Button(L.t("Rename…")) {
                             renameText = session.title
                             isRenaming = true
                         }
                         ShareLink(item: appState.sessionTranscriptMarkdown(sessionId: session.id) ?? session.title) {
-                            Text("Share transcript")
+                            Text(L.t("Share transcript"))
                         }
-                        Button("Export transcript…") {
+                        Button(L.t("Export transcript…")) {
                             appState.exportSessionTranscript(sessionId: session.id)
                         }
                         Divider()
@@ -239,7 +239,7 @@ struct SessionTaskRow: View {
                             appState.archiveSessionInDatabaseUI(id: session.id)
                         }
                         Divider()
-                        Button("Delete…", role: .destructive) {
+                        Button(L.t("Delete…"), role: .destructive) {
                             showingDeleteConfirm = true
                         }
                     } label: {
@@ -268,13 +268,13 @@ struct SessionTaskRow: View {
         .onReceive(appState.$pendingQuestionRequest) { _ in
             refreshAttention()
         }
-        .alert("Delete this chat?", isPresented: $showingDeleteConfirm) {
-            Button("Delete", role: .destructive) {
+        .alert(L.t("Delete this chat?"), isPresented: $showingDeleteConfirm) {
+            Button(L.t(AppLocalizationKey.locDelete), role: .destructive) {
                 appState.deleteSessionInDatabaseUI(id: session.id)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L.t(AppLocalizationKey.locCancel), role: .cancel) {}
         } message: {
-            Text("This permanently removes the chat and its messages from the local database. It cannot be undone.")
+            Text(L.t("This permanently removes the chat and its messages from the local database. It cannot be undone."))
         }
     }
 }
