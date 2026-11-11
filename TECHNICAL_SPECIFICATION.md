@@ -65,6 +65,13 @@ myCoder/
 - `MarkdownText` — лёгкий Markdown-рендер (блоки, inline, таблицы, код, списки).
 - `MimoServeClient` / `DirectWebAPIClient` / `SSEClient` — API-клиенты и веб-транспорты.
 
+Правило размера модуля: каждый исходный файл — не более 600 строк. Крупные
+модули разделены на файл-класс и файлы-расширения по доменам (`AppState` +
+`AppState+…`, `ChatPanelView` + `ChatPanelView+…`, `MyCoderAPIServer` +
+`MyCoderAPIServer+…`), а тесты-инспекторы читают семейство файлов целиком,
+поэтому разбиение не прячет код от проверок. Ограничение закреплено
+храповиком `ModuleSizeRatchetTests`.
+
 ---
 
 ## 4. Активности и возможности
