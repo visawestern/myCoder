@@ -7,20 +7,16 @@ extension MyCoderAPIServer {
     /// range, whether the bottom is visible, the last command, and (with
     /// `?samples=1`) recent offset samples. This is the read side of the
     /// scroll diagnostics.
-    func handleScroll(query: String = "") -> String {
+    func handleScroll(query: String = "") async -> String {
         let sampleLimit = query.components(separatedBy: "&")
             .first(where: { $0.hasPrefix("samples=") })
             .flatMap { Int($0.dropFirst("samples=".count)) } ?? 0
-        let semaphore = DispatchSemaphore(value: 0)
-        var state: [String: Any] = ["error": "scroll state timed out"]
-        Task { @MainActor in
-            state = ChatScrollBridge.shared.state(
+        let state = await Self.mainRead {
+            ChatScrollBridge.shared.state(
                 includeSamples: sampleLimit > 0,
                 sampleLimit: sampleLimit > 0 ? min(sampleLimit, 200) : 0
             )
-            semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 10)
         return jsonResponse(state)
     }
 
@@ -31,23 +27,20 @@ extension MyCoderAPIServer {
     ///     "times": 40,              // wheel only
     ///     "intervalMs": 16,         // wheel only
     ///     "anchor": "<messageId>" } // toAnchor only
-    func handleScroll(body: String, query: String = "") -> String {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: [String: Any] = ["error": "scroll command timed out"]
+    func handleScroll(body: String, query: String = "") async -> String {
         let data = body.data(using: .utf8)
         let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         let action = json?["action"] as? String ?? ""
         let receivedAt = Date()
-        Task { @MainActor in
-            defer { semaphore.signal() }
+        let result = await Self.mainRead { () -> [String: Any] in
             let taskStartedAt = Date()
+            var result: [String: Any] = [:]
             result["diag"] = [
                 "waitMs": (taskStartedAt.timeIntervalSince(receivedAt) * 1000).rounded(),
                 "workMs": 0
             ]
             guard !action.isEmpty else {
-                result = ["ok": false, "error": "action is required (scrollBy|toTop|toBottom|toAnchor|wheel)"]
-                return
+                return ["ok": false, "error": "action is required (scrollBy|toTop|toBottom|toAnchor|wheel)"]
             }
             defer {
                 var diag = result["diag"] as? [String: Any] ?? [:]
@@ -58,7 +51,7 @@ extension MyCoderAPIServer {
             case "scrollBy":
                 guard let pixels = json?["pixels"] as? Double else {
                     result = ["ok": false, "error": "pixels required (Double)"]
-                    return
+                    return result
                 }
                 result = ChatScrollBridge.shared.scrollBy(
                     pixels: CGFloat(pixels),
@@ -71,13 +64,13 @@ extension MyCoderAPIServer {
             case "toAnchor":
                 guard let anchor = json?["anchor"] as? String, !anchor.isEmpty else {
                     result = ["ok": false, "error": "anchor required (messageId)"]
-                    return
+                    return result
                 }
                 result = ChatScrollBridge.shared.scroll(toAnchor: anchor)
             case "wheel":
                 guard let pixels = json?["pixels"] as? NSNumber else {
                     result = ["ok": false, "error": "pixels required (Int)"]
-                    return
+                    return result
                 }
                 let direction = json?["direction"] as? String ?? "down"
                 let times = (json?["times"] as? Int) ?? 20
@@ -93,8 +86,8 @@ extension MyCoderAPIServer {
             default:
                 result = ["ok": false, "error": "unknown action \(action)"]
             }
+            return result
         }
-        _ = semaphore.wait(timeout: .now() + 15)
         return jsonResponse(result)
     }
 }

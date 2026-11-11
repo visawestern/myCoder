@@ -4,6 +4,9 @@ import AppKit
 import Darwin
 
 /// Global reference for local API server access. Set during app startup.
+/// Main-actor isolated: the server reads it on the main actor, so the
+/// reference can never be observed while it is being replaced.
+@MainActor
 var __myCoderAppState: AppState?
 
 /// One-shot coder prompt waiting for its chat history to finish loading.

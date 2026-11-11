@@ -1,14 +1,8 @@
 import Foundation
 
 extension MyCoderAPIServer {
-    func handleActions() -> String {
-        let semaphore = DispatchSemaphore(value: 0)
-        var actions: [[String: Any]] = []
-        Task { @MainActor in
-            actions = AppActionRouter.catalog
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 10)
+    func handleActions() async -> String {
+        let actions = await Self.mainRead { AppActionRouter.catalog }
         return jsonResponse(["count": actions.count, "actions": actions])
     }
 
@@ -16,33 +10,23 @@ extension MyCoderAPIServer {
     /// (NSCursor.current), the mouse position, and the view chain under the
     /// pointer for every visible window. Used to verify cursor behavior in the
     /// running app (e.g. I-beam over the composer) without guessing.
-    func handleCursorDebug() -> String {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: [String: Any] = ["error": "timed out"]
-        Task { @MainActor in
-            result = CursorDiagnostics.snapshot()
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 10)
+    func handleCursorDebug() async -> String {
+        let result = await Self.mainRead { CursorDiagnostics.snapshot() }
         return jsonResponse(result)
     }
 
-    func handleState() -> String {
-        guard let appState = __myCoderAppState else {
+    func handleState() async -> String {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "app not ready"])
         }
-        let semaphore = DispatchSemaphore(value: 0)
-        var state: [String: Any] = ["error": "state timed out"]
-        Task { @MainActor in
-            state = AppActionRouter.shared.snapshot(appState: appState)
-            semaphore.signal()
+        let state = await Self.mainRead {
+            AppActionRouter.shared.snapshot(appState: appState)
         }
-        _ = semaphore.wait(timeout: .now() + 15)
         return jsonResponse(state)
     }
 
-    func handleAction(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleAction(body: String) async -> String {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -51,27 +35,22 @@ extension MyCoderAPIServer {
             return jsonResponse(["error": "action is required"])
         }
         let params = (json["params"] as? [String: Any]) ?? [:]
-        let semaphore = DispatchSemaphore(value: 0)
-        var response: [String: Any] = ["error": "action timed out"]
-        Task { @MainActor in
-            do {
-                let result = try await AppActionRouter.shared.perform(
-                    action: action,
-                    params: params,
-                    appState: appState
-                )
-                response = ["ok": true, "action": action, "result": result]
-            } catch {
-                response = ["ok": false, "action": action, "error": error.localizedDescription]
-            }
-            semaphore.signal()
+        do {
+            let result = try await AppActionRouter.shared.perform(
+                action: action,
+                params: params,
+                appState: appState
+            )
+            return jsonResponse(["ok": true, "action": action, "result": result])
+        } catch {
+            return jsonResponse(["ok": false, "action": action, "error": error.localizedDescription])
         }
-        _ = semaphore.wait(timeout: .now() + 660)
-        return jsonResponse(response)
     }
 
-    func providersInfo() -> [String: Any] {
-        guard __myCoderAppState != nil else { return ["error": "app not ready"] }
+    func providersInfo() async -> [String: Any] {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
+            return ["error": "app not ready"]
+        }
         var providers: [[String: Any]] = []
         
         // Web providers
@@ -90,9 +69,11 @@ extension MyCoderAPIServer {
         return ["providers": providers]
     }
     
-    func chatsInfo() -> [String: Any] {
-        guard let appState = __myCoderAppState else { return ["error": "app not ready"] }
-        return Self.onMainRead {
+    func chatsInfo() async -> [String: Any] {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
+            return ["error": "app not ready"]
+        }
+        return await Self.mainRead {
             let sessions = appState.sessions.map { session in
                 [
                     "id": session.id,
@@ -113,14 +94,14 @@ extension MyCoderAPIServer {
         }
     }
     
-    func handleSend(body: String) -> String {
+    func handleSend(body: String) async -> String {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? String else {
             return jsonResponse(["error": "message is required"])
         }
         
-        guard let appState = __myCoderAppState else {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "app not ready"])
         }
         
@@ -133,9 +114,7 @@ extension MyCoderAPIServer {
         // state. The previous fire-and-forget version returned stale values:
         // for a new chat the response carried "" / the previously selected
         // session instead of the freshly created one.
-        let semaphore = DispatchSemaphore(value: 0)
-        var resolved: ResolvedSendTarget?
-        Task { @MainActor in
+        let target = await Self.mainRead {
             let target = Self.resolveSendTargets(appState: appState,
                                                  providerId: providerId,
                                                  modelId: modelId,
@@ -146,13 +125,7 @@ extension MyCoderAPIServer {
                 object: nil,
                 userInfo: ["message": message, "chatId": target.chatID]
             )
-            resolved = target
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 30)
-
-        guard let target = resolved else {
-            return jsonResponse(["error": "send timed out waiting for main thread"])
+            return target
         }
         return jsonResponse([
             "status": "sent",
@@ -235,9 +208,11 @@ extension MyCoderAPIServer {
         )
     }
     
-    func messagesInfo() -> [String: Any] {
-        guard let appState = __myCoderAppState else { return ["error": "app not ready"] }
-        guard let sessionID = Self.onMainRead({ appState.selectedSession?.id }) else {
+    func messagesInfo() async -> [String: Any] {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
+            return ["error": "app not ready"]
+        }
+        guard let sessionID = await Self.mainRead({ appState.selectedSession?.id }) else {
             return ["messages": []]
         }
 
@@ -283,14 +258,16 @@ extension MyCoderAPIServer {
         return ["messages": result, "sessionId": sessionID]
     }
     
-    func handleSelect(body: String) -> String {
+    func handleSelect(body: String) async -> String {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let appState = __myCoderAppState else {
+              let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "invalid body or app not ready"])
         }
         
-        DispatchQueue.main.async {
+        // Выбор применяется до ответа: клиент, который сразу читает
+        // /api/chats, обязан увидеть уже выбранный чат и модель.
+        await Self.mainRead {
             if let providerId = json["providerId"] as? String {
                 appState.selectProvider(providerId, persistPreference: false)
             }

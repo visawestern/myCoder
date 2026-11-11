@@ -10,7 +10,8 @@ final class AntiBrowserTabManager {
     static let shared = AntiBrowserTabManager()
 
     /// Единый ключ вкладки/моста для чата (совпадает с tab_key браузера).
-    static func makeKey(providerID: String, projectID: String, chatID: String) -> String {
+    /// Чистая сборка строки, поэтому не требует главного актора.
+    nonisolated static func makeKey(providerID: String, projectID: String, chatID: String) -> String {
         "\(providerID)|\(projectID)|\(chatID)"
     }
 

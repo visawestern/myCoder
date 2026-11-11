@@ -7,8 +7,8 @@ extension MyCoderAPIServer {
     /// verification surface for the context directives (2026-11-03): one curl
     /// proves the stages, the tabs, the system instruction and the harness
     /// questions are actually assembled — no GUI automation needed.
-    func handleContextPreview(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleContextPreview(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -17,16 +17,15 @@ extension MyCoderAPIServer {
               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return jsonResponse(["error": "message is required"])
         }
-        let semaphore = DispatchSemaphore(value: 0)
-        var payload: [String: Any] = ["error": "preview timed out"]
-        Task { @MainActor in
-            // The request body may name the project to preview. Without it,
-            // fall back to the currently selected workspace so the preview
-            // mirrors what a send would collect (user check 2026-11-08: the
-            // preview ignored the passed projectPath and always used the
-            // selected workspace).
-            let requestedProject = (object["projectPath"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // The request body may name the project to preview. Without it,
+        // fall back to the currently selected workspace so the preview
+        // mirrors what a send would collect (user check 2026-11-08: the
+        // preview ignored the passed projectPath and always used the
+        // selected workspace).
+        let requestedProject = (object["projectPath"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let request = await Self.mainRead { () -> ContextPreviewService.Request in
+            let appState = __myCoderAppState!
             let projectPath = requestedProject.isEmpty
                 ? (appState.selectedWorkspace?.path ?? "")
                 : requestedProject
@@ -43,7 +42,7 @@ extension MyCoderAPIServer {
             let systemPrompt = TurnDelivery.systemInstruction(route: route,
                 userRules: [webRules, params.systemPrompt ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n"),
                 projectRoot: toolRoot, isProject: !projectPath.isEmpty, agentMode: appState.agentMode)
-            let request = ContextPreviewService.Request(
+            return ContextPreviewService.Request(
                 message: message,
                 projectPath: projectPath,
                 isEnabled: appState.isPointContextEnabled,
@@ -54,21 +53,21 @@ extension MyCoderAPIServer {
                 ),
                 isPlanMode: appState.agentMode == .plan
             )
-            payload = await ContextPreviewService.run(request)
-            // Expose the resolved context window for the selected model so a
-            // live curl proves which window myCoder actually applies (e.g.
-            // Mercury = 1M from opencode.json, not the 200k default).
-            // An optional `modelId` in the request body overrides the model
-            // used for this read-only window calculation (for live checks
-            // when the provider list is empty).
-            let windowModel = (object["modelId"] as? String)?.isEmpty == false
-                ? object["modelId"] as! String
-                : appState.effectiveSelectedModel()
-            payload["contextWindow"] = ContextWindowCatalog.limit(for: windowModel)
-            payload["selectedModel"] = windowModel
-            semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + Self.contextPreviewDeadline)
+        var payload = await ContextPreviewService.run(request)
+        // Expose the resolved context window for the selected model so a
+        // live curl proves which window myCoder actually applies (e.g.
+        // Mercury = 1M from opencode.json, not the 200k default).
+        // An optional `modelId` in the request body overrides the model
+        // used for this read-only window calculation (for live checks
+        // when the provider list is empty).
+        let windowModel: String = await Self.mainRead {
+            let requested = (object["modelId"] as? String) ?? ""
+            if !requested.isEmpty { return requested }
+            return __myCoderAppState?.effectiveSelectedModel() ?? ""
+        }
+        payload["contextWindow"] = ContextWindowCatalog.limit(for: windowModel)
+        payload["selectedModel"] = windowModel
         return jsonResponse(payload)
     }
 }

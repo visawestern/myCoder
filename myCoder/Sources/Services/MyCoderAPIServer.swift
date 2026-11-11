@@ -18,10 +18,6 @@ final class MyCoderAPIServer {
     static let contextPreviewDeadline: TimeInterval = ContextCollectionBudget.total + 60
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "mycoder.api.server")
-    /// Отдельная очередь для тяжёлых долгих/мутирующих запросов (audit B1).
-    /// Быстрые GET-чтения остаются на `queue` и не ждут долгие POST
-    /// (ожидания в обработчиках доходят до 660 с).
-    private let actionQueue = DispatchQueue(label: "mycoder.api.actions", qos: .userInitiated)
     private(set) var port: Int = 0
     
     static func appendLog(_ message: String) {
@@ -41,20 +37,15 @@ final class MyCoderAPIServer {
         }
     }
 
-    /// Выполняет чтение состояния приложения на главном акторе.
+    /// Выполняет чтение на главном акторе и возвращает значение.
     ///
-    /// Сервер принимает запросы на сетевых очередях, а `AppState` с 11.11.2026
-    /// целиком изолирован на главном акторе. Если ответ уже на главном потоке,
-    /// читаем на месте; иначе переходим синхронно и возвращаем результат.
-    /// Так ни одно чтение не может увидеть состояние, обновляемое другим
-    /// потоком. Долгие записи по-прежнему идут через `Task { @MainActor }`.
-    static func onMainRead<T>(_ body: @MainActor () -> T) -> T {
-        if Thread.isMainThread {
-            return MainActor.assumeIsolated(body)
-        }
-        return DispatchQueue.main.sync {
-            MainActor.assumeIsolated(body)
-        }
+    /// Явная обёртка вместо `MainActor.run`: в Swift 6.3 его вывод типа
+    /// требует `resultType:` при замыкании из одного выражения, а нам нужен
+    /// простой читаемый вызов. Всё, что трогает `AppState`, обязано идти
+    /// через этот помощник.
+    @MainActor
+    static func mainRead<T>(_ body: @MainActor () -> T) -> T {
+        body()
     }
     
     /// Останавливает listener. Вызывается при выходе из приложения, чтобы
@@ -157,23 +148,32 @@ final class MyCoderAPIServer {
                 path = String(rawPath[..<queryStart])
                 query = String(rawPath[rawPath.index(after: queryStart)...])
             }
-            // Audit B1: тяжёлые запросы не блокируют очередь слушателя —
-            // быстрые GET-чтения отвечают, пока долгий POST выполняется.
-            if Self.isHeavyRoute(method: method, path: path) {
-                self.actionQueue.async { [weak self] in
-                    guard let self else { return }
-                    let response = self.routeRequest(method: method, path: path, body: body, query: query)
-                    self.sendResponse(response, on: connection)
+            // Аудит B1: каждый запрос обслуживается собственной задачей.
+            // Долгий POST больше не держит очередь слушателя, а два чата
+            // могут идти одновременно: у каждого свой `Task` и свой
+            // `NWConnection`, общего семафора между ними нет.
+            let priority: TaskPriority = Self.isHeavyRoute(method: method, path: path)
+                ? .userInitiated
+                : .utility
+            Task(priority: priority) { [weak self] in
+                guard let self else {
+                    connection.cancel()
+                    return
                 }
-            } else {
-                let response = self.routeRequest(method: method, path: path, body: body, query: query)
+                let response = await self.routeRequest(
+                    method: method,
+                    path: path,
+                    body: body,
+                    query: query
+                )
                 self.sendResponse(response, on: connection)
             }
         }
     }
 
-    /// Классифицирует запрос: тяжёлые (долгие/мутирующие) обрабатываются на
-    /// отдельной `actionQueue`, чтобы не блокировать очередь слушателя.
+    /// Классифицирует запрос: тяжёлые (долгие/мутирующие) получают более
+    /// высокий приоритет задачи, чтобы долгий POST не ждал за быстрыми
+    /// чтениями. Само выполнение всегда идёт в отдельной задаче.
     ///
     /// Вход: HTTP-метод и путь. Выход: true для POST и долгих GET
     /// (inspect/scroll/screenshot). Зависимости: нет.
@@ -205,69 +205,69 @@ final class MyCoderAPIServer {
         return "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\n\r\n{\"error\":\"request body exceeds 4 MB\"}"
     }
 
-    private func routeRequest(method: String, path: String, body: String, query: String = "") -> String {
+    private func routeRequest(method: String, path: String, body: String, query: String = "") async -> String {
         switch (method, path) {
         case ("GET", "/api/actions"):
-            return handleActions()
+            return await handleActions()
         case ("POST", "/api/action"):
-            return handleAction(body: body)
+            return await handleAction(body: body)
         case ("GET", "/api/state"):
-            return handleState()
+            return await handleState()
         case ("GET", "/api/providers"):
-            return jsonResponse(providersInfo())
+            return await jsonResponse(providersInfo())
         case ("GET", "/api/chats"):
-            return jsonResponse(chatsInfo())
+            return await jsonResponse(chatsInfo())
         case ("GET", "/api/messages"):
-            return jsonResponse(messagesInfo())
+            return await jsonResponse(messagesInfo())
         case ("POST", "/api/send"):
-            return handleSend(body: body)
+            return await handleSend(body: body)
         case ("POST", "/api/select"):
-            return handleSelect(body: body)
+            return await handleSelect(body: body)
         case ("POST", "/api/refresh-models"):
-            return handleRefreshModels(body: body)
+            return await handleRefreshModels(body: body)
         case ("POST", "/api/evaluate"):
-            return handleEvaluate(body: body)
+            return await handleEvaluate(body: body)
         case ("GET", "/api/webviews"):
-            return handleWebviews()
+            return await handleWebviews()
         case ("POST", "/api/save-session"):
-            return handleSaveSession(body: body)
+            return await handleSaveSession(body: body)
         case ("GET", "/api/inspect"):
-            return handleInspect(body: body)
+            return await handleInspect(body: body)
         case ("POST", "/api/inspect"):
-            return handleInspect(body: body)
+            return await handleInspect(body: body)
         case ("GET", "/api/debug/cursor"):
-            return handleCursorDebug()
+            return await handleCursorDebug()
         case ("POST", "/api/discover-models"):
-            return handleDiscoverModels()
+            return await handleDiscoverModels()
         case ("POST", "/api/add-account"):
-            return handleAddAccount(body: body)
+            return await handleAddAccount(body: body)
         case ("POST", "/api/add-vendor"):
-            return handleAddVendor(body: body)
+            return await handleAddVendor(body: body)
         case ("POST", "/api/web-login-check"):
-            return handleWebLoginCheck(body: body)
+            return await handleWebLoginCheck(body: body)
         case ("GET", "/api/web-login-status"):
-            return handleWebLoginStatus()
+            return await handleWebLoginStatus()
         case ("POST", "/api/open-login"):
-            return handleOpenLogin(body: body)
+            return await handleOpenLogin(body: body)
         case ("POST", "/api/send-and-wait"):
-            return handleSendAndWait(body: body)
+            return await handleSendAndWait(body: body)
         case ("POST", "/api/update-provider-url"):
-            return handleUpdateProviderURL(body: body)
+            return await handleUpdateProviderURL(body: body)
         case ("POST", "/api/set-web-model"):
-            return handleSetWebModel(body: body)
+            return await handleSetWebModel(body: body)
         case ("GET", "/api/scroll"):
-            return handleScroll(query: query)
+            return await handleScroll(query: query)
         case ("POST", "/api/scroll"):
-            return handleScroll(body: body, query: query)
+            return await handleScroll(body: body, query: query)
         case ("GET", "/api/screenshot"):
-            return handleScreenshot(query: query)
+            return await handleScreenshot(query: query)
         case ("GET", "/api/markdown-perf"):
             return jsonResponse(MarkdownAttributedStringBuilder.statsSnapshot().dictionary)
         case ("POST", "/api/markdown-perf/reset"):
             MarkdownAttributedStringBuilder.resetStats()
             return jsonResponse(["ok": true])
         case ("POST", "/api/context-preview"):
-            return handleContextPreview(body: body)
+            return await handleContextPreview(body: body)
         default:
             return notFound()
         }

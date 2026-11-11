@@ -5,13 +5,13 @@ extension MyCoderAPIServer {
     /// messages until the assistant turn finishes (bounded wait) and returns
     /// the conversation tail. This is the debug contract for "ask every
     /// provider a question and compare the answer".
-    func handleSendAndWait(body: String) -> String {
+    func handleSendAndWait(body: String) async -> String {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? String else {
             return jsonResponse(["error": "message is required"])
         }
-        guard let appState = __myCoderAppState else {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "app not ready"])
         }
         let providerId = json["providerId"] as? String
@@ -19,25 +19,18 @@ extension MyCoderAPIServer {
         let timeoutSec = (json["timeoutSec"] as? Int) ?? 180
 
         // Resolve target + post the send exactly like /api/send.
-        let resolveSemaphore = DispatchSemaphore(value: 0)
-        var target: ResolvedSendTarget?
-        Task { @MainActor in
-            let t = Self.resolveSendTargets(appState: appState,
-                                             providerId: providerId,
-                                             modelId: modelId,
-                                             chatId: json["chatId"] as? String,
-                                             message: message)
+        let target = await Self.mainRead {
+            let target = Self.resolveSendTargets(appState: appState,
+                                                 providerId: providerId,
+                                                 modelId: modelId,
+                                                 chatId: json["chatId"] as? String,
+                                                 message: message)
             NotificationCenter.default.post(
                 name: Notification.Name("apiSendRequested"),
                 object: nil,
-                userInfo: ["message": message, "chatId": t.chatID]
+                userInfo: ["message": message, "chatId": target.chatID]
             )
-            target = t
-            resolveSemaphore.signal()
-        }
-        _ = resolveSemaphore.wait(timeout: .now() + 30)
-        guard let target else {
-            return jsonResponse(["error": "send timed out waiting for main thread"])
+            return target
         }
 
         // Poll messages until the last assistant message finishes.
@@ -47,7 +40,7 @@ extension MyCoderAPIServer {
         // enforces via WebSendCompletionLogic.
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSec))
         while Date() < deadline {
-            Thread.sleep(forTimeInterval: 1.5)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
             let messages = DatabaseBridge.shared.loadMessages(sessionId: target.chatID)
             if let last = messages.last,
                last.role == .assistant,

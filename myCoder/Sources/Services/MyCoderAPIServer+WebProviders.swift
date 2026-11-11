@@ -6,8 +6,8 @@ extension MyCoderAPIServer {
     /// Creates the FIRST config for a vendor (the UI's "Add Kimi/Qwen/…"
     /// button). `add-account` clones an existing config; this endpoint covers
     /// the bootstrap case so the debug API can provision every vendor alone.
-    func handleAddVendor(body: String) -> String {
-        guard __myCoderAppState != nil else {
+    func handleAddVendor(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -44,8 +44,8 @@ extension MyCoderAPIServer {
     /// Opens the provider's login page in the app's embedded webview pool and
     /// reports whether the stored session is authenticated. When `login` is
     /// false the caller must log in manually in the app UI.
-    func handleWebLoginCheck(body: String) -> String {
-        guard __myCoderAppState != nil else {
+    func handleWebLoginCheck(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -79,8 +79,8 @@ extension MyCoderAPIServer {
     }
 
     /// Aggregated login/connectivity state for every configured web provider.
-    func handleWebLoginStatus() -> String {
-        guard __myCoderAppState != nil else {
+    func handleWebLoginStatus() async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         var result: [[String: Any]] = []
@@ -103,8 +103,8 @@ extension MyCoderAPIServer {
     /// Opens the provider's login screen in the app's webview pool so the user
     /// can log in manually. Returns immediately with the opened state; the
     /// caller polls /api/web-login-check or /api/webviews afterwards.
-    func handleOpenLogin(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleOpenLogin(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -115,35 +115,30 @@ extension MyCoderAPIServer {
         guard let config = webConfig(for: providerId) else {
             return jsonResponse(["error": "web provider not found", "providerId": providerId])
         }
-        let semaphore = DispatchSemaphore(value: 0)
+        let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                   projectID: "global",
+                                                   chatID: "provider-login")
+        let bridge = await AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
         var opened = false
         var url = ""
-        Task { @MainActor in
-            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
-                                                      projectID: "global",
-                                                      chatID: "provider-login")
-            let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-            do {
-                // Restore saved cookies first, then land on the login page.
-                let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-                if let store = WebSessionManager.restore(providerId: config.id,
-                                                         homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                         sessionID: sessionID),
-                   !store.cookies.isEmpty {
-                    let payload = WebSessionRestorationLogic.payload(from: store)
-                    try await bridge.setCookies(payload.cookies)
-                }
-                let loginURL = (try? WebProviderCatalog.loadBundled().loginURL(for: config.vendor.id))
-                    ?? config.chatURL
-                try await bridge.navigate(to: loginURL)
-                url = loginURL
-                opened = true
-            } catch {
-                opened = false
+        do {
+            // Restore saved cookies first, then land on the login page.
+            let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
+            if let store = WebSessionManager.restore(providerId: config.id,
+                                                     homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                                                     sessionID: sessionID),
+               !store.cookies.isEmpty {
+                let payload = WebSessionRestorationLogic.payload(from: store)
+                try await bridge.setCookies(payload.cookies)
             }
-            semaphore.signal()
+            let loginURL = (try? WebProviderCatalog.loadBundled().loginURL(for: config.vendor.id))
+                ?? config.chatURL
+            try await bridge.navigate(to: loginURL)
+            url = loginURL
+            opened = true
+        } catch {
+            opened = false
         }
-        _ = semaphore.wait(timeout: .now() + 30)
         return opened
             ? jsonResponse(["status": "opened", "url": url,
                             "note": "log in inside the myCoder window, then POST /api/save-session and re-check"])
@@ -153,8 +148,8 @@ extension MyCoderAPIServer {
     /// Updates a web provider's chatURL (e.g. kimi.com → kimi.ai for
     /// non-CN accounts, or a vendor region change) without recreating the
     /// config and losing the saved session/models.
-    func handleUpdateProviderURL(body: String) -> String {
-        guard __myCoderAppState != nil else {
+    func handleUpdateProviderURL(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -182,8 +177,8 @@ extension MyCoderAPIServer {
     /// Sets a web provider's selected model (debug contract: switch models
     /// without the settings UI). The model must be in the provider's known
     /// list, otherwise the send flow would block on injection.
-    func handleSetWebModel(body: String) -> String {
-        guard __myCoderAppState != nil else {
+    func handleSetWebModel(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),

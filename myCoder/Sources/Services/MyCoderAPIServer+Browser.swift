@@ -6,18 +6,14 @@ extension MyCoderAPIServer {
     /// GET /api/screenshot — capture the app's own window (no Screen Recording
     /// permission needed) and return it as PNG. Supports `?path=/abs/out.png`
     /// to write to a file instead of returning base64.
-    func handleScreenshot(query: String = "") -> String {
+    func handleScreenshot(query: String = "") async -> String {
         let requestedPath = query.components(separatedBy: "&")
             .first(where: { $0.hasPrefix("path=") })
             .flatMap { String($0.dropFirst("path=".count)) }
             .map { ($0 as NSString).expandingTildeInPath }
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: [String: Any] = ["error": "screenshot timed out"]
-        Task { @MainActor in
-            defer { semaphore.signal() }
+        let result = await Self.mainRead { () -> [String: Any] in
             guard let shot = AppWindowCapture.capture() else {
-                result = ["ok": false, "error": "no visible window content to capture"]
-                return
+                return ["ok": false, "error": "no visible window content to capture"]
             }
             let target: URL
             if let requestedPath {
@@ -27,7 +23,7 @@ extension MyCoderAPIServer {
             }
             do {
                 try AppWindowCapture.write(shot, to: target)
-                result = [
+                return [
                     "ok": true,
                     "method": shot.method,
                     "width": shot.width,
@@ -37,15 +33,14 @@ extension MyCoderAPIServer {
                     "base64": shot.pngData.base64EncodedString()
                 ]
             } catch {
-                result = ["ok": false, "error": "capture failed: \(error.localizedDescription)"]
+                return ["ok": false, "error": "capture failed: \(error.localizedDescription)"]
             }
         }
-        _ = semaphore.wait(timeout: .now() + 15)
         return jsonResponse(result)
     }
 
-    func handleRefreshModels(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleRefreshModels(body: String) async -> String {
+        guard let appState = await Self.mainRead({ __myCoderAppState }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -57,25 +52,19 @@ extension MyCoderAPIServer {
         guard let config = configs.first(where: { "web:\($0.id)" == providerId }) else {
             return jsonResponse(["error": "provider not found"])
         }
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: String = "timeout"
-        Task { @MainActor in
-            // Когда живая страница сидит во вкладке логина (свежий ручной
-            // вход), обновляем модели там — чтобы discovery зондировал
-            // гидратированную страницу, а не about:blank.
-            var chatID: String?
-            for (key, bridge) in AntiBrowserTabManager.shared.allBridges()
-            where key.contains("provider-login::\(config.id)") {
-                if let url = try? await bridge.currentURL(),
-                   !url.isEmpty, url != "about:blank" {
-                    chatID = "provider-login"
-                    break
-                }
+        // Когда живая страница сидит во вкладке логина (свежий ручной
+        // вход), обновляем модели там — чтобы discovery зондировал
+        // гидратированную страницу, а не about:blank.
+        var chatID: String?
+        for (key, bridge) in await AntiBrowserTabManager.shared.allBridges()
+        where key.contains("provider-login::\(config.id)") {
+            if let url = try? await bridge.currentURL(),
+               !url.isEmpty, url != "about:blank" {
+                chatID = "provider-login"
+                break
             }
-            result = await appState.refreshWebModels(for: config, chatID: chatID)
-            semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 180)
+        let result = await appState.refreshWebModels(for: config, chatID: chatID)
         let updated = WebProviderStore.load()
         let updatedConfig = updated.first(where: { $0.id == config.id })
         return jsonResponse(["message": result, "models": updatedConfig?.allModels ?? []])
@@ -100,22 +89,17 @@ extension MyCoderAPIServer {
         return AntiBrowserTabManager.shared.bridge(tabKey: key)
     }
 
-    func handleEvaluate(body: String) -> String {
+    func handleEvaluate(body: String) async -> String {
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let script = json["script"] as? String else {
             return jsonResponse(["error": "script is required"])
         }
         let targetKey = json["webview"] as? String
-        let semaphore = DispatchSemaphore(value: 0)
         var result: Any?
-        Task { @MainActor in
-            if let bridge = engineBridge(forProviderID: targetKey) {
-                result = try? await bridge.evaluateJS(script)
-            }
-            semaphore.signal()
+        if let bridge = await engineBridge(forProviderID: targetKey) {
+            result = try? await bridge.evaluateJS(script)
         }
-        _ = semaphore.wait(timeout: .now() + 15)
         if let result = result {
             if let dict = result as? [String: Any] {
                 return jsonResponse(dict)
@@ -130,26 +114,19 @@ extension MyCoderAPIServer {
         return jsonResponse(["result": NSNull()])
     }
 
-    func handleWebviews() -> String {
-        guard let appState = __myCoderAppState else {
+    func handleWebviews() async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
-        let semaphore = DispatchSemaphore(value: 0)
         var result: [String: String] = [:]
-        Task { @MainActor in
-            var out: [String: String] = [:]
-            for (key, bridge) in AntiBrowserTabManager.shared.allBridges() {
-                out[key] = (try? await bridge.currentURL()) ?? ""
-            }
-            result = out
-            semaphore.signal()
+        for (key, bridge) in await AntiBrowserTabManager.shared.allBridges() {
+            result[key] = (try? await bridge.currentURL()) ?? ""
         }
-        _ = semaphore.wait(timeout: .now() + 10)
         return jsonResponse(result)
     }
 
-    func handleSaveSession(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleSaveSession(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),
@@ -161,23 +138,14 @@ extension MyCoderAPIServer {
         guard let config = configs.first(where: { "web:\($0.id)" == providerId }) else {
             return jsonResponse(["error": "provider not found"])
         }
-        let semaphore = DispatchSemaphore(value: 0)
+        let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                   projectID: "global",
+                                                   chatID: "provider-default")
+        let bridge = await AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
         var cookies: [BrowserCookie] = []
-        var errorRef: Error? = nil
-        Task { @MainActor in
-            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
-                                                      projectID: "global",
-                                                      chatID: "provider-default")
-            let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-            do {
-                cookies = try await bridge.cookies()
-            } catch {
-                errorRef = error
-            }
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 30)
-        if let error = errorRef {
+        do {
+            cookies = try await bridge.cookies()
+        } catch {
             return jsonResponse(["error": "failed to get cookies: \(error.localizedDescription)"])
         }
         guard !cookies.isEmpty else {
@@ -202,8 +170,8 @@ extension MyCoderAPIServer {
         }
     }
 
-    func handleInspect(body: String) -> String {
-        guard let appState = __myCoderAppState else {
+    func handleInspect(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         // Resolve the provider from the request body (providerId), falling
@@ -223,102 +191,93 @@ extension MyCoderAPIServer {
             return jsonResponse(["error": "provider not found"])
         }
         
-        let semaphore = DispatchSemaphore(value: 0)
         var finalResult: [String: Any] = ["error": "timeout"]
-        Task { @MainActor in
-            do {
-                let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
-                                                          projectID: "global",
-                                                          chatID: "provider-default")
-                let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-                let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
-                let selectors = WebVendorSelectors(
-                    input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
-                    sendButton: catalogEntry?.sendButton ?? "button[type='submit'], button[aria-label*='send']",
-                    responseContainer: catalogEntry?.responseContainer ?? "div[class*='markdown']",
-                    stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
-                )
-                
-                // Restore cookies and navigate
-                let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
-                if let store = WebSessionManager.restore(providerId: config.id,
-                                                         homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-                                                         sessionID: sessionID),
-                   !store.cookies.isEmpty,
-                   !WebSessionManager.isExpired(store) {
-                    let payload = WebSessionRestorationLogic.payload(from: store)
-                    try await bridge.setCookies(payload.cookies)
+        do {
+            let tabKey = AntiBrowserTabManager.makeKey(providerID: config.id,
+                                                      projectID: "global",
+                                                      chatID: "provider-default")
+            let bridge = await AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+            let catalogEntry = try? WebProviderCatalog.loadBundled().selectors(for: config.vendor.id)
+            let selectors = WebVendorSelectors(
+                input: catalogEntry?.input ?? "textarea, div[contenteditable='true']",
+                sendButton: catalogEntry?.sendButton ?? "button[type='submit'], button[aria-label*='send']",
+                responseContainer: catalogEntry?.responseContainer ?? "div[class*='markdown']",
+                stopButton: catalogEntry?.stopButton ?? "button[aria-label*='stop']"
+            )
+            
+            // Restore cookies and navigate
+            let sessionID = config.activeSessionID ?? WebSessionManager.defaultSessionID
+            if let store = WebSessionManager.restore(providerId: config.id,
+                                                     homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+                                                     sessionID: sessionID),
+               !store.cookies.isEmpty,
+               !WebSessionManager.isExpired(store) {
+                let payload = WebSessionRestorationLogic.payload(from: store)
+                try await bridge.setCookies(payload.cookies)
+                try await bridge.navigate(to: config.chatURL)
+                if !payload.localStorage.isEmpty {
+                    try await bridge.setLocalStorage(payload.localStorage)
                     try await bridge.navigate(to: config.chatURL)
-                    if !payload.localStorage.isEmpty {
-                        try await bridge.setLocalStorage(payload.localStorage)
-                        try await bridge.navigate(to: config.chatURL)
-                    }
                 }
-                
-                // Wait for input to be ready
-                for _ in 0..<30 {
-                    if try await bridge.exists(selector: selectors.input) {
-                        break
-                    }
-                    await bridge.wait(ms: 500)
-                }
-                
-                // Now run the inspection JS
-                let js = """
-                (function(){
-                    var url = window.location.href;
-                    var title = document.title;
-                    var modelDropdown = document.querySelector('.current-model');
-                    var modelDropdownText = modelDropdown ? modelDropdown.innerText.trim() : '';
-                    var popover = document.querySelector('.models-popover, .n-popover__content');
-                    var popoverOpen = !!popover;
-                    var modelItems = Array.from(document.querySelectorAll('.model-item')).map(function(el){
-                        var name = el.querySelector('.model-name .name');
-                        var desc = el.querySelector('.desc');
-                        var checked = el.classList.contains('checked');
-                        return {name: name ? name.textContent.trim() : el.innerText.trim().substring(0, 50), desc: desc ? desc.textContent.trim() : '', checked: checked};
-                    });
-                    var effortValue = document.querySelector('.effort-value');
-                    var effortTitle = document.querySelector('.effort-title');
-                    var input = document.querySelector('.chat-input-editor, textarea, div[contenteditable="true"]');
-                    var sendBtn = document.querySelector('.send-button-container, .chat-editor-action button[class*="send"], button[type="submit"]');
-                    var newChatBtn = document.querySelector('.new-chat-btn, [class*="new-chat"]');
-                    return JSON.stringify({url: url, title: title, modelDropdownText: modelDropdownText, popoverOpen: popoverOpen, modelItems: modelItems, effort: {value: effortValue ? effortValue.textContent.trim() : '', title: effortTitle ? effortTitle.textContent.trim() : ''}, input: input ? {tag: input.tagName, cls: input.className.substring(0, 80)} : null, sendButton: sendBtn ? {tag: sendBtn.tagName, cls: sendBtn.className.substring(0, 80)} : null, newChatButton: newChatBtn ? {tag: newChatBtn.tagName, cls: newChatBtn.className.substring(0, 80), text: newChatBtn.innerText.trim().substring(0, 50)} : null});
-                })();
-                """
-                let inspectResult = try await bridge.evaluateJS(js)
-                if let jsonStr = inspectResult as? String,
-                   let data = jsonStr.data(using: .utf8),
-                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    finalResult = dict
-                } else {
-                    finalResult = ["error": "failed to inspect"]
-                }
-            } catch {
-                finalResult = ["error": "failed to inspect: \(error.localizedDescription)"]
             }
-            semaphore.signal()
+            
+            // Wait for input to be ready
+            for _ in 0..<30 {
+                if try await bridge.exists(selector: selectors.input) {
+                    break
+                }
+                await bridge.wait(ms: 500)
+            }
+            
+            // Now run the inspection JS
+            let js = """
+            (function(){
+                var url = window.location.href;
+                var title = document.title;
+                var modelDropdown = document.querySelector('.current-model');
+                var modelDropdownText = modelDropdown ? modelDropdown.innerText.trim() : '';
+                var popover = document.querySelector('.models-popover, .n-popover__content');
+                var popoverOpen = !!popover;
+                var modelItems = Array.from(document.querySelectorAll('.model-item')).map(function(el){
+                    var name = el.querySelector('.model-name .name');
+                    var desc = el.querySelector('.desc');
+                    var checked = el.classList.contains('checked');
+                    return {name: name ? name.textContent.trim() : el.innerText.trim().substring(0, 50), desc: desc ? desc.textContent.trim() : '', checked: checked};
+                });
+                var effortValue = document.querySelector('.effort-value');
+                var effortTitle = document.querySelector('.effort-title');
+                var input = document.querySelector('.chat-input-editor, textarea, div[contenteditable="true"]');
+                var sendBtn = document.querySelector('.send-button-container, .chat-editor-action button[class*="send"], button[type="submit"]');
+                var newChatBtn = document.querySelector('.new-chat-btn, [class*="new-chat"]');
+                return JSON.stringify({url: url, title: title, modelDropdownText: modelDropdownText, popoverOpen: popoverOpen, modelItems: modelItems, effort: {value: effortValue ? effortValue.textContent.trim() : '', title: effortTitle ? effortTitle.textContent.trim() : ''}, input: input ? {tag: input.tagName, cls: input.className.substring(0, 80)} : null, sendButton: sendBtn ? {tag: sendBtn.tagName, cls: sendBtn.className.substring(0, 80)} : null, newChatButton: newChatBtn ? {tag: newChatBtn.tagName, cls: newChatBtn.className.substring(0, 80), text: newChatBtn.innerText.trim().substring(0, 50)} : null});
+            })();
+            """
+            let inspectResult = try await bridge.evaluateJS(js)
+            if let jsonStr = inspectResult as? String,
+               let data = jsonStr.data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                finalResult = dict
+            } else {
+                finalResult = ["error": "failed to inspect"]
+            }
+        } catch {
+            finalResult = ["error": "failed to inspect: \(error.localizedDescription)"]
         }
-        _ = semaphore.wait(timeout: .now() + 30)
         return jsonResponse(finalResult)
     }
 
-    func handleDiscoverModels() -> String {
-        guard let appState = __myCoderAppState else {
+    func handleDiscoverModels() async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         // Click model dropdown
         let clickScript = "document.querySelector('.current-model')?.click(); 'clicked'"
-        let semaphore1 = DispatchSemaphore(value: 0)
-        Task { @MainActor in
-            if let bridge = engineBridge(forProviderID: nil, fallbackVendor: "kimi") {
-                _ = try? await bridge.evaluateJS(clickScript)
-            }
-            semaphore1.signal()
+        let bridge = await engineBridge(forProviderID: nil, fallbackVendor: "kimi")
+        if let bridge {
+            _ = try? await bridge.evaluateJS(clickScript)
         }
-        _ = semaphore1.wait(timeout: .now() + 5)
         // Wait for popover
-        Thread.sleep(forTimeInterval: 2)
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
         // Read model items
         let readScript = """
         (function(){
@@ -339,15 +298,10 @@ extension MyCoderAPIServer {
             return JSON.stringify({models: r, effort: effort});
         })();
         """
-        let semaphore2 = DispatchSemaphore(value: 0)
         var readResult: Any?
-        Task { @MainActor in
-            if let bridge = engineBridge(forProviderID: nil, fallbackVendor: "kimi") {
-                readResult = try? await bridge.evaluateJS(readScript)
-            }
-            semaphore2.signal()
+        if let bridge {
+            readResult = try? await bridge.evaluateJS(readScript)
         }
-        _ = semaphore2.wait(timeout: .now() + 5)
         if let jsonStr = readResult as? String,
            let data = jsonStr.data(using: .utf8),
            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -367,8 +321,8 @@ extension MyCoderAPIServer {
         return jsonResponse(["error": "failed to read models"])
     }
 
-    func handleAddAccount(body: String) -> String {
-        guard __myCoderAppState != nil else {
+    func handleAddAccount(body: String) async -> String {
+        guard await Self.mainRead({ __myCoderAppState != nil }) else {
             return jsonResponse(["error": "app not ready"])
         }
         guard let data = body.data(using: .utf8),

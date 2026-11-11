@@ -3,13 +3,13 @@ import Foundation
 @testable import myCoder
 
 /// Аудит B2: состояние приложения должно жить на главном акторе.
+/// Аудит B1 (остаток): сервер обязан быть полностью асинхронным — без
+/// семафоров, без блокировки потоков и с отдельной задачей на запрос.
 ///
-/// `AppState` читают и пишут обработчики интерфейса и локальный HTTP-сервер.
-/// Если класс не изолирован, два потока могут увидеть наполовину обновлённое
-/// состояние. Эти проверки фиксируют изоляцию класса и то, что сервер
-/// действительно переходит на главный поток за чтением.
+/// Эти проверки фиксируют оба свойства: класс изолирован, а обработчики
+/// переходят на главный актор через `await`, а не через ожидание семафора.
 @MainActor
-@Suite("B2: AppState изолирован на главном акторе")
+@Suite("B2: AppState изолирован, сервер полностью асинхронный")
 struct AppStateMainActorTests {
 
     @Test("Класс AppState помечен @MainActor")
@@ -18,21 +18,27 @@ struct AppStateMainActorTests {
         #expect(source.contains("@MainActor\nclass AppState: ObservableObject"))
     }
 
-    @Test("Сервер читает состояние через переход на главный актор")
-    func serverReadHelperExists() throws {
+    @Test("В сервере не осталось ни одного семафора")
+    func serverHasNoSemaphores() throws {
         let source = try RepoRoot.apiServerSourceText
-        #expect(source.contains("static func onMainRead<T>(_ body: @MainActor () -> T) -> T"))
-        #expect(source.contains("DispatchQueue.main.sync"))
+        #expect(!source.contains("DispatchSemaphore"))
+        #expect(!source.contains("Thread.sleep"))
     }
 
-    @Test("Чтение с фоновой очереди выполняется на главном потоке")
+    @Test("Каждый запрос обслуживается отдельной задачей")
+    func eachRequestGetsItsOwnTask() throws {
+        let source = try RepoRoot.apiServerSourceText
+        #expect(source.contains("Task(priority: priority)"))
+        #expect(source.contains("await self.routeRequest("))
+        #expect(source.contains("private func routeRequest"))
+        #expect(source.contains(") async -> String {"))
+    }
+
+    @Test("Чтение состояния с фоновой задачи попадает на главный поток")
     func backgroundReadLandsOnMainThread() async {
-        let landedOnMain = await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                let flag = MyCoderAPIServer.onMainRead { Thread.isMainThread }
-                continuation.resume(returning: flag)
-            }
-        }
+        let landedOnMain = await Task.detached {
+            await MyCoderAPIServer.mainRead({ Thread.isMainThread })
+        }.value
         #expect(landedOnMain)
     }
 }
