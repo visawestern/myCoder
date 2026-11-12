@@ -190,4 +190,29 @@ struct ModelGroupingLogicTests {
         #expect(ModelCapabilityLogic.effectiveContextWindow(for: "other", in: providers, providerID: "p1") == 200_000)
         #expect(ModelCapabilityLogic.effectiveOutputLimit(for: "m", in: providers, providerID: "p1") == 32_000)
     }
+
+    /// The composer dropdown and the settings model list render every model of
+    /// the selected provider. Some catalogs (NVIDIA, …) ship thousands of
+    /// entries — grouping must be a single pass, not O(n²) (user report
+    /// 2026-11-12: opening the model list froze the whole UI).
+    @Test("Grouping scales to large provider catalogs", .timeLimit(.minutes(1)))
+    func groupingScalesToLargeCatalogs() {
+        let prefixes = ["nvidia", "openai", "google", "meta", "anthropic", "mistral"]
+        var modelIDs: [String] = []
+        modelIDs.reserveCapacity(12_000)
+        for i in 0..<12_000 {
+            modelIDs.append("\(prefixes[i % prefixes.count])/model-\(i)")
+        }
+
+        let groups = ModelGroupingLogic.groupedModels(modelIDs)
+
+        #expect(groups.count == prefixes.count)
+        let total = groups.reduce(0) { $0 + $1.models.count }
+        #expect(total == modelIDs.count)
+        for group in groups {
+            if let prefix = group.prefix {
+                #expect(group.models.allSatisfy { $0.hasPrefix(prefix + "/") })
+            }
+        }
+    }
 }

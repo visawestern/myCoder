@@ -73,10 +73,11 @@ struct ModelPickerDropdown: View {
                     .foregroundColor(Color.mimo.textMuted)
                     .padding(12)
             } else {
+                let rowMeta = buildRowMetadata(for: models)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(groups.indices, id: \.self) { index in
-                            groupSection(groups[index])
+                            groupSection(groups[index], rowMeta)
                         }
                     }
                     .padding(8)
@@ -107,7 +108,7 @@ struct ModelPickerDropdown: View {
         .background(Color.mimo.background)
     }
 
-    private func groupSection(_ group: (prefix: String?, models: [String])) -> some View {
+    private func groupSection(_ group: (prefix: String?, models: [String]), _ rowMeta: [String: ModelPickerRowMetadata]) -> some View {
         let key = ModelGroupingLogic.groupKey(prefix: group.prefix, providerID: appState.selectedProviderID)
         let isCollapsed = collapsedGroups.contains(key)
         return VStack(alignment: .leading, spacing: 3) {
@@ -145,63 +146,41 @@ struct ModelPickerDropdown: View {
             .buttonStyle(HandCursorButtonStyle())
 
             if !isCollapsed {
-                VStack(spacing: 2) {
+                LazyVStack(spacing: 2) {
                     ForEach(group.models, id: \.self) { modelID in
-                        modelRow(modelID)
+                        modelRow(modelID, rowMeta[modelID] ?? ModelPickerRowMetadata())
                     }
                 }
             }
         }
     }
 
-    private func modelRow(_ modelID: String) -> some View {
-        let isSelected = ModelSelectionPresentationLogic.isSelected(
-            candidate: modelID,
-            selectedModel: appState.selectedModel,
-            effectiveModel: appState.effectiveSelectedModel()
-        )
-        let badges = ModelCapabilityLogic.badges(
-            for: modelID,
-            in: appState.serverProviders,
-            providerID: appState.selectedProviderID.isEmpty ? nil : appState.selectedProviderID
-        )
-        let context = ModelCapabilityLogic.contextWindow(
-            for: modelID,
-            in: appState.serverProviders,
-            providerID: appState.selectedProviderID.isEmpty ? nil : appState.selectedProviderID
-        )
+    private func modelRow(_ modelID: String, _ meta: ModelPickerRowMetadata) -> some View {
         let ref = InternalModelRef(providerID: appState.selectedProviderID, modelID: modelID)
-        let isInternal = internalStore.contains(ref)
-        let canBeInternal = InternalModelResolver.route(
-            for: ref,
-            customProviders: appState.customProviders,
-            localProviders: LocalProviderLogic.load(),
-            serverProviders: appState.serverProviders.isEmpty ? nil : appState.serverProviders
-        ) != nil
         return HStack(alignment: .top, spacing: 2) {
             Button {
                 appState.selectModel(modelID)
                 isOpen = false
             } label: {
                 HStack(alignment: .top, spacing: 7) {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: meta.isSelected ? "checkmark.circle.fill" : "circle")
                         .interfaceFont(size: 10)
-                        .foregroundColor(isSelected ? Color.mimo.brand : Color.mimo.textMuted.opacity(0.6))
+                        .foregroundColor(meta.isSelected ? Color.mimo.brand : Color.mimo.textMuted.opacity(0.6))
                         .frame(width: 12)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(ModelGroupingLogic.splitModelID(modelID).name)
-                            .interfaceFont(size: 11, weight: isSelected ? .semibold : .regular, design: .monospaced)
-                            .foregroundColor(isSelected ? Color.mimo.brand : Color.mimo.textPrimary)
+                            .interfaceFont(size: 11, weight: meta.isSelected ? .semibold : .regular, design: .monospaced)
+                            .foregroundColor(meta.isSelected ? Color.mimo.brand : Color.mimo.textPrimary)
                             .lineLimit(1)
-                        if isInternal || !badges.isEmpty || context != nil {
+                        if meta.isInternal || !meta.badges.isEmpty || meta.context != nil {
                             HStack(spacing: 4) {
-                                if isInternal {
+                                if meta.isInternal {
                                     internalBadge
                                 }
-                                ForEach(badges) { badge in
+                                ForEach(meta.badges) { badge in
                                     badgeView(badge)
                                 }
-                                if let context {
+                                if let context = meta.context {
                                     Text(ModelCapabilityLogic.contextLabel(for: context))
                                         .interfaceFont(size: 8, weight: .medium, design: .monospaced)
                                         .foregroundColor(Color.mimo.textMuted)
@@ -222,7 +201,7 @@ struct ModelPickerDropdown: View {
             .buttonStyle(HandCursorButtonStyle())
 
             Button {
-                if isInternal {
+                if meta.isInternal {
                     internalStore.remove(ref)
                 } else {
                     internalStore.add(ref)
@@ -230,20 +209,49 @@ struct ModelPickerDropdown: View {
             } label: {
                 Image(systemName: "brain.head.profile")
                     .interfaceFont(size: 10, weight: .medium)
-                    .foregroundColor(isInternal ? Color.mimo.brand : Color.mimo.textMuted.opacity(0.55))
+                    .foregroundColor(meta.isInternal ? Color.mimo.brand : Color.mimo.textMuted.opacity(0.55))
                     .frame(width: 20, height: 20)
-                    .background(isInternal ? Color.mimo.brand.opacity(0.12) : Color.clear)
+                    .background(meta.isInternal ? Color.mimo.brand.opacity(0.12) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                     .contentShape(Rectangle())
             }
             .buttonStyle(HandCursorButtonStyle())
-            .disabled(!canBeInternal)
-            .help(internalToggleHelp(isInternal: isInternal, canBeInternal: canBeInternal))
+            .disabled(!meta.canBeInternal)
+            .help(internalToggleHelp(isInternal: meta.isInternal, canBeInternal: meta.canBeInternal))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background(isSelected ? Color.mimo.brand.opacity(0.08) : Color.clear)
+        .background(meta.isSelected ? Color.mimo.brand.opacity(0.08) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Everything a model row needs, computed once per dropdown open instead of
+    /// per row per render. The old per-row path scanned every provider and
+    /// re-decoded local provider configs from UserDefaults for each of
+    /// thousands of rows — which froze the UI on large catalogs (user report
+    /// 2026-11-12).
+
+    private func buildRowMetadata(for modelIDs: [String]) -> [String: ModelPickerRowMetadata] {
+        ModelPickerRowMetadataBuilder.build(
+            modelIDs: modelIDs,
+            providerID: appState.selectedProviderID,
+            selectedModel: appState.selectedModel,
+            effectiveModel: appState.effectiveSelectedModel(),
+            serverProviders: appState.serverProviders,
+            isInternal: { modelID in
+                internalStore.contains(InternalModelRef(
+                    providerID: appState.selectedProviderID,
+                    modelID: modelID
+                ))
+            },
+            canBeInternalForProvider: ModelPickerRowMetadataBuilder.canBeInternalForProvider(
+                providerID: appState.selectedProviderID,
+                modelIDs: modelIDs,
+                customProviders: appState.customProviders,
+                localProviders: LocalProviderLogic.load(),
+                serverProviders: appState.serverProviders
+            )
+        )
     }
 
     private var internalBadge: some View {

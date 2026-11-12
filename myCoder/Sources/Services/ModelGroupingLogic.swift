@@ -14,16 +14,22 @@ enum ModelGroupingLogic {
     }
 
     static func groupedModels(_ models: [String]) -> [(prefix: String?, models: [String])] {
-        var grouped: [(String?, [String])] = []
-        var seenPrefixes = Set<String>()
+        // Single pass: buckets keyed by prefix, first-seen order preserved.
+        // A filter-per-prefix implementation is O(n²) and froze the dropdown on
+        // large catalogs (user report 2026-11-12).
+        var result: [(prefix: String?, models: [String])] = []
+        var bucketIndexByPrefix: [String: Int] = [:]
         for modelID in models {
             let (prefix, _) = splitModelID(modelID)
-            let groupKey = prefix ?? ""
-            if seenPrefixes.contains(groupKey) { continue }
-            seenPrefixes.insert(groupKey)
-            grouped.append((prefix, models.filter { (splitModelID($0).prefix ?? "") == groupKey }))
+            let key = prefix ?? ""
+            if let index = bucketIndexByPrefix[key] {
+                result[index].models.append(modelID)
+            } else {
+                bucketIndexByPrefix[key] = result.count
+                result.append((prefix, [modelID]))
+            }
         }
-        return grouped
+        return result
     }
 
     static func groupKey(prefix: String?, providerID: String) -> String {

@@ -36,25 +36,15 @@ extension AppState {
         }
         // Local provider selected → its loaded models.
         if let local = LocalProviderLogic.load(defaults: defaults).first(where: { $0.id == selectedProviderID }) {
-            return local.models.filter {
-                !DisabledModelStore.isDisabled(
-                    providerID: local.id,
-                    modelID: $0,
-                    defaults: defaults
-                )
-            }
+            let disabled = DisabledModelStore.disabledModels(for: local.id, defaults: defaults)
+            return local.models.filter { !disabled.contains($0) }
         }
+        let disabled = DisabledModelStore.disabledModels(for: selectedProviderID, defaults: defaults)
         return ProviderSettingsLogic.models(
             for: selectedProviderID,
             in: serverProviders,
             customProviders: customProviders
-        ).filter {
-            !DisabledModelStore.isDisabled(
-                providerID: selectedProviderID,
-                modelID: $0,
-                defaults: defaults
-            )
-        }
+        ).filter { !disabled.contains($0) }
     }
 
     var supportsToolcallForSelection: Bool {

@@ -126,8 +126,8 @@ else
     fi
 fi
 
-# ── Build release ────────────────────────────────────────────
-echo "━━━ Building release…"
+# ── Build release (universal: x86_64 + arm64) ────────────────
+echo "━━━ Building release (universal)…"
 if [ "$PARALLEL" -eq 1 ]; then
     CORES=$(sysctl -n hw.ncpu 2>/dev/null || echo 8)
     BUILD_ARGS="--jobs $CORES"
@@ -139,19 +139,46 @@ else
     echo "    (single-thread, -Onone — avoids Swift 6.3 deadlock)"
 fi
 
-if ! swift build -c release --product "$APP_NAME" $BUILD_ARGS $DISABLE_SPM_SANDBOX -Xswiftc -no-whole-module-optimization -Xswiftc "$OPT_FLAG"; then
-    echo ""
-    echo "━━━ ❌ BUILD FAILED. Full compiler output is above (not truncated)."
-    echo "━━━    Fix the errors and re-run ./build-app.sh"
+build_release_for() {
+    local triple="$1"
+    echo "━━━ Building $triple ..."
+    if ! swift build -c release --product "$APP_NAME" --triple "$triple" \
+        $BUILD_ARGS $DISABLE_SPM_SANDBOX \
+        -Xswiftc -no-whole-module-optimization -Xswiftc "$OPT_FLAG"; then
+        echo ""
+        echo "━━━ ❌ BUILD FAILED for $triple. Full compiler output is above (not truncated)."
+        echo "━━━    Fix the errors and re-run ./build-app.sh"
+        exit 1
+    fi
+}
+
+build_release_for x86_64-apple-macosx
+build_release_for arm64-apple-macosx
+
+INTEL_BIN="$BUILD_DIR/myCoder"
+ARM_BIN=".build/arm64-apple-macosx/release/$APP_NAME"
+
+# ── Merge into a universal binary ────────────────────────────
+echo "━━━ Merging universal binary (x86_64 + arm64)…"
+if [ ! -f "$INTEL_BIN" ] || [ ! -f "$ARM_BIN" ]; then
+    echo "━━━ ❌ Missing architecture binaries: $INTEL_BIN or $ARM_BIN"
+    echo "━━━    Re-run ./build-app.sh after fixing the failed architecture build."
     exit 1
 fi
+
+UNIVERSAL_BIN="$BUILD_DIR/myCoder-universal"
+if ! lipo -create "$INTEL_BIN" "$ARM_BIN" -output "$UNIVERSAL_BIN"; then
+    echo "━━━ ❌ lipo merge failed."
+    exit 1
+fi
+echo "━━━ ✅ Universal binary: $(lipo -archs "$UNIVERSAL_BIN" | tr '\n' ' ')"
 
 # ── Assemble the .app bundle in the repo root ────────────────
 echo "━━━ Assembling $APP_BUNDLE (clean)…"
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
-cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+cp "$UNIVERSAL_BIN" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
 if [ -f "$RESOURCES_DIR/AppIcon.icns" ]; then
@@ -197,7 +224,7 @@ else
     echo "━━━ ⚠️  No code-signing identity found; macOS may re-check the app on launch"
 fi
 
-BIN_SIZE=$(stat -f "%z" "$BUILD_DIR/$APP_NAME" 2>/dev/null || stat --format="%s" "$BUILD_DIR/$APP_NAME" 2>/dev/null || echo "0")
-echo "━━━ ✅ Built v$NEW_SHORT (build $NEW_BUILD) — $((BIN_SIZE / 1024)) KB"
+BIN_SIZE=$(stat -f "%z" "$UNIVERSAL_BIN" 2>/dev/null || stat --format="%s" "$UNIVERSAL_BIN" 2>/dev/null || echo "0")
+echo "━━━ ✅ Built v$NEW_SHORT (build $NEW_BUILD) — $((BIN_SIZE / 1024)) KB (universal: $(lipo -archs "$UNIVERSAL_BIN" | tr '\n' ' '))"
 echo "━━━ App: $SCRIPT_DIR/$APP_BUNDLE"
 echo "━━━ Run: open '$APP_BUNDLE'"

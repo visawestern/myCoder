@@ -209,9 +209,12 @@ struct WorkspaceGridView: View {
             ForEach(workspaces) { workspace in
                 Button(action: { appState.selectWorkspace(workspace) }) {
                     VStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .interfaceFont(size: 18)
-                            .foregroundColor(appState.selectedWorkspace?.id == workspace.id ? Color.mimo.brand : Color.mimo.textMuted)
+                        ProjectAvatarView(
+                            workspace: workspace,
+                            size: 26,
+                            fallbackColor: appState.selectedWorkspace?.id == workspace.id ? Color.mimo.brand : Color.mimo.textMuted,
+                            fallbackSymbol: "folder.fill"
+                        )
                         Text(workspace.name)
                             .interfaceFont(size: 11, weight: .medium)
                             .foregroundColor(Color.mimo.textPrimary)
@@ -329,15 +332,12 @@ struct WorkspaceSidebarSection: View {
         VStack(alignment: .leading, spacing: 0) {
             // Group Row
             HStack(spacing: 8) {
-                // Colored circle avatar with #
-                ZStack {
-                    Circle()
-                        .fill(groupColor.opacity(0.2))
-                        .frame(width: 28, height: 28)
-                    Text("#")
-                        .interfaceFont(size: 12, weight: .bold)
-                        .foregroundColor(groupColor)
-                }
+                // Project avatar: its own favicon/logo when present, else the
+                // colored # badge.
+                ProjectAvatarView(
+                    workspace: workspace,
+                    fallbackColor: groupColor
+                )
                 
                 // Name + chevron
                 Button(action: {
