@@ -152,7 +152,11 @@ enum MarkdownInlineParser {
             case .bold: return #"\*\*(.+?)\*\*"#
             case .italic: return #"(?<!\*)\*([^*\n]+?)\*(?!\*)|(?<!_)_([^_\n]+?)_(?!_)"#
             case .code: return #"`(.+?)`"#
-            case .link: return #"\[([^\]\n]+)\]\((https?://[^)\s]+)\)"#
+            // Ссылка: `[текст](назначение)`. Назначение — URL или локальный
+            // путь (относительный/абсолютный). Отрицательный просмотр вперёд
+            // исключает картинки `![alt](src)` — они выделяются отдельно
+            // `MarkdownMediaSegmentLogic` (запрос 2026-11-13).
+            case .link: return #"(?<!!)\[([^\]\n]+)\]\(([^()\s]+)\)"#
             case .parenMath: return #"\\\(([^\n)]+?)\)"#
             case .bracketMath: return #"\\\[([^\n\[\]]+?)\]"#
             case .dollarMath: return #"\$([^\$\n]+?)\$"#
@@ -168,9 +172,14 @@ enum MarkdownInlineParser {
             case .code:
                 return [.code(String(matched.dropFirst().dropLast()))]
             case .link:
-                let groups = captureGroups(matched, pattern: #"\[([^\]\n]+)\]\((https?://[^)\s]+)\)"#)
+                let groups = captureGroups(matched, pattern: #"\[([^\]\n]+)\]\(([^()\s]+)\)"#)
                 if groups.count >= 2, !groups[0].isEmpty, !groups[1].isEmpty {
-                    return [.link(groups[0], groups[1])]
+                    switch MarkdownLinkLogic.kind(for: groups[1]) {
+                    case .web, .file:
+                        return [.link(groups[0], groups[1])]
+                    case .unsupported:
+                        return [.text(matched)]
+                    }
                 }
                 return [.text(matched)]
             case .parenMath, .bracketMath:

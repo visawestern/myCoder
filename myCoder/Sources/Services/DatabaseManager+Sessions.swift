@@ -207,6 +207,25 @@ extension DatabaseManager {
         }
     }
 
+    /// Persist the chat's plan steps (JSON snapshot of `TaskStep`s).
+    ///
+    /// Вход: `id` — чат; `stepsJSON` — снимок из
+    /// `SessionStepsPersistenceLogic.encode`, nil очищает колонку.
+    /// Выход: нет. Зависимости: колонка `sessions.metadata`.
+    func setSessionSteps(sessionId id: String, stepsJSON: String?) throws {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        try db.run(sessions.filter(sessionId == id).update(sessionMetadata <- stepsJSON))
+    }
+
+    /// Read the chat's persisted plan steps.
+    ///
+    /// Вход: `id` — чат. Выход: JSON-снимок или nil.
+    /// Зависимости: колонка `sessions.metadata`.
+    func getSessionSteps(sessionId id: String) throws -> String? {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        return try db.pluck(sessions.filter(sessionId == id).select(sessionMetadata))?[sessionMetadata]
+    }
+
     /// Persist a sub-agent lifecycle status ("running" | "done" | "failed").
     func setSubagentStatus(sessionId id: String, status: String?) throws {
         guard let db = db else { throw DatabaseError.notInitialized }

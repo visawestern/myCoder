@@ -540,12 +540,11 @@ struct MessageRow: View {
 
     @ViewBuilder
     private func markdownBubble(_ text: String) -> some View {
-        // Prose keeps the single selectable text surface the chat was built
-        // around; fenced code becomes its own spoiler (see
-        // MarkdownCodeSegmentLogic) so it can use the configured code theme,
-        // syntax highlighting and copy control. The message-level Copy action
-        // still copies the whole answer, fences included.
-        let segments = MarkdownCodeSegmentLogic.segments(from: text)
+        // Проза сохраняет единую selectable поверхность, фенс-код становится
+        // своим спойлером, инлайн-картинки — своими вью с действиями (см.
+        // MarkdownMediaSegmentLogic; запрос 2026-11-13). Копирование уровня
+        // сообщения по-прежнему копирует весь ответ целиком, включая фенсы.
+        let segments = MarkdownMediaSegmentLogic.segments(from: text)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
@@ -558,6 +557,12 @@ struct MessageRow: View {
                     )
                 case .code(let language, let code):
                     CodeBlockSpoilerView(language: language, code: code)
+                case .image(let alt, let source):
+                    MarkdownImageMessageView(
+                        source: source,
+                        alt: alt,
+                        projectRoot: projectRoot
+                    )
                 }
             }
         }

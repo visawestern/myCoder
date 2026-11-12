@@ -144,6 +144,10 @@ extension ChatPanelView {
                        let steps = SessionPlanParser.steps(fromTodoWriteJSON: input) {
                         appState.setSteps(steps, for: sessionID)
                         appState.showGoal = true
+                        GoalPlanSyncService.sync(
+                            steps: steps,
+                            context: appState.goalContext(for: sessionID)
+                        )
                     }
                 case "step-start":
                     msg.parts.append(.stepStart)
@@ -264,5 +268,8 @@ extension ChatPanelView {
         streamingText = ""
         currentAssistantMessageID = nil
         appState.scheduleGitRefresh(sessionID: turnSessionID)
+        // Ход закончился: звук играет только если это был успешный ответ и
+        // нет работающей цели (запрос 2026-11-13).
+        playCompletionSoundIfIdle(endedWithError: isEmptyCompletion)
     }
 }

@@ -67,6 +67,7 @@ struct HarnessPromptQualityTests {
         #expect(discipline.contains("under 600 lines"), "≤600 строк на файл")
         #expect(discipline.contains("tdd") || discipline.contains("test-first"), "TDD")
         #expect(discipline.contains("all reasonable tests") || discipline.contains("every"), "все возможные тесты")
+        #expect(discipline.contains("actual") && discipline.contains("expected"), "тест сравнивает фактический результат с ожидаемым")
         #expect(discipline.contains("contract"), "комментарий-контракт над каждой функцией")
         #expect(discipline.contains("input") && discipline.contains("output"), "входные и выходные параметры")
         #expect(discipline.contains("dependencies"), "зависимости функции")

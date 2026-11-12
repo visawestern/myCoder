@@ -129,10 +129,16 @@ extension ChatPanelView {
                 language: appState.appLanguage,
                 context: context
             )
-            // Команда start/resume запускает автономный цикл: полный промпт
-            // цели уходит в чат как юзер (с контекстом).
-            if case .start = command, let active = result.goals.first(where: { $0.state == .active }) {
-                launchedGoalID = active.id
+            // Создание цели сразу запускает её (директива 2026-11-13):
+            // start/resume/создание отправляют полный промпт цели в чат как
+            // юзер (с контекстом).
+            switch command {
+            case .create:
+                launchedGoalID = result.createdGoalID
+            case .start, .resume:
+                launchedGoalID = result.goals.first(where: { $0.state == .active })?.id
+            default:
+                break
             }
             reply = result.reply.isEmpty ? "🎯 Целей нет." : result.reply
         } catch {

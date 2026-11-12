@@ -16,15 +16,17 @@ extension ChatPanelView {
         images: [ClipboardImage],
         preparation: SendContextPreparation,
         sysPrompt: String,
-        agentMode: AgentMode
+        agentMode: AgentMode,
+        isProjectlessTurn: Bool
     ) async {
         let params = ModelCallParametersStore.parameters(for: model)
-        // Prior turns = everything except the just-appended user message
-        // and the empty assistant placeholder (audit P1 — carry history).
+        // Prior turns = everything strictly before the current user message.
+        // `dropLast(2)` was wrong: a warning notice inserted before the
+        // assistant placeholder cut a real answer out of history (audit P1).
         let prior = await MainActor.run { () -> [ChatHistoryBuilder.Turn] in
             let msgs = messageStore.messages(in: sendSessionID)
             let modelHistory = ConversationCompactionLogic.historyForModel(msgs)
-            let history = modelHistory.count >= 2 ? Array(modelHistory.dropLast(2)) : []
+            let history = DirectHistorySelectionLogic.priorTurns(from: modelHistory)
             // A long transcript is replaced by the ledger inside
             // `modelText`; do not also send twenty raw turns.
             guard !SendContextPreparationLogic.replacesRawHistory(
@@ -77,8 +79,15 @@ extension ChatPanelView {
             projectRoot: projectRoot,
             accessLevel: appState.accessLevel,
             sessionId: sendSessionID,
-            messageId: assistantID
+            messageId: assistantID,
+            isProjectless: isProjectlessTurn
         )
+        executor.projectlessWritePrompt = { suggested in
+            await self.promptCreateProjectForFileWrite(
+                suggestedName: suggested,
+                sessionID: sendSessionID
+            )
+        }
         executor.subagentLauncher = subagentLauncher(
             projectRoot: projectRoot,
             transport: routedSubagentTransport(fallback: .openAICompatible(baseURL: URL(string: baseURL) ?? URL(fileURLWithPath: "/"), apiKey: apiKey ?? "", model: model)),
@@ -312,12 +321,17 @@ extension ChatPanelView {
                     // сохранённый чеклист сразу после исполнения —
                     // единый источник правды для всех путей.
                     if TodoPanelSyncLogic.updatesChecklist(toolName: item.call.name) {
+                        let todoItems = executor.loadTodoItems()
                         let steps = TodoPanelSyncLogic.steps(
-                            fromTodoItems: executor.loadTodoItems()
+                            fromTodoItems: todoItems
                         )
                         await MainActor.run {
                             self.appState.setSteps(steps, for: sendSessionID)
                             if !steps.isEmpty { self.appState.showGoal = true }
+                            GoalPlanSyncService.sync(
+                                todoItems: todoItems,
+                                context: self.appState.goalContext(for: sendSessionID)
+                            )
                         }
                     }
                     if StreamDiagnostics.isEnabled {
@@ -415,6 +429,9 @@ extension ChatPanelView {
                     msg.isStreaming = false
                 }
                 self.currentAssistantMessageID = nil
+                // Успешный ответ прямой модели — звук завершения, если нет
+                // работающей цели (запрос 2026-11-13).
+                self.playCompletionSoundIfIdle()
             }
         } catch {
             await MainActor.run {

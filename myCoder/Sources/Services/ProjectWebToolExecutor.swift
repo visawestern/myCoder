@@ -19,6 +19,14 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     /// правки файлов привязываются к нему для точного отката диалога.
     let messageId: String?
     let accessLevel: AccessLevel
+    /// True when the open chat has no project folder. File-changing tools are
+    /// then refused until the user creates a project (see `ProjectlessWriteLogic`).
+    let isProjectless: Bool
+    /// Host hook that asks the user to create a project folder. Input is the
+    /// suggested folder name; output is the created project root, or nil when
+    /// the user declined. Called only for file-changing tools in a projectless
+    /// chat, before any write happens.
+    var projectlessWritePrompt: (@MainActor (String) async -> String?)?
     /// Home directory for user-global reads (installed skills). Defaults to
     /// the real home; injectable so skill tests use a temp sandbox.
     let homeDirectory: URL
@@ -31,6 +39,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
          sessionId: String? = nil,
          messageId: String? = nil,
          accessLevel: AccessLevel = .askBeforeChanges,
+         isProjectless: Bool = false,
+         projectlessWritePrompt: (@MainActor (String) async -> String?)? = nil,
          homeDirectory: URL? = nil) {
         self.projectRoot = projectRoot
         self.fileManager = fileManager
@@ -38,6 +48,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         self.sessionId = sessionId
         self.messageId = messageId
         self.accessLevel = accessLevel
+        self.isProjectless = isProjectless
+        self.projectlessWritePrompt = projectlessWritePrompt
         self.homeDirectory = homeDirectory ?? fileManager.homeDirectoryForCurrentUser
     }
 
@@ -54,19 +66,27 @@ struct ProjectWebToolExecutor: WebToolExecutor {
                         accessLevel: AccessLevel = .askBeforeChanges,
                         sessionId: String? = nil,
                         messageId: String? = nil,
+                        isProjectless: Bool = false,
                         tabKey: String = "tools") -> ProjectWebToolExecutor {
         var executor = ProjectWebToolExecutor(
             projectRoot: projectRoot,
             undoManager: (try? ProjectUndoManager(projectPath: projectRoot)),
             sessionId: sessionId,
             messageId: messageId,
-            accessLevel: accessLevel
+            accessLevel: accessLevel,
+            isProjectless: isProjectless
         )
         executor.bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
         return executor
     }
 
     func execute(_ call: WebToolCall) async -> String {
+        // The project gate runs before any side effect AND before the access
+        // prompt: asking the user to allow a write that cannot legally happen
+        // would be noise. A projectless chat must never touch disk.
+        if let refusal = await projectlessWriteRefusal(for: call) {
+            return refusal
+        }
         // The access gate runs before any side effect: a gated tool is never
         // executed, it is reported back to the model as needing approval.
         // NOTE: when the driver already collected an Allow verdict it calls
@@ -78,8 +98,16 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     }
 
     func execute(_ call: WebToolCall, userApproved: Bool) async -> String {
+        if let refusal = await projectlessWriteRefusal(for: call) {
+            return refusal
+        }
         if userApproved { return await run(call) }
-        return await execute(call)
+        // Do not re-enter execute(_:) here: it would run the project gate a
+        // second time and ask the user twice.
+        if WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
+            return approvalMessage(for: call)
+        }
+        return await run(call)
     }
 
     /// Resolve a tool path against the project root.
@@ -470,7 +498,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         }
         let id = await BackgroundCommandCenter.shared.start(
             command: command,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            sessionID: sessionId
         )
         let task = await BackgroundCommandCenter.shared.awaitCompletion(id: id)
         return BackgroundCommandLogic.renderResult(output: task.output, exitCode: task.exitCode ?? -1)

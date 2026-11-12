@@ -21,6 +21,10 @@ enum GoalPromptBuilder {
         let continuationLabel = russian ? "Продолжение" : "Continuation"
         let verificationLabel = russian ? "Проверка (адвокат дьявола)" : "Verification (devil's advocate)"
 
+        let continuation = goal.plan.isEmpty
+            ? GoalVerificationPromptBuilder.readinessMessage(language: language)
+            : GoalVerificationPromptBuilder.continuationMessage(language: language)
+
         return """
         \(goalLabel): \(goal.title)
 
@@ -28,7 +32,7 @@ enum GoalPromptBuilder {
         \(planLines.isEmpty ? emptyPlan : planLines)
 
         \(continuationLabel):
-        \(GoalVerificationPromptBuilder.continuationMessage(language: language))
+        \(continuation)
 
         \(verificationLabel):
         \(GoalVerificationPromptBuilder.devilAdvocateSystem(language: language))

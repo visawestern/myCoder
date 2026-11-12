@@ -21,13 +21,17 @@ struct SessionProjectRootLogicTests {
         #expect(root == "/Users/apple/projects/myCoder")
     }
 
-    @Test("Standalone-чат (без проекта) использует выбранный workspace")
-    func standaloneFallsBackToWorkspace() {
+    @Test("Standalone-чат (без проекта) не подмешивает выбранный workspace")
+    func standaloneStaysProjectless() {
+        // Live 2026-11-12: the aquarium chat wrote aquarium_3d.html to the
+        // home folder, but context collection fell back to the selected
+        // myCoder workspace and fed another project's files/rules into it.
         let root = SessionProjectRootLogic.resolve(
             sessionDirectory: ChatSession.standaloneProjectKey,
             selectedWorkspacePath: "/Users/apple/projects/myCoder"
         )
-        #expect(root == "/Users/apple/projects/myCoder")
+        #expect(root.isEmpty,
+                "фактически: \(root) — ожидался пустой корень (без проекта)")
     }
 
     @Test("Пустой project сессии — фолбэк на workspace (новый чат)")

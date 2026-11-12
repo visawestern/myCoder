@@ -74,4 +74,32 @@ struct GoalPresentationTests {
         #expect(p.primaryAction == .none)
         #expect(p.isComplete == true)
     }
+
+    @Test("Управление сессией цели доступно по состоянию")
+    func sessionControlsAvailability() {
+        let pending = GoalPresentation(goal: goal(state: .pending))
+        #expect(pending.canStart)
+        #expect(!pending.canPause)
+        #expect(!pending.canStop)
+
+        let active = GoalPresentation(goal: goal(state: .active))
+        #expect(!active.canStart)
+        #expect(active.canPause)
+        #expect(active.canStop)
+
+        let paused = GoalPresentation(goal: goal(state: .paused))
+        #expect(paused.canStart)
+        #expect(!paused.canPause)
+        #expect(!paused.canStop)
+
+        let failed = GoalPresentation(goal: goal(state: .error))
+        #expect(failed.canStart)
+        #expect(!failed.canPause)
+        #expect(!failed.canStop)
+
+        let done = GoalPresentation(goal: goal(state: .done))
+        #expect(!done.canStart)
+        #expect(!done.canPause)
+        #expect(!done.canStop)
+    }
 }

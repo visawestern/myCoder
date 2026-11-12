@@ -94,6 +94,22 @@ struct GoalPresentation: Equatable, Sendable {
         }
     }
 
+    /// Session controls of the composer goal row. Start is offered when the
+    /// goal is not running, pause/stop only while it is running; a done goal
+    /// can only be deleted.
+    var canStart: Bool {
+        goal.state == .pending || goal.state == .paused || goal.state == .error
+    }
+
+    var canPause: Bool {
+        goal.state == .active
+    }
+
+    /// Stop is the hard version of pause: it also aborts the running turn.
+    var canStop: Bool {
+        goal.state == .active
+    }
+
     /// A goal is complete when it is marked done or every plan step is done.
     var isComplete: Bool {
         goal.state == .done || (showsProgress && doneCount == totalCount)

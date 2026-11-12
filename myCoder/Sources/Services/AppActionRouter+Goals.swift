@@ -24,13 +24,22 @@ extension AppActionRouter {
             language: appState.appLanguage,
             context: context
         )
-        // start/resume запускают автономный цикл: полный промпт цели уходит
-        // в чат через обычный send-путь (обработчик apiSendRequested), чтобы
-        // модель получила его с полным контекстом, как от юзера.
-        if case .start = command,
-           let active = outcome.goals.first(where: { $0.state == .active }) {
+        // Создание цели сразу запускает её (директива 2026-11-13):
+        // start/resume/создание отправляют полный промпт цели в чат через
+        // обычный send-путь (обработчик apiSendRequested), чтобы модель
+        // получила его с полным контекстом, как от юзера.
+        let launchedGoalID: UUID?
+        switch command {
+        case .create:
+            launchedGoalID = outcome.createdGoalID
+        case .start, .resume:
+            launchedGoalID = outcome.goals.first(where: { $0.state == .active })?.id
+        default:
+            launchedGoalID = nil
+        }
+        if let launchedGoalID {
             _ = GoalLauncher.launch(
-                goalID: active.id,
+                goalID: launchedGoalID,
                 homeDirectory: Self.homeDirectory,
                 language: appState.appLanguage,
                 fallbackChatID: context.chatID

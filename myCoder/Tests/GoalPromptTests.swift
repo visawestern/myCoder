@@ -40,11 +40,23 @@ struct GoalPromptTests {
         #expect(first == second)
     }
 
-    @Test("Цель без плана: промпт честно говорит, что план пуст")
+    @Test("Цель без плана: промпт требует сначала составить план")
     func emptyPlanIsStated() {
         let prompt = GoalPromptBuilder.fullPrompt(goal: goal(), language: .russian)
         #expect(prompt.contains("Переработать отчёт по продажам"))
         #expect(prompt.contains("план пуст"), "пустой план должен быть назван прямо")
+        #expect(prompt.contains("Сначала составь план"),
+                "фактически: пустой план не просит построить план — модель начинает искать заново")
+        #expect(!prompt.contains("План ещё не полностью готов"),
+                "для пустого плана нельзя говорить «продолжай по плану»")
+    }
+
+    @Test("Непустой план использует обычное продолжение")
+    func nonEmptyPlanUsesContinuation() {
+        let plan = [UserGoal.PlanItem(title: "Шаг 1", status: .inProgress)]
+        let prompt = GoalPromptBuilder.fullPrompt(goal: goal(plan: plan), language: .russian)
+        #expect(prompt.contains(GoalVerificationPromptBuilder.continuationMessage(language: .russian)))
+        #expect(!prompt.contains("Сначала составь план"))
     }
 
     @Test("Английская версия промпта тоже собирается")

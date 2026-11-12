@@ -119,6 +119,22 @@ struct SendContextPreparationFirstTurnTests {
         #expect(preparation.modelText == "привет")
     }
 
+    @Test("Режим «План» в чате без проекта не собирает контекст на первом промпте")
+    func planModeWithoutProjectStaysSilentOnFirstTurn() {
+        let preparation = SendContextPreparationLogic.prepare(
+            message: "составь план",
+            records: [],
+            projectPath: "",
+            isEnabled: true,
+            priorTurns: [],
+            isPlanMode: true
+        )
+        #expect(preparation.status == .projectlessFirstTurn)
+        #expect(preparation.pack == nil)
+        #expect(preparation.warning == nil)
+        #expect(preparation.modelText == "составь план")
+    }
+
     @Test("Режим «План» собирает контекст даже на первом промпте")
     func planModeCompilesContextOnFirstTurn() throws {
         let root = try makeProject()

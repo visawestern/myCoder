@@ -309,13 +309,14 @@ class MessageStore: ObservableObject {
     /// finds a ready layout instead of stalling the main thread (user report
     /// 2026-11-01: thumb spins at the message boundary).
     ///
-    /// The chat splits a message at fenced code blocks and gives only the
-    /// prose segments to the selectable markdown renderer; code blocks have
-    /// their own view. Prewarming the raw message text would therefore build
-    /// entries no row ever asks for, so the same split is applied here.
+    /// The chat splits a message at fenced code blocks and inline images and
+    /// gives only the prose segments to the selectable markdown renderer;
+    /// code blocks and images have their own views. Prewarming the raw message
+    /// text would therefore build entries no row ever asks for, so the same
+    /// split is applied here.
     private func scheduleMarkdownPrewarm(for messages: [Message]? = nil) {
         let source = messages ?? self.messages
-        let proseTexts = MarkdownCodeSegmentLogic.proseTexts(
+        let proseTexts = MarkdownMediaSegmentLogic.proseTexts(
             from: source.filter { !$0.isStreaming }.map(\.content)
         )
 

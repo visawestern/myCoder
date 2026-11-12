@@ -80,6 +80,9 @@ extension ChatPanelView {
                     msg.isStreaming = false
                 }
                 self.currentAssistantMessageID = nil
+                // Успешный ответ opencode serve — звук завершения, если нет
+                // работающей цели (запрос 2026-11-13).
+                self.playCompletionSoundIfIdle()
             }
             return
     }

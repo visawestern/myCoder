@@ -157,6 +157,15 @@ enum TaskLedgerExtraction {
                     }
                 }
             }
+            // A file the assistant actually created/updated is task state.
+            // Scanning only user messages made the model forget
+            // `aquarium_3d.html` right after writing it (live 2026-11-12).
+            if message.role == .assistant {
+                for path in assistantArtifactPaths(in: text) {
+                    add(path, to: &artifacts)
+                    contributed = true
+                }
+            }
             if contributed { markCovered(message.id) }
         }
 
@@ -180,6 +189,44 @@ enum TaskLedgerExtraction {
     private static func isConcreteArtifact(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/") else { return false }
         return !path.split(separator: "/").contains("..")
+    }
+
+    /// Inline code spans in an assistant answer that name a concrete file.
+    ///
+    /// - Input: the assistant message body.
+    /// - Output: relative file paths in order of appearance, without duplicates.
+    /// - Purpose: record artifacts the model actually created or updated,
+    ///   without treating every inline token (`todo_write`) as a file.
+    /// - Depends on: `isConcreteArtifact`; pure and unit-testable.
+    private static func assistantArtifactPaths(in text: String) -> [String] {
+        var paths: [String] = []
+        var rest = text[...]
+        while let open = rest.firstIndex(of: "`") {
+            let afterOpen = rest.index(after: open)
+            guard let close = rest[afterOpen...].firstIndex(of: "`") else { break }
+            let token = String(rest[afterOpen..<close])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = token.hasPrefix("./") ? String(token.dropFirst(2)) : token
+            if isConcreteArtifact(normalized), looksLikeFileName(normalized),
+               !paths.contains(normalized) {
+                paths.append(normalized)
+            }
+            rest = rest[rest.index(after: close)...]
+        }
+        return paths
+    }
+
+    /// True when the token has a filename shape: no spaces, not a URL, and a
+    /// short alphanumeric extension (`.html`, `.swift`, `.md`, `.json`).
+    private static func looksLikeFileName(_ path: String) -> Bool {
+        guard !path.contains(where: { $0.isWhitespace }), !path.contains("://") else {
+            return false
+        }
+        let name = path.split(separator: "/").last.map(String.init) ?? path
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return false }
+        let ext = name[name.index(after: dot)...]
+        return (1...8).contains(ext.count)
+            && ext.allSatisfy { $0.isLetter || $0.isNumber }
     }
 }
 

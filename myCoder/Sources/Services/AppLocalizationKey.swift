@@ -50,6 +50,8 @@ enum AppLocalizationKey: String, CaseIterable {
     case appDisplayName, statusBarIdle, statusBarGenerating, statusBarProcessing
     case newProjectTitle, newProjectName, newProjectFolder, newProjectChooseFolder
     case newProjectCreate, newProjectCancel, notificationsTitle, notificationsEmpty
+    case locProjectlessWriteTitle, locProjectlessWriteBody, locProjectlessWriteCreate
+    case locProjectlessWriteFolder, locProjectlessWriteNotice
     case notificationsEmptySubtitle, workspacesTitle, noTasksYet, justNow
     case storageTabTitle, storageStatsTitle, storageDatabaseSize, storageSnapshotSize
     case storageMessageCount, storageActiveSessions, storageArchivedSessions, cleanupTitle
@@ -173,7 +175,9 @@ enum AppLocalizationKey: String, CaseIterable {
     case locGoalPause, locGoalResume, locGoalDeleteQuestion, locGoalDelete
     case locGoalCancel, locGoalDeleteHint, locGoalEdit, locGoalEditTitle
     case locGoalSave, locGoalFullPrompt, locGoalTitlePlaceholder, locGoalNoneInChat
+    case locGoalStop, locGoalStopHint, locGoalDeleteConfirm
     case locTerminalTitle, locTerminalEmpty, locTerminalOpen, locTerminalCancel
+    case locTerminalCopyCommand, locTerminalCopyOutput, locTerminalRemove, locTerminalCopied
     case locTerminal, locCopyChat, locPickElement, locNotConfigured
     case locConnectionFailed, locRequiresAPIKey, locEnableToolCalling, locEnableACP
     case locAlertRemoveSkill, locAlertRemoveMCPServer, locUpdate, locUpdateAvailable

@@ -80,7 +80,11 @@ extension AppState {
         }
         selectedSession = session
         restoreSelection(for: session)
-        currentSteps = []
+        // Restore the chat's plan from the program database instead of
+        // clearing it: a relaunch used to show "Нет шагов" for a chat whose
+        // checklist was already built (user directive 2026-11-13).
+        let restoredSteps = steps(for: session.id)
+        stepsBySessionID[ContextSessionStatusLogic.key(session.id)] = restoredSteps
         vcsChanges = []
         sessionGitTotals = SessionGitTotals(additions: 0, deletions: 0)
         refreshSubagentSessions()

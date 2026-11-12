@@ -22,6 +22,15 @@ enum ProjectlessWorkspaceLogic {
         workspace?.id == workspaceID
     }
 
+    /// True when the OPEN CHAT has no project, regardless of the sidebar
+    /// selection. An empty directory means the chat was not attached to a
+    /// project yet, which is also project-less for write gating.
+    static func isProjectless(sessionDirectory: String?) -> Bool {
+        guard let sessionDirectory else { return true }
+        let trimmed = sessionDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed == workspaceID
+    }
+
     /// Working directory of the open chat.
     ///
     /// A project chat uses its project folder. A project-less chat uses the

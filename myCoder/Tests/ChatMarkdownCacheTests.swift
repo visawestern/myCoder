@@ -325,7 +325,7 @@ struct ChatMarkdownCacheTests {
     @Test("MessageStore ставит в prewarm только prose и профиль панели")
     func storePrewarmsProseWithPanelProfile() throws {
         let store = try RepoRoot.sourceText("myCoder/Sources/Services/MessageStore.swift")
-        #expect(store.contains("MarkdownCodeSegmentLogic.proseTexts"))
+        #expect(store.contains("MarkdownMediaSegmentLogic.proseTexts"))
         #expect(store.contains("markdownPrewarmFontSize"))
         #expect(store.contains("markdownPrewarmIsLightInterface"))
         #expect(store.contains("markdownPrewarmTask?.cancel()"))

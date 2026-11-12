@@ -82,4 +82,20 @@ struct GoalRunnerLogicTests {
         #expect(GoalRunner.shouldContinue(after: GoalVerdict(complete: false, notDone: ["x"], reason: "", valid: true)))
         #expect(!GoalRunner.shouldContinue(after: GoalVerdict(complete: true, notDone: [], reason: "", valid: true)))
     }
+
+    @Test("Запуск цели сразу помечает её активной")
+    func launchMarksGoalActive() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let goal = UserGoal(title: "Запустить", chatID: "chat-a")
+        try GoalStore.upsert(goal, homeDirectory: home)
+        let launched = GoalLauncher.launch(
+            goalID: goal.id,
+            homeDirectory: home,
+            language: .russian,
+            fallbackChatID: "chat-a"
+        )
+        #expect(launched)
+        #expect(GoalStore.load(homeDirectory: home).first?.state == .active)
+    }
 }

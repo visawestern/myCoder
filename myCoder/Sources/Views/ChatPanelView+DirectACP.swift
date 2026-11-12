@@ -74,6 +74,9 @@ extension ChatPanelView {
                     sessionTitle: String(text.prefix(50)),
                     sessionID: assistantID
                 )
+                // Успешный ответ ACP — звук завершения, если нет работающей
+                // цели (запрос 2026-11-13).
+                self.playCompletionSoundIfIdle()
             }
             return true
         }

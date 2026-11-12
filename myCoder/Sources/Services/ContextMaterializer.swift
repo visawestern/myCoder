@@ -77,17 +77,24 @@ enum ContextMaterializer {
 
     /// Builds one code block for a reference. Internal so `TurnContextCompiler`
     /// can compose sections without inventing its own file reading.
+    ///
+    /// `fallbackReason` помечает блок, когда точная ссылка не сработала и
+    /// вызывающий показал файл целиком: честность «что и почему показано»
+    /// сохраняется (запрос 2026-11-13).
     static func block(for reference: TaskReference,
                       projectRoot: String,
                       maxBytes: Int = defaultMaxBlockBytes,
-                      maxFileBytes: Int = ProjectFileIndexLogic.defaultMaxFileSize) throws -> String {
-        try codeBlock(for: reference, projectRoot: projectRoot, maxBytes: maxBytes, maxFileBytes: maxFileBytes)
+                      maxFileBytes: Int = ProjectFileIndexLogic.defaultMaxFileSize,
+                      fallbackReason: String? = nil) throws -> String {
+        try codeBlock(for: reference, projectRoot: projectRoot, maxBytes: maxBytes,
+                      maxFileBytes: maxFileBytes, fallbackReason: fallbackReason)
     }
 
     private static func codeBlock(for reference: TaskReference,
                                   projectRoot: String,
                                   maxBytes: Int,
-                                  maxFileBytes: Int) throws -> String {
+                                  maxFileBytes: Int,
+                                  fallbackReason: String? = nil) throws -> String {
         let path = reference.path
         let url = try resolve(path: path, projectRoot: projectRoot)
 
@@ -111,14 +118,13 @@ enum ContextMaterializer {
         }
 
         let text: String
-        do {
-            text = try String(contentsOf: url, encoding: .utf8)
-        } catch {
+        guard let decoded = ContextFileDecoding.readText(url: url) else {
             throw LocalCompilerError.materializationFailed(
                 path: path,
-                reason: error.localizedDescription
+                reason: "не удалось декодировать текст файла"
             )
         }
+        text = decoded
 
         var lines = text.components(separatedBy: "\n")
         if lines.last?.isEmpty == true { lines.removeLast() }
@@ -176,6 +182,9 @@ enum ContextMaterializer {
         }
         if let why = reference.why, !why.isEmpty {
             header += "\n(зачем: \(why))"
+        }
+        if let fallbackReason, !fallbackReason.isEmpty {
+            header += "\n(_\(fallbackReason)_)"
         }
 
         // Keep the block inside the byte budget by dropping trailing lines,

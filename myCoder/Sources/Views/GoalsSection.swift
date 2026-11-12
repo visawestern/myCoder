@@ -163,6 +163,14 @@ struct GoalsSection: View {
             chatID: context.chatID
         )
         _ = try? GoalStore.upsert(goal, homeDirectory: home)
+        // Новая цель стартует сразу (директива 2026-11-13): не нужно
+        // отдельно нажимать «Старт» — полный промпт уходит в текущий чат.
+        _ = GoalLauncher.launch(
+            goalID: goal.id,
+            homeDirectory: home,
+            language: language,
+            fallbackChatID: appState.selectedSession?.id
+        )
         newGoalTitle = ""
         withAnimation(.easeOut(duration: 0.15)) {
             isCreating = false

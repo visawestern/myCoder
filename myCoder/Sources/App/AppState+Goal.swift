@@ -13,6 +13,26 @@ extension AppState {
 
     var currentSessionGoal: String? { selectedSession?.sessionGoal }
 
+    /// Scope of a goal for a concrete chat, not just the selected one.
+    ///
+    /// Вход: `sessionID` — чат, для которого исполняется инструмент.
+    /// Выход: `GoalContext` с id чата и его проектом (nil для standalone).
+    /// Зависимости: `DatabaseBridge.sessionDirectory`,
+    /// `GoalContextLogic.context`.
+    func goalContext(for sessionID: String?) -> GoalContext {
+        let resolvedID = ContextSessionStatusLogic.key(sessionID).isEmpty
+            ? selectedSession?.id
+            : sessionID
+        let directory = resolvedID.flatMap {
+            DatabaseBridge.shared.sessionDirectory(forSessionID: $0)
+        } ?? selectedSession?.directory
+        return GoalContextLogic.context(
+            chatID: resolvedID,
+            sessionDirectory: directory,
+            selectedWorkspacePath: selectedWorkspace?.path
+        )
+    }
+
     /// Undo the most recent project-scoped file change and make every outcome
     /// visible. The old command discarded both the Bool result and thrown
     /// errors, leaving users unable to tell whether anything happened.

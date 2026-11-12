@@ -295,6 +295,34 @@ class DatabaseBridge: ObservableObject {
         }
     }
     
+    /// Persist the chat's plan steps so they survive an app restart.
+    ///
+    /// Вход: `id` — чат; `steps` — шаги правой панели.
+    /// Выход: нет; ошибка базы логируется, чат продолжает работать.
+    /// Зависимости: `DatabaseManager.setSessionSteps`,
+    /// `SessionStepsPersistenceLogic.encode`.
+    func setSessionSteps(sessionId id: String, steps: [TaskStep]) {
+        do {
+            try db.setSessionSteps(
+                sessionId: id,
+                stepsJSON: SessionStepsPersistenceLogic.encode(steps)
+            )
+        } catch {
+            print("❌ Failed to persist session steps: \(error)")
+        }
+    }
+
+    /// Read the chat's persisted plan steps.
+    ///
+    /// Вход: `sessionID` — чат. Выход: шаги или пустой список.
+    /// Зависимости: `DatabaseManager.getSessionSteps`,
+    /// `SessionStepsPersistenceLogic.decode`.
+    func sessionSteps(forSessionID sessionID: String) -> [TaskStep] {
+        SessionStepsPersistenceLogic.decode(
+            try? db.getSessionSteps(sessionId: sessionID)
+        )
+    }
+
     /// Persist a session goal in the program database.
     func setSessionGoal(sessionId id: String, goal: String?) {
         do {

@@ -17,6 +17,9 @@ enum ChatHistoryBuilder {
     static func history(from turns: [Turn], maxTurns: Int = 20) -> [DirectChatMessage] {
         let cleaned = turns.compactMap { turn -> DirectChatMessage? in
             guard turn.role == "user" || turn.role == "assistant" else { return nil }
+            // Legacy warning notices were saved as assistant messages; they
+            // are UI status, not dialogue, and must not consume the turn cap.
+            guard !TurnNoticeBuilder.isLegacyNotice(role: turn.role, content: turn.content) else { return nil }
             let text = turn.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }        // skip empty streaming placeholders
             guard turn.isFinished || turn.role == "user" else { return nil }

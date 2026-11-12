@@ -21,6 +21,16 @@ struct GoalServiceTests {
         #expect(list.reply.contains("Сделать фичу"))
     }
 
+    @Test("Создание возвращает id новой цели — её запускают сразу")
+    func createReturnsCreatedGoalID() throws {
+        let h = home(); defer { try? FileManager.default.removeItem(at: h) }
+        let created = try GoalService.apply(.create(title: "Новая"), homeDirectory: h, language: .russian)
+        #expect(created.createdGoalID != nil)
+        #expect(created.goals.first(where: { $0.id == created.createdGoalID })?.title == "Новая")
+        let startCommand = try GoalService.apply(.start, homeDirectory: h, language: .russian)
+        #expect(startCommand.createdGoalID == nil)
+    }
+
     @Test("Start без плана возвращает промпт готовности")
     func startWithoutPlan() throws {
         let h = home(); defer { try? FileManager.default.removeItem(at: h) }

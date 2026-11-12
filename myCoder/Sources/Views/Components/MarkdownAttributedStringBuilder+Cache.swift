@@ -400,12 +400,33 @@ extension MarkdownAttributedStringBuilder {
                 }
                 result.append(attributedCode)
             case .link(let title, let url):
-                result.append(NSAttributedString(string: title, attributes: [
-                    .font: font,
-                    .foregroundColor: brand,
-                    .underlineStyle: NSUnderlineStyle.single.rawValue,
-                    .link: url
-                ]))
+                switch MarkdownLinkLogic.kind(for: url) {
+                case .web:
+                    result.append(NSAttributedString(string: title, attributes: [
+                        .font: font,
+                        .foregroundColor: brand,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                        .link: url
+                    ]))
+                case .file:
+                    var attributes: [NSAttributedString.Key: Any] = [
+                        .font: font,
+                        .foregroundColor: brand,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue
+                    ]
+                    // Локальный путь: клик открывает меню «Открыть с / Показать
+                    // в Finder» (то же поведение, что у путей в тексте).
+                    // Если файла нет — остаётся стиль ссылки без клика.
+                    if let resolved = MarkdownLinkLogic.resolveFile(url, projectRoot: projectRoot) {
+                        attributes[.chatFilePath] = resolved
+                    }
+                    result.append(NSAttributedString(string: title, attributes: attributes))
+                case .unsupported:
+                    result.append(NSAttributedString(string: title, attributes: [
+                        .font: font,
+                        .foregroundColor: color
+                    ]))
+                }
             case .mathInline(let value):
                 let italic = NSFontManager.shared.convert(
                     codeFont,

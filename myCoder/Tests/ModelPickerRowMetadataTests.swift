@@ -87,7 +87,7 @@ struct ModelPickerRowMetadataTests {
 
     @Test("canBeInternal is true for an enabled custom provider")
     func canBeInternalCustomEnabled() {
-        let custom = CustomProvider(id: "or", name: "OpenRouter", type: .openRouter, baseURL: "https://openrouter.ai/api/v1", apiKey: "k", models: [], isEnabled: true)
+        let custom = CustomProvider(id: "or", name: "OpenRouter", type: .openRouter, baseURL: "https://openrouter.ai/api/v1", apiKey: "k", isEnabled: true, models: [])
         #expect(ModelPickerRowMetadataBuilder.canBeInternalForProvider(
             providerID: "or",
             modelIDs: ["a"],
@@ -99,7 +99,7 @@ struct ModelPickerRowMetadataTests {
 
     @Test("canBeInternal is false for a disabled custom provider")
     func canBeInternalCustomDisabled() {
-        let custom = CustomProvider(id: "or", name: "OpenRouter", type: .openRouter, baseURL: "https://openrouter.ai/api/v1", apiKey: "k", models: [], isEnabled: false)
+        let custom = CustomProvider(id: "or", name: "OpenRouter", type: .openRouter, baseURL: "https://openrouter.ai/api/v1", apiKey: "k", isEnabled: false, models: [])
         #expect(!ModelPickerRowMetadataBuilder.canBeInternalForProvider(
             providerID: "or",
             modelIDs: ["a"],
@@ -111,7 +111,7 @@ struct ModelPickerRowMetadataTests {
 
     @Test("canBeInternal is true for an enabled local provider")
     func canBeInternalLocalEnabled() {
-        let local = LocalProviderConfig(id: "ollama", kind: .ollama, host: "127.0.0.1", port: 11434, models: [], isEnabled: true)
+        let local = LocalProviderConfig(id: "ollama", kind: .ollama, host: "127.0.0.1", port: 11434, isEnabled: true, models: [])
         #expect(ModelPickerRowMetadataBuilder.canBeInternalForProvider(
             providerID: "ollama",
             modelIDs: ["a"],

@@ -173,8 +173,17 @@ extension ChatPanelView {
             undoManager: (try? ProjectUndoManager(projectPath: workspacePath)),
             sessionId: messageStore.currentSessionID,
             messageId: assistantID,
-            accessLevel: appState.accessLevel
+            accessLevel: appState.accessLevel,
+            isProjectless: ProjectlessWorkspaceLogic.isProjectless(
+                sessionDirectory: appState.selectedSession?.directory
+            )
         )
+        executor.projectlessWritePrompt = { suggested in
+            await self.promptCreateProjectForFileWrite(
+                suggestedName: suggested,
+                sessionID: messageStore.currentSessionID
+            )
+        }
         executor.bridge = bridge
         executor.selectors = selectors
         let driver = WebChatDriver(bridge: bridge, executor: executor, selectors: selectors,
@@ -484,6 +493,9 @@ extension ChatPanelView {
             routeParts.append(.routeInfo(chips: chips))
             message.parts = routeParts
         }
+        // Проверенный финальный ответ веб-чат провайдера — звук завершения,
+        // если нет работающей цели (запрос 2026-11-13).
+        playCompletionSoundIfIdle()
         finishWebTurn()
     }
 

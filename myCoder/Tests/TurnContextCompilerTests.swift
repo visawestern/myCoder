@@ -177,4 +177,53 @@ struct TurnContextCompilerTests {
         #expect(pack.citations.isEmpty)
         #expect(pack.unknowns.contains { $0.contains("UserStore.swift") })
     }
+
+    // MARK: - Отказоустойчивое чтение (запрос 2026-11-13)
+
+    @Test("Устаревший символ не роняет файл — показывается весь файл с пометкой")
+    func staleSymbolFallsBackToWholeFile() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Индекс построен по версии с `load`, потом файл переписан без него —
+        // точная ссылка на символ становится нечитаемой.
+        let board = try board(for: root, files: ["UserStore.swift"])
+        try "let x = 1\n".write(to: root.appendingPathComponent("UserStore.swift"), atomically: true, encoding: .utf8)
+
+        let plan = LocalQueryPlan(
+            intent: .fix,
+            terms: ["UserStore"],
+            symbols: ["load"],
+            files: [],
+            memoryTags: [],
+            questions: [],
+            skills: [],
+            instructions: []
+        )
+        let pack = TurnContextCompiler.compile(
+            message: "UserStore load",
+            board: board,
+            projectRoot: root.path,
+            localPlan: LocalQueryPlanResult(plan: plan, status: .local(model: "тест"), dropped: [])
+        )
+        #expect(pack.manifest.included.contains("UserStore.swift"))
+        #expect(pack.text.contains("точная ссылка не сработала"))
+        #expect(pack.text.contains("UserStore.swift:"))
+    }
+
+    @Test("Устаревшая строка за концом файла не роняет файл")
+    func staleLineFallsBackToWholeFile() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let board = try board(for: root, files: ["UserStore.swift"])
+
+        let pack = TurnContextCompiler.compile(
+            message: "UserStore.swift:500",
+            board: board,
+            projectRoot: root.path,
+            budgetTokens: 2000
+        )
+        #expect(pack.manifest.included.contains("UserStore.swift"))
+        #expect(pack.text.contains("точная ссылка не сработала"))
+        #expect(pack.text.contains("UserStore.swift:"))
+    }
 }

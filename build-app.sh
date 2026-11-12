@@ -155,8 +155,8 @@ build_release_for() {
 build_release_for x86_64-apple-macosx
 build_release_for arm64-apple-macosx
 
-INTEL_BIN="$BUILD_DIR/myCoder"
-ARM_BIN=".build/arm64-apple-macosx/release/$APP_NAME"
+INTEL_BIN="$SCRIPT_DIR/.build/x86_64-apple-macosx/release/$APP_NAME"
+ARM_BIN="$SCRIPT_DIR/.build/arm64-apple-macosx/release/$APP_NAME"
 
 # ── Merge into a universal binary ────────────────────────────
 echo "━━━ Merging universal binary (x86_64 + arm64)…"
@@ -188,7 +188,7 @@ fi
 echo "━━━ Copying resource bundles…"
 shopt -s nullglob
 copied=0
-for b in "$BUILD_DIR"/*.bundle; do
+for b in "$SCRIPT_DIR/.build/arm64-apple-macosx/release"/*.bundle; do
     cp -R "$b" "$APP_BUNDLE/Contents/Resources/"
     echo "    + $(basename "$b")"
     copied=$((copied + 1))

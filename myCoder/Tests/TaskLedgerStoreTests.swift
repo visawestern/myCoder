@@ -80,6 +80,38 @@ struct TaskLedgerStoreTests {
         #expect(!ledger.isEmpty)
     }
 
+    @Test("Файл, созданный ассистентом, попадает в артефакты ledger")
+    func assistantCreatedFileBecomesArtifact() {
+        // Live 2026-11-12: the model created aquarium_3d.html, but the ledger
+        // only scanned USER messages, so the next turn no longer knew the file
+        // existed and re-searched for it.
+        let messages = [
+            message("m1", .user, "сделай 3D аквариум"),
+            message("m2", .assistant, "Готово. Создал файл `aquarium_3d.html` в корне и открыл его.")
+        ]
+        let ledger = TaskLedgerExtraction.build(
+            sessionID: "s1",
+            projectPath: "/tmp/p",
+            goal: nil,
+            messages: messages
+        )
+        #expect(ledger.artifacts.contains("aquarium_3d.html"),
+                "фактически: \(ledger.artifacts) — ожидался aquarium_3d.html")
+    }
+
+    @Test("Инлайн-код без расширения не считается артефактом")
+    func inlineCodeWithoutExtensionIsNotArtifact() {
+        let ledger = TaskLedgerExtraction.build(
+            sessionID: "s1",
+            projectPath: "/tmp/p",
+            goal: nil,
+            messages: [message("m1", .assistant, "Обновил `todo_write` и вызвал `task_list`.")]
+        )
+        #expect(!ledger.artifacts.contains("todo_write"),
+                "фактически: \(ledger.artifacts) — ожидалось пусто")
+        #expect(!ledger.artifacts.contains("task_list"))
+    }
+
     @Test("Короткая история без фактов не даёт пустых полей-призраков")
     func smallTalkIsNotInvented() {
         let ledger = TaskLedgerExtraction.build(

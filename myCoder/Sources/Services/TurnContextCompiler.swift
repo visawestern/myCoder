@@ -332,14 +332,23 @@ enum TurnContextCompiler {
             let block: String
             do {
                 block = try ContextMaterializer.block(for: ref, projectRoot: projectRoot)
-            } catch let error as LocalCompilerError {
-                unknowns.append("\(candidate.path): \(error.errorDescription ?? "не прочитан")")
-                dropped.append(DroppedSource(path: candidate.path, reason: "файл не прочитан"))
-                continue
             } catch {
-                unknowns.append("\(candidate.path): \(error.localizedDescription)")
-                dropped.append(DroppedSource(path: candidate.path, reason: "файл не прочитан"))
-                continue
+                // Точная ссылка не сработала (устаревший символ/строка,
+                // нестандартная кодировка). Не теряем файл: показываем его
+                // целиком с пометкой причины (запрос 2026-11-13).
+                let detail = (error as? LocalCompilerError)?.errorDescription ?? error.localizedDescription
+                if let fallback = fallbackBlock(
+                    path: candidate.path,
+                    projectRoot: projectRoot,
+                    reason: "точная ссылка не сработала: \(detail) — показан весь файл"
+                ) {
+                    unknowns.append("\(candidate.path): точная ссылка не сработала (\(detail)) — показан весь файл")
+                    block = fallback
+                } else {
+                    unknowns.append("\(candidate.path): \(detail)")
+                    dropped.append(DroppedSource(path: candidate.path, reason: "файл не прочитан"))
+                    continue
+                }
             }
 
             let section = ContextSection(title: candidate.path, body: "````\n" + block + "\n````")
@@ -372,9 +381,21 @@ enum TurnContextCompiler {
                 do {
                     block = try ContextMaterializer.block(for: ref, projectRoot: projectRoot)
                 } catch {
-                    unknowns.append("\(ref.path): зависимость не прочитана")
-                    dropped.append(DroppedSource(path: ref.path, reason: "зависимость не прочитана"))
-                    continue
+                    // Зависимость не читается по точной ссылке — показываем
+                    // весь файл с пометкой вместо дропа (запрос 2026-11-13).
+                    let detail = error.localizedDescription
+                    if let fallback = fallbackBlock(
+                        path: ref.path,
+                        projectRoot: projectRoot,
+                        reason: "точная ссылка не сработала: \(detail) — показан весь файл"
+                    ) {
+                        unknowns.append("\(ref.path): точная ссылка не сработала (\(detail)) — показан весь файл")
+                        block = fallback
+                    } else {
+                        unknowns.append("\(ref.path): зависимость не прочитана")
+                        dropped.append(DroppedSource(path: ref.path, reason: "зависимость не прочитана"))
+                        continue
+                    }
                 }
                 let section = ContextSection(title: "\(ref.path) — зависимость", body: "````\n" + block + "\n````")
                 let proposed = sections + [section]
@@ -508,7 +529,7 @@ enum TurnContextCompiler {
     static func compileChatHistory(message: String,
                                    turns: [ChatHistoryBuilder.Turn],
                                    budgetTokens: Int = defaultBudgetTokens,
-                                   maxTurns: Int = 12,
+                                   maxTurns: Int = 40,
                                    systemPrompt: String? = nil) -> CompiledContextPack? {
         let request = message.trimmingCharacters(in: .whitespacesAndNewlines)
         let history = historySection(turns, maxTurns: maxTurns)
@@ -532,37 +553,7 @@ enum TurnContextCompiler {
         )
     }
 
-    // MARK: - Pieces
-
-    /// One block per file: the most relevant symbol, or the line the user
-    /// pointed at. Several overlapping blocks of the same file waste the
-    /// budget and add nothing.
-    private static func reference(for candidate: ContextCandidate,
-                                  plan: ContextQueryPlan) -> TaskReference? {
-        if plan.files.contains(candidate.path), let line = plan.lineNumbers.first {
-            return TaskReference(path: candidate.path, symbol: nil,
-                                 startLine: max(1, line - 5),
-                                 endLine: line + 25, why: nil)
-        }
-        if let symbol = candidate.matchedSymbols.first {
-            return TaskReference(path: candidate.path, symbol: symbol.name,
-                                 startLine: nil, endLine: nil, why: nil)
-        }
-        return TaskReference(path: candidate.path, symbol: nil,
-                             startLine: 1, endLine: nil, why: nil)
-    }
-
-    private static func citation(for reference: TaskReference, block: String) -> ContextCitation? {
-        guard let header = block.split(separator: "\n").first else { return nil }
-        // Header shape: `### path:start-end[ — symbol]`
-        guard let colon = header.lastIndex(of: ":") else { return nil }
-        let ranges = header[header.index(after: colon)...].split(separator: " ").first ?? ""
-        let parts = ranges.split(separator: "-")
-        guard parts.count == 2,
-              let start = Int(parts[0]),
-              let end = Int(parts[1]) else { return nil }
-        return ContextCitation(path: reference.path, startLine: start, endLine: end, symbol: reference.symbol)
-    }
+    // MARK: - Render
 
     private static func render(sections: [ContextSection],
                                unknowns: [String],

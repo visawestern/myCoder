@@ -26,8 +26,13 @@ actor BackgroundCommandCenter {
     @discardableResult
     func start(command: String,
                workingDirectory: String,
+               sessionID: String? = nil,
                timeoutSeconds: TimeInterval = BackgroundCommandCenter.defaultTimeoutSeconds) -> String {
-        let task = BackgroundCommandTask(command: command, workingDirectory: workingDirectory)
+        let task = BackgroundCommandTask(
+            command: command,
+            workingDirectory: workingDirectory,
+            sessionID: sessionID
+        )
         if let reason = DestructiveCommandGuard.blockReason(for: command) {
             var blocked = task
             blocked.state = .completed
@@ -123,7 +128,19 @@ actor BackgroundCommandCenter {
     }
 
     /// Все задачи: активные + завершённые (новые сверху).
-    func snapshot() -> [BackgroundCommandTask] {
+    ///
+    /// С `sessionID` возвращает только команды этого чата и не больше
+    /// `limit` последних — так правый терминал остаётся привязанным к чату
+    /// и не растёт бесконечно (директива 2026-11-13).
+    func snapshot(sessionID: String? = nil,
+                  limit: Int = BackgroundCommandLogic.maxVisibleTasks) -> [BackgroundCommandTask] {
+        if let sessionID {
+            return BackgroundCommandLogic.visibleTasks(
+                Array(tasks.values),
+                sessionID: sessionID,
+                limit: limit
+            )
+        }
         let all = Array(tasks.values)
         let active = BackgroundCommandLogic.sortedActive(all.filter { !$0.isCompleted })
         let finished = BackgroundCommandLogic.sortedFinished(all.filter(\.isCompleted))
@@ -136,6 +153,18 @@ actor BackgroundCommandCenter {
 
     func cancel(id: String) {
         runningProcesses[id]?.terminate()
+    }
+
+    /// Remove a completed task from the right-panel list. A running command
+    /// cannot be removed: its agent turn is still awaiting the result, so
+    /// removing it would strand `awaitCompletion` forever. Returns whether a
+    /// task was actually removed.
+    @discardableResult
+    func remove(id: String) -> Bool {
+        guard let task = tasks[id], task.isCompleted else { return false }
+        tasks.removeValue(forKey: id)
+        NotificationCenter.default.post(name: .backgroundCommandChanged, object: nil)
+        return true
     }
 
     private func complete(id: String, output: String, exitCode: Int, timedOut: Bool) {

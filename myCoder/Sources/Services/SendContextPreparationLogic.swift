@@ -63,7 +63,10 @@ enum SendContextPreparationLogic {
                                           warning: extraWarning, status: .disabled)
         }
         // An open project supplies evidence even before the first chat turn.
-        guard !projectPath.isEmpty || !priorTurns.isEmpty || isPlanMode else {
+        // Plan mode is NOT an exception: a chat without a project has nothing
+        // to collect on its first message, and the model must not receive a
+        // fabricated pack (user directive 2026-11-13).
+        guard !projectPath.isEmpty || !priorTurns.isEmpty else {
             return SendContextPreparation(modelText: message, pack: nil,
                                           warning: extraWarning, status: .projectlessFirstTurn)
         }

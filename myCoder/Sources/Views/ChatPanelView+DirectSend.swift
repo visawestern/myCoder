@@ -224,11 +224,9 @@ extension ChatPanelView {
             await MainActor.run {
                 // Visible degradation: the send goes ahead with the raw
                 // message, and the user is told why no context was added.
-                messageStore.append(Message(
-                    role: .assistant,
-                    content: "⚠️ \(warning)",
-                    isFinished: true
-                ), to: sendSessionID)
+                // A notice is UI status, not dialogue: `.system` keeps it out
+                // of the model history window (it used to push real answers out).
+                messageStore.append(TurnNoticeBuilder.warningNotice(warning), to: sendSessionID)
             }
         }
         let parts = MessagePartsBuilder.build(text: modelText, files: files, images: images)
@@ -317,7 +315,8 @@ extension ChatPanelView {
                     images: images,
                     preparation: preparation,
                     sysPrompt: sysPrompt,
-                    agentMode: agentMode
+                    agentMode: agentMode,
+                    isProjectlessTurn: prepared.capturedProjectRoot.isEmpty
                 )
                 return
             }
@@ -408,12 +407,19 @@ extension ChatPanelView {
                    return false
                } ?? false) {
                 var timelineParts: [MessagePartContent] = []
-                let loopExecutor = ProjectWebToolExecutor.bridged(
+                var loopExecutor = ProjectWebToolExecutor.bridged(
                     projectRoot: appState.toolWorkingDirectory,
                     accessLevel: appState.accessLevel,
                     sessionId: sessionID,
-                    messageId: assistantID
+                    messageId: assistantID,
+                    isProjectless: prepared.capturedProjectRoot.isEmpty
                 )
+                loopExecutor.projectlessWritePrompt = { suggested in
+                    await self.promptCreateProjectForFileWrite(
+                        suggestedName: suggested,
+                        sessionID: sessionID
+                    )
+                }
                 let loopResult = await AgentToolLoopLogic.run(
                     initialText: firstResponse.textContent,
                     execute: { call in
@@ -421,12 +427,20 @@ extension ChatPanelView {
                         // U5: тот же синхрон панели, что и в direct-цикле —
                         // серверный путь здесь не участвует.
                         if TodoPanelSyncLogic.updatesChecklist(toolName: call.name) {
+                            let todoItems = loopExecutor.loadTodoItems()
                             let steps = TodoPanelSyncLogic.steps(
-                                fromTodoItems: loopExecutor.loadTodoItems()
+                                fromTodoItems: todoItems
                             )
                             await MainActor.run {
                                 self.appState.setSteps(steps, for: sessionID)
                                 if !steps.isEmpty { self.appState.showGoal = true }
+                                // ЦЕЛЬ: чеклист модели — это и есть план
+                                // цели; без записи в goal.plan панель
+                                // показывает «Нет шагов» (2026-11-13).
+                                GoalPlanSyncService.sync(
+                                    todoItems: todoItems,
+                                    context: self.appState.goalContext(for: sessionID)
+                                )
                             }
                         }
                         return result

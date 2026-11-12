@@ -42,7 +42,7 @@ enum HarnessPromptQuality {
     /// and reused in another module without friction.
     static let codeDiscipline = """
     # Code work pipeline — mandatory for every app, website or coding project
-    - Work test-first (TDD): write or update a failing test, watch it fail, implement the smallest change, then make it pass; run the relevant test suites before finishing. Cover the changed logic with all reasonable tests.
+    - Work test-first (TDD): write or update a failing test, watch it fail, implement the smallest change, then make it pass. Every test must assert the actual result against the expected result — a test that only runs code without an assertion is not a test. Cover the changed logic with all reasonable tests; run the relevant test suites before finishing.
     - Keep every source file under 600 lines; split larger files instead of growing them.
     - Write a short comment above every function stating its contract — input, output, what it does, and its dependencies. A function without a clear contract is not finished.
     - Decompose the task into small, atomic functions BEFORE writing them. Each function does exactly one thing, has no hidden side effects, can be understood alone, and is modular enough to be debugged in isolation and reused in another module without friction.
