@@ -136,10 +136,12 @@ extension ChatPanelView {
                     reasoningChunks.append(reasoning)
                     timelineParts.append(.reasoning(reasoning))
                 }
-                let calls = WebToolProtocolEmulator.parseToolCalls(from: response)
-                if calls.isEmpty || WebToolProtocolEmulator.shouldStopLoop(
-                    iteration: iteration, maxIterations: maxIterations, lastResponse: response
-                ) {
+                var calls = WebToolProtocolEmulator.parseToolCalls(from: response)
+                if calls.isEmpty,
+                   let repaired = await WebToolCallRepairLogic.tryRepair(responseText: response) {
+                    calls = repaired
+                }
+                if calls.isEmpty || iteration >= maxIterations {
                     if calls.isEmpty, let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
                         // Битый блок — тоже «прописанный» вызов: он
                         // обязан попасть под спойлер с причиной, а не

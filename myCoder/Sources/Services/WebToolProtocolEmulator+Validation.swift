@@ -47,6 +47,10 @@ extension WebToolProtocolEmulator {
            ExtraToolCallFormatParsers.parseAll(from: responseText).isEmpty {
             return ("tool", "unclosed tool_use block")
         }
+        if normalized.contains("<ernie:tool_call"), !normalized.contains("</ernie:tool_call") {
+            return (firstAttributeValue("name", in: normalized) ?? "tool",
+                    "unclosed ernie:tool_call wrapper")
+        }
         return nil
     }
 
@@ -215,8 +219,12 @@ extension WebToolProtocolEmulator {
                          accessLevel: AccessLevel = .askBeforeChanges,
                          grantedRoots: [String] = []) -> WebToolValidationError? {
         let call = canonicalized(call)
-        guard WebEmulatedTool(rawValue: call.name) != nil else {
+        guard let tool = WebEmulatedTool(rawValue: call.name) else {
             return .unknownTool(call.name)
+        }
+        if call.arguments["__mycoder_truncated"] == nil,
+           let violation = WebToolSchemaValidator.violation(for: tool, arguments: call.arguments) {
+            return .invalidArguments(violation)
         }
         // Path boundary check is now permission-based, not hard restriction.
         // At .fullAccess, any path is allowed. At lower levels, restrict to project root.

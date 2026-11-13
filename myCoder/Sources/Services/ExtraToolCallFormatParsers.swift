@@ -20,6 +20,31 @@ enum ExtraToolCallFormatParsers {
         calls.append(contentsOf: parseAnthropicInvokeCalls(from: text))
         calls.append(contentsOf: parseToolUseCalls(from: text))
         calls.append(contentsOf: parseFunctionCallTagCalls(from: text))
+        calls.append(contentsOf: parseErnieToolCalls(from: text))
+        return calls
+    }
+
+    // MARK: - ERNIE <ernie:tool_call>…</ernie:tool_call>
+
+    /// Parses `<ernie:tool_call>` wrappers whose body is either JSON
+    /// `{"name":…, "args":…}` or inner `<invoke>` tags (deduped downstream).
+    static func parseErnieToolCalls(from text: String) -> [WebToolCall] {
+        guard text.contains("<ernie:tool_call") else { return [] }
+        guard let regex = try? NSRegularExpression(
+            pattern: "<ernie:tool_call\\b[^>]*>([\\s\\S]*?)</ernie:tool_call\\s*>",
+            options: [.caseInsensitive]) else { return [] }
+        let scanner = text as NSString
+        var calls: [WebToolCall] = []
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: scanner.length))
+        where match.numberOfRanges >= 2 {
+            let body = scanner.substring(with: match.range(at: 1))
+            let nested = parseAnthropicInvokeCalls(from: body)
+            if !nested.isEmpty {
+                calls.append(contentsOf: nested)
+            } else if let jsonCall = WebToolProtocolEmulator.parseSingleCall(body) {
+                calls.append(jsonCall)
+            }
+        }
         return calls
     }
 

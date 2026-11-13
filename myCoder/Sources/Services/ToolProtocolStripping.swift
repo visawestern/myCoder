@@ -31,6 +31,10 @@ enum ToolProtocolStripping {
         out = removeBlocks(out, open: "<function_call\\b[^>]*>", close: "</function_call\\s*>")
         out = removeSelfClosingTags(out, pattern: "<function_call\\b[^>]*/>")
 
+        // ERNIE-style <ernie:tool_call>…</ernie:tool_call> и одиночные <invoke>.
+        out = removeBlocks(out, open: "<ernie:tool_call\\b[^>]*>", close: "</ernie:tool_call\\s*>")
+        out = removeBlocks(out, open: "<invoke\\b[^>]*>", close: "</invoke\\s*>")
+
         // ```tool fences — тем же правилом, что и раньше.
         out = WebToolProtocolEmulator.strippingToolFences(from: out)
 

@@ -300,4 +300,8 @@ enum WebToolValidationError: Error, Equatable {
     case pathEscapesProject(String)
     case unknownTool(String)
     case incompleteJSON
+    /// Deterministic schema violation: the call misses a required argument
+    /// or a value is outside the tool's allowed domain (directive
+    /// 2026-11-13, план п.8 — validated before execution, no model needed).
+    case invalidArguments(String)
 }

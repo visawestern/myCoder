@@ -370,11 +370,11 @@ struct WebChatDriver {
                     }
                 }
 
+                let repairedCalls = await WebToolCallRepairLogic.tryRepair(responseText: response)
                 let maxIterations = Self.effectiveMaxIterations(configured: config.maxToolIterations)
-                if WebToolProtocolEmulator.shouldStopLoop(iteration: iteration,
-                                                          maxIterations: maxIterations,
-                                                          lastResponse: response) {
-                    if let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
+                let hasCalls = repairedCalls != nil || !WebToolProtocolEmulator.isFinalResponse(response)
+                if iteration >= maxIterations || !hasCalls {
+                    if !hasCalls, let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
                         MyCoderAPIServer.appendLog("⚠️ [WebChatDriver] malformed tool JSON, feeding error back")
                         malformedFeedbackSentThisTurn = true
                         let feedbackBlock = feedback + "\n"
@@ -392,7 +392,7 @@ struct WebChatDriver {
                     if !danglingIntentNudgedThisTurn,
                        !malformedFeedbackSentThisTurn,
                        iteration + 1 < maxIterations,
-                       WebToolProtocolEmulator.isFinalResponse(response),
+                       !hasCalls,
                        DanglingIntentLogic.announcesAction(response) {
                         danglingIntentNudgedThisTurn = true
                         MyCoderAPIServer.appendLog("🔁 [WebChatDriver] dangling intent: announced an action without a tool call")
@@ -405,7 +405,7 @@ struct WebChatDriver {
                         iteration += 1
                         continue
                     }
-                    if WebToolProtocolEmulator.isFinalResponse(response) {
+                    if !hasCalls {
                         MyCoderAPIServer.appendLog("🏁 [WebChatDriver] final answer: \(response.prefix(120))")
                         emit(.final(response))
                     } else {
@@ -417,7 +417,8 @@ struct WebChatDriver {
 
                 // Execute each requested tool and feed results back.
                 let parsed = WebToolProtocolEmulator.parseToolCallsWithIssues(from: response)
-                let calls = parsed.calls
+                let calls = repairedCalls ?? parsed.calls
+                let issues = repairedCalls == nil ? parsed.issues : []
                 // Harness-tax C3: stop BEFORE re-executing a call the model
                 // already repeated twice — each repeat re-sends the whole
                 // context for zero new information.
@@ -432,7 +433,7 @@ struct WebChatDriver {
                 // A block the parser could not turn into a call still owes the
                 // model an answer: report it as a tool_result error so the turn
                 // continues and the model can re-emit a valid call.
-                for issue in parsed.issues {
+                for issue in issues {
                     let msg = "error: malformed tool call — \(issue.reason). Nothing was executed. Re-emit the COMPLETE call with valid JSON."
                     MyCoderAPIServer.appendLog("⚠️ [WebChatDriver] malformed block for '\(issue.toolName)': \(issue.reason)")
                     resultsBlock += WebToolProtocolEmulator.formatToolResult(name: issue.toolName, result: msg) + "\n"
