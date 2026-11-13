@@ -121,6 +121,26 @@ extension ChatPanelView {
         let contextQuery = (mergedPlan.terms + mergedPlan.symbols + mergedPlan.files).joined(separator: " ")
         let evidenceQuery = ([text] + mergedPlan.symbols + mergedPlan.terms).joined(separator: " ")
         let indexedFileCount = pointContextRecords.count
+        // Plan item 9: the point-context budget uses the model's FULL context
+        // window (effective limit from the catalog/overrides). The compiler
+        // then fits system+evidence+request inside it.
+        let fullWindowTokens = ContextBudgetLogic.effectiveContextLimit(
+            modelID: capturedModelID,
+            providerID: appState.selectedProviderID.isEmpty ? nil : appState.selectedProviderID,
+            serverProviders: appState.serverProviders
+        )
+        // Plan item 10: LSP-assisted point context — probe diagnostics for the
+        // most relevant candidate files; unavailable servers simply yield no
+        // section (honest skip), never fabricated data.
+        let lspCandidates = LSPPointContextLogic.candidatePaths(
+            records: pointContextRecords,
+            query: contextQuery
+        )
+        let lspFacts = await LSPPointContextLogic.facts(
+            candidates: lspCandidates,
+            projectRoot: pointContextProjectRoot
+        )
+        let lspSection = LSPPointContextLogic.section(facts: lspFacts)
         let preparation = await SendContextPreparationLogic.prepareAsync(
             message: text,
             records: pointContextRecords,
@@ -164,7 +184,9 @@ extension ChatPanelView {
                         sessionID: sendSessionID
                     )
                 }
-            }
+            },
+            fullWindowTokens: fullWindowTokens,
+            lspSection: lspSection
         )
         if StreamDiagnostics.isEnabled {
             StreamDiagnostics.log(

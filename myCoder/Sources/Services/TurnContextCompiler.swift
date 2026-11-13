@@ -159,6 +159,7 @@ enum TurnContextCompiler {
                         skillsDirectory: URL? = nil,
                         records: [FileIndexRecord]? = nil,
                         impact: ImpactReport? = nil,
+                        lspSection: ContextSection? = nil,
                         onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil) -> CompiledContextPack {
         let deterministic = ContextQueryPlanner.plan(for: message)
         let plan = merged(deterministic, with: localPlan?.plan)
@@ -219,6 +220,8 @@ enum TurnContextCompiler {
         var unknowns: [String] = []
         var included: [String] = []
         var dropped: [DroppedSource] = []
+        // Файлы, которые НЕ удалось прочитать (путь + причина) — секция «Чтение файлов».
+        var readFailures: [DroppedSource] = []
 
         // Task state comes before evidence: the model must know what is being
         // built and what was already decided before reading code.
@@ -333,19 +336,18 @@ enum TurnContextCompiler {
             do {
                 block = try ContextMaterializer.block(for: ref, projectRoot: projectRoot)
             } catch {
-                // Точная ссылка не сработала (устаревший символ/строка,
-                // нестандартная кодировка). Не теряем файл: показываем его
-                // целиком с пометкой причины (запрос 2026-11-13).
+                // Точная ссылка не сработала — не теряем файл: показываем его
+                // целиком с пометкой причины (запрос 2026-11-13). Успешный
+                // fallback — НЕ пробел: файл ушёл в контекст.
                 let detail = (error as? LocalCompilerError)?.errorDescription ?? error.localizedDescription
                 if let fallback = fallbackBlock(
                     path: candidate.path,
                     projectRoot: projectRoot,
                     reason: "точная ссылка не сработала: \(detail) — показан весь файл"
                 ) {
-                    unknowns.append("\(candidate.path): точная ссылка не сработала (\(detail)) — показан весь файл")
                     block = fallback
                 } else {
-                    unknowns.append("\(candidate.path): \(detail)")
+                    readFailures.append(DroppedSource(path: candidate.path, reason: detail))
                     dropped.append(DroppedSource(path: candidate.path, reason: "файл не прочитан"))
                     continue
                 }
@@ -381,18 +383,17 @@ enum TurnContextCompiler {
                 do {
                     block = try ContextMaterializer.block(for: ref, projectRoot: projectRoot)
                 } catch {
-                    // Зависимость не читается по точной ссылке — показываем
-                    // весь файл с пометкой вместо дропа (запрос 2026-11-13).
+                    // Зависимость не читается по точной ссылке — весь файл с
+                    // пометкой; успешный fallback не создаёт пробел.
                     let detail = error.localizedDescription
                     if let fallback = fallbackBlock(
                         path: ref.path,
                         projectRoot: projectRoot,
                         reason: "точная ссылка не сработала: \(detail) — показан весь файл"
                     ) {
-                        unknowns.append("\(ref.path): точная ссылка не сработала (\(detail)) — показан весь файл")
                         block = fallback
                     } else {
-                        unknowns.append("\(ref.path): зависимость не прочитана")
+                        readFailures.append(DroppedSource(path: ref.path, reason: detail))
                         dropped.append(DroppedSource(path: ref.path, reason: "зависимость не прочитана"))
                         continue
                     }
@@ -412,6 +413,13 @@ enum TurnContextCompiler {
                     citations.append(citation)
                 }
             }
+        }
+
+        // LSP facts (plan item 10): a separate, clearly-sourced section that
+        // never duplicates the code blocks above. Absent facts = absent
+        // section — the pack continues honestly without LSP.
+        if let lspSection {
+            sections.append(lspSection)
         }
 
         // Финальная дедупликация: одинаковые файлы (кандидат + зависимость),
@@ -437,6 +445,16 @@ enum TurnContextCompiler {
             keptBlockHeaders.contains { header in
                 header.hasPrefix("### \(citation.path):\(citation.startLine)-\(citation.endLine)")
             }
+        }
+
+        // Секция «Чтение файлов»: каждый файл, который НЕ удалось прочитать,
+        // назван с причиной (директива 2026-11-13). Показывается в тексте
+        // пакета и в спойлере контекста — не «Пробелы», а отдельный честный
+        // блок про чтение.
+        if !readFailures.isEmpty {
+            let body = readFailures.map { "- \($0.path) — \($0.reason)" }
+                .joined(separator: "\n")
+            sections.append(ContextSection(title: "Чтение файлов", body: body))
         }
 
         // Never trim the request to fit the evidence budget: losing the user's

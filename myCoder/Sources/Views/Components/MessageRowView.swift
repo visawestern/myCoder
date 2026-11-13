@@ -109,6 +109,15 @@ struct MessageRow: View {
         MessageRowLayoutLogic.isTrailing(role: message.role)
     }
 
+    /// Resolved image paths found in the message's text (plan item 13.1).
+    /// Uses the display text, so protocol blocks are already stripped.
+    private var inlineImagePaths: [String] {
+        ChatImagePathLogic.extractImagePaths(
+            from: messageText,
+            projectRoot: projectRoot.isEmpty ? nil : projectRoot
+        )
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if isTrailing {
@@ -217,6 +226,12 @@ struct MessageRow: View {
                 tool: tool,
                 message: message.pendingApprovalMessage ?? ""
             )
+        }
+
+        // Пункт 13.1: пути-картинки из текста — превью под контентом.
+        if !inlineImagePaths.isEmpty {
+            ChatImagePathCollageView(paths: inlineImagePaths)
+                .padding(.top, 2)
         }
 
         if let added = message.tokensAdded, let removed = message.tokensRemoved, added + removed > 0 {

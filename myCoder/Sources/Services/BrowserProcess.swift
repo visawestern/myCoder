@@ -106,49 +106,41 @@ final class BrowserProcess {
     }
 
     /// Готовит профиль к запуску БЕЗ «светящихся» флагов командной строки:
-    /// первый запуск уже пройден (first_run_completed), восстановление окон
-    /// из сессии запрещено (session.restore_on_startup=4), геометрия окна —
-    /// за экраном (browser.window_placement). Плюс сам движок принудительно
-    /// ставит окно за экран в коде (browser_window_state.cc).
+    /// единый персистентный профиль, первый запуск уже пройден
+    /// (first_run_completed), восстановление окон из сессии запрещено
+    /// (session.restore_on_startup=4), флаг краша очищен (нет вопросика
+    /// «Восстановить страницы?»), стартовое окно выключено, геометрия —
+    /// за экраном. Правила живут в `EngineProfilePreparation` (чистые,
+    /// покрыты тестами — пункт 5).
     private func prepareProfileForEngine() {
         // Local State: отметить первый запуск как пройденный; запретить
         // стартовое окно (движок запускается без окна, оно создаётся по
         // кнопке «Войти»).
-        mutateJSON(at: config.profileDir.appendingPathComponent("Local State")) { json in
-            json["first_run_completed"] = true
-            var ab = json["antibrowser"] as? [String: Any] ?? [:]
-            ab["no_startup_window"] = true
-            json["antibrowser"] = ab
-        }
+        let localStatePath = config.profileDir.appendingPathComponent("Local State")
         // Default/Preferences: не восстанавливать окна; геометрия — за экраном.
-        let prefs = config.profileDir
+        let prefsPath = config.profileDir
             .appendingPathComponent("Default", isDirectory: true)
             .appendingPathComponent("Preferences")
-        mutateJSON(at: prefs) { json in
-            var session = json["session"] as? [String: Any] ?? [:]
-            session["restore_on_startup"] = 4  // никогда
-            json["session"] = session
-            var browser = json["browser"] as? [String: Any] ?? [:]
-            browser["window_placement"] = [
-                "left": -4000,
-                "top": 0,
-                "width": 1280,
-                "height": 800,
-            ]
-            json["browser"] = browser
-        }
+
+        let localState = readJSON(at: localStatePath)
+        let prefs = readJSON(at: prefsPath)
+        let prepared = EngineProfilePreparation.apply(localState: localState, preferences: prefs)
+        writeJSON(prepared.localState, to: localStatePath)
+        writeJSON(prepared.preferences, to: prefsPath)
+        log("профиль подготовлен: единый профиль, восстановление выключено, окно за экраном")
     }
 
-    /// Читает JSON-файл профиля (или создаёт), применяет правку и пишет обратно.
-    private func mutateJSON(at url: URL, _ edit: (inout [String: Any]) -> Void) {
-        var json: [String: Any]
+    /// Читает JSON-файл профиля (или создаёт пустой словарь).
+    private func readJSON(at url: URL) -> [String: Any] {
         if let data = try? Data(contentsOf: url),
            let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            json = parsed
-        } else {
-            json = [:]
+            return parsed
         }
-        edit(&json)
+        return [:]
+    }
+
+    /// Пишет JSON-словарь в файл профиля (создаёт каталоги при необходимости).
+    private func writeJSON(_ json: [String: Any], to url: URL) {
         guard let out = try? JSONSerialization.data(withJSONObject: json,
                                                     options: [.sortedKeys]) else {
             return
@@ -156,7 +148,6 @@ final class BrowserProcess {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try? out.write(to: url, options: .atomic)
-        log("профиль подготовлен: \(url.lastPathComponent)")
     }
 
     // MARK: - Готовность

@@ -119,9 +119,12 @@ struct BottomInputBar: View {
             )
             .padding(.vertical, 4)
             // Context ring lives in the top-right corner of the input card and
-            // never occupies its own line (user directive 2026-10-24).
+            // never occupies its own line (user directive 2026-10-24). In
+            // point-context mode the harness manages the budget itself, so the
+            // ring is hidden (plan item 9: the ring only shows when point
+            // context is OFF).
             .overlay(alignment: .topTrailing) {
-                if let contextUsage {
+                if let contextUsage, !appState.isPointContextEnabled {
                     ContextUsageIndicator(usage: contextUsage)
                         .padding(.trailing, 10)
                 }

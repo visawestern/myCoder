@@ -27,6 +27,22 @@ struct ChatFileOpenLogicTests {
         #expect(!ChatFileOpenLogic.looksLikeFilePath("very_long_identifier_without_extension"))
     }
 
+    @Test("Standalone html file from a model answer is recognized and resolves")
+    func standaloneHTMLFile() {
+        // Ответ модели: «рабочий aquarium_3d.html» — голое имя с расширением.
+        #expect(ChatFileOpenLogic.looksLikeFilePath("aquarium_3d.html"))
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("chat-open-html-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("aquarium_3d.html")
+        try? Data("<html></html>".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        #expect(ChatFileOpenLogic.resolveFilePath("aquarium_3d.html", projectRoot: root.path) == file.path)
+        // Несуществующий файл не резолвится — никаких ложных ссылок.
+        #expect(ChatFileOpenLogic.resolveFilePath("aquarium_3d.html", projectRoot: nil) == nil)
+    }
+
     @Test("Absolute paths resolve when the file exists")
     func absoluteResolution() {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())

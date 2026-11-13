@@ -56,7 +56,9 @@ enum SendContextPreparationLogic {
                         skillsDirectory: URL? = nil,
                         impact: ImpactReport? = nil,
                         onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil,
-                        budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) -> SendContextPreparation {
+                        budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens,
+                        fullWindowTokens: Int? = nil,
+                        lspSection: ContextSection? = nil) -> SendContextPreparation {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, !trimmed.isEmpty else {
             return SendContextPreparation(modelText: message, pack: nil,
@@ -84,6 +86,19 @@ enum SendContextPreparationLogic {
                                           status: .projectless)
         }
         let board = preparedBoard ?? ContextBoardBuilder.build(projectPath: projectPath, records: records)
+        // Plan item 9: when the model's FULL window is known, the evidence
+        // budget is derived from it (full window − system prompt), so the
+        // final packet never exceeds the window. Without it the legacy fixed
+        // default budget applies.
+        let effectiveBudget: Int
+        if let fullWindowTokens {
+            effectiveBudget = PointContextBudgetLogic.remainingForContent(
+                fullLimit: fullWindowTokens,
+                systemTokens: PointContextBudgetLogic.systemTokens(systemPrompt)
+            )
+        } else {
+            effectiveBudget = budgetTokens
+        }
         let pack = TurnContextCompiler.compile(
             message: trimmed,
             board: board,
@@ -91,21 +106,36 @@ enum SendContextPreparationLogic {
             memories: memories,
             ledger: ledger,
             chatHistory: priorTurns,
-            budgetTokens: budgetTokens,
+            budgetTokens: effectiveBudget,
             localPlan: localPlan,
             systemPrompt: systemPrompt,
             skillsDirectory: skillsDirectory,
             records: records,
             impact: impact,
+            lspSection: lspSection,
             onStage: onStage
         )
         // Keep the task history, project rules, model fallback and known gaps
         // even when no source file matched. Absence of code is visible in the pack.
         let hasEvidence = !pack.citations.isEmpty || !pack.memoryIDs.isEmpty || pack.ledgerSummary != nil
+        var warning = combinedWarning(nil, extraWarning)
+        // Final full-window verification: request+system alone may exceed the
+        // window (never truncated) — say so honestly instead of claiming fit.
+        if let fullWindowTokens,
+           !PointContextBudgetLogic.fits(
+               fullLimit: fullWindowTokens,
+               systemTokens: PointContextBudgetLogic.systemTokens(systemPrompt),
+               contentTokens: ContextUsageLogic.estimateTokens(pack.text)
+           ) {
+            warning = combinedWarning(
+                "Запрос и системная инструкция превышают полное окно модели \(fullWindowTokens) токенов — отправлены целиком.",
+                warning
+            )
+        }
         return SendContextPreparation(
             modelText: pack.text,
             pack: pack,
-            warning: combinedWarning(nil, extraWarning),
+            warning: warning,
             status: hasEvidence ? .compiled : .noEvidence
         )
     }
@@ -155,7 +185,9 @@ enum SendContextPreparationLogic {
                             skillsDirectory: URL? = nil,
                             impact: ImpactReport? = nil,
                             onStage: (@Sendable (ContextStageLogLogic.Stage) -> Void)? = nil,
-                            budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens) async -> SendContextPreparation {
+                            budgetTokens: Int = TurnContextCompiler.defaultBudgetTokens,
+                            fullWindowTokens: Int? = nil,
+                            lspSection: ContextSection? = nil) async -> SendContextPreparation {
         await Task.detached(priority: .userInitiated) {
             prepare(
                 message: message,
@@ -173,7 +205,9 @@ enum SendContextPreparationLogic {
                 skillsDirectory: skillsDirectory,
                 impact: impact,
                 onStage: onStage,
-                budgetTokens: budgetTokens
+                budgetTokens: budgetTokens,
+                fullWindowTokens: fullWindowTokens,
+                lspSection: lspSection
             )
         }.value
     }

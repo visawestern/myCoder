@@ -162,7 +162,7 @@ struct TurnContextCompilerTests {
         #expect(pack.text.contains("Пробелы") || pack.text.contains("что не вошло"))
     }
 
-    @Test("Нечитаемый кандидат не роняет пакет, а попадает в пробелы")
+    @Test("Нечитаемый кандидат не роняет пакет, а попадает в «Чтение файлов»")
     func unreadableCandidateBecomesGap() throws {
         let root = try makeProject()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -175,7 +175,31 @@ struct TurnContextCompilerTests {
             projectRoot: root.path
         )
         #expect(pack.citations.isEmpty)
-        #expect(pack.unknowns.contains { $0.contains("UserStore.swift") })
+        // Файл назван с причиной в секции «Чтение файлов» (директива
+        // 2026-11-13).
+        #expect(pack.text.contains("Чтение файлов"))
+        #expect(pack.text.contains("UserStore.swift"))
+    }
+
+    @Test("Чтение файлов: секция перечисляет файл и причину")
+    func readFailuresCarryFileAndReason() throws {
+        let root = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let board = try board(for: root, files: ["UserStore.swift"])
+        try FileManager.default.removeItem(at: root.appendingPathComponent("UserStore.swift"))
+
+        let pack = TurnContextCompiler.compile(
+            message: "UserStore load",
+            board: board,
+            projectRoot: root.path
+        )
+        let section = pack.sections.first { $0.title == "Чтение файлов" }
+        let sut = try? #require(section)
+        #expect(sut?.body.contains("UserStore.swift") == true)
+        // Причина непустая и сформулирована (после « — »), конкретный текст
+        // ошибки зависит от локали/файловой системы — важно, что он есть.
+        #expect(sut?.body.contains("—") == true)
+        #expect((sut?.body.count ?? 0) > "UserStore.swift".count)
     }
 
     // MARK: - Отказоустойчивое чтение (запрос 2026-11-13)
