@@ -8,7 +8,8 @@ import AppKit
 ///
 /// Input: resolved absolute image paths.
 /// Output: thumbnail grid (bounded size, not full-chat).
-/// Dependencies: `ChatFileOpenLogic`, `NSPasteboard`.
+/// Dependencies: `ChatThumbnailCache` (off-main load/scale), `ChatFileOpenLogic`,
+/// `NSPasteboard`.
 struct ChatImagePathCollageView: View {
     let paths: [String]
 
@@ -24,7 +25,9 @@ struct ChatImagePathCollageView: View {
             spacing: 8
         ) {
             ForEach(paths, id: \.self) { path in
-                thumbnail(for: path)
+                ThumbnailCell(path: path, side: Self.thumbnailSide) { path in
+                    previewItem = PreviewItem(path: path)
+                }
             }
         }
         .frame(maxWidth: Self.maxCollageWidth, alignment: .leading)
@@ -32,33 +35,75 @@ struct ChatImagePathCollageView: View {
             InlineImagePreviewSheet(path: item.path)
         }
     }
+}
+
+/// One thumbnail tile: loads and scales the image through the shared off-main
+/// store, shows a placeholder until ready, and reacts to left/right clicks.
+///
+/// Input: an absolute image path, the maximum side, and a preview callback.
+/// Output: the tile view (placeholder / image with actions).
+/// Dependencies: `ChatThumbnailCache`, `HandCursorButtonStyle`, `L` (i18n).
+private struct ThumbnailCell: View {
+    let path: String
+    let side: CGFloat
+    let onPreview: (String) -> Void
+
+    @State private var image: NSImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                tile(image)
+            } else if failed {
+                placeholder(symbol: "exclamationmark.triangle")
+            } else {
+                ProgressView()
+                    .frame(width: side, height: side)
+            }
+        }
+        .task(id: path) {
+            guard image == nil, !failed else { return }
+            let loaded = await ChatThumbnailCache.shared.thumbnail(for: path, side: side)
+            if let loaded {
+                image = loaded
+            } else {
+                failed = true
+            }
+        }
+    }
+
+    private func tile(_ image: NSImage) -> some View {
+        Button {
+            onPreview(path)
+        } label: {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: side, height: side)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.mimo.border.opacity(0.6), lineWidth: 1)
+                )
+        }
+        .buttonStyle(HandCursorButtonStyle())
+        .contextMenu { contextMenuItems(image: image) }
+    }
 
     @ViewBuilder
-    private func thumbnail(for path: String) -> some View {
-        if let image = NSImage(contentsOfFile: path) {
-            Button {
-                previewItem = PreviewItem(path: path)
-            } label: {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: Self.thumbnailSide, height: Self.thumbnailSide)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.mimo.border.opacity(0.6), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .contextMenu { contextMenuItems(for: path, image: image) }
-        }
+    private func placeholder(symbol: String) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.mimo.subtleFill)
+            .frame(width: side, height: side)
+            .overlay(Image(systemName: symbol).foregroundColor(Color.mimo.textMuted))
     }
 
     /// Right-click menu: copy image, copy path, reveal in Finder, open with
     /// the default application.
     @ViewBuilder
-    private func contextMenuItems(for path: String, image: NSImage) -> some View {
+    private func contextMenuItems(image: NSImage) -> some View {
         Button {
             copyImage(image)
         } label: {

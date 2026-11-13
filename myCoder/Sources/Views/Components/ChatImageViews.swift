@@ -15,8 +15,7 @@ struct TappableChatImage: View {
 
     var body: some View {
         Group {
-            if let data = Data(base64Encoded: image.base64),
-               let nsImage = NSImage(data: data) {
+            if let nsImage = ChatBase64ImageCache.shared.image(forBase64: image.base64) {
                 Button {
                     previewImage = image
                 } label: {

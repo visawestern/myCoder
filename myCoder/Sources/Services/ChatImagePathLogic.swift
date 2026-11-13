@@ -25,19 +25,33 @@ enum ChatImagePathLogic {
 
     /// Extract image paths from free text.
     ///
-    /// Input: text; project root; optional bound.
+    /// Input: text; project root; optional bound; optional cache.
     /// Output: unique resolved absolute paths of existing image files.
-    /// Dependencies: `ChatFileOpenLogic.resolveFilePath`, `imageExtensions`.
+    /// Dependencies: `ChatImagePathExtractionCache` (memoization),
+    /// `ChatFileOpenLogic.resolveFilePath`, `imageExtensions`.
     static func extractImagePaths(from text: String,
                                   projectRoot: String?,
-                                  limit: Int = maxInlineImages) -> [String] {
+                                  limit: Int = maxInlineImages,
+                                  cache: ChatImagePathExtractionCache = .shared) -> [String] {
+        cache.extractedPaths(from: text, projectRoot: projectRoot, limit: limit)
+    }
+
+    /// Pure resolution core (no caching): maps tokens to existing image paths.
+    ///
+    /// Input: text; project root; result bound; a resolver that converts a
+    /// token into a resolved absolute path (or nil).
+    /// Output: ordered, deduplicated absolute paths of existing images.
+    /// Dependencies: none — the resolver is injected, so this core is portable
+    /// and testable without touching the filesystem.
+    static func resolvedPaths(in text: String,
+                              projectRoot: String?,
+                              limit: Int,
+                              resolve: (String) -> String?) -> [String] {
         guard !text.isEmpty else { return [] }
         var seen = Set<String>()
         var result: [String] = []
         for token in tokenize(text) where result.count < limit {
-            guard let path = ChatFileOpenLogic.resolveFilePath(token, projectRoot: projectRoot) else {
-                continue
-            }
+            guard let path = resolve(token) else { continue }
             let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
             guard imageExtensions.contains(ext), seen.insert(path).inserted else { continue }
             result.append(path)
