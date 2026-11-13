@@ -7,7 +7,11 @@ import Foundation
 /// context assembly inherited that budget, so a slow or wedged internal model
 /// left the turn "collecting context" for ten minutes with no way out.
 /// The planner must have its own short budget and fall back deterministically.
-@MainActor
+///
+/// The suite is deliberately NOT `@MainActor`: it measures a wall-clock
+/// timeout, and queueing behind the other main-actor suites delayed the
+/// 0.2 s timer past the 5 s assertion under parallel load (2026-11-13).
+/// Nothing here touches UI state, so a nonisolated suite is also more honest.
 @Suite("Бюджет сборки контекста")
 struct ContextPlannerBudgetTests {
 

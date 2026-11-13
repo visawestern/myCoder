@@ -97,14 +97,20 @@ extension AppState {
     }
 
     /// Reload the sub-agent list for the selected chat from its own store.
+    ///
+    /// A normal chat lists its own children. A child chat lists its SIBLINGS
+    /// and remembers the parent, so opening a sub-agent does not empty the
+    /// section and the back breadcrumb can return to the parent.
     func refreshSubagentSessions() {
         guard let session = selectedSession else {
             subagentSessions = []
+            subagentParentSession = nil
             return
         }
         let projectKey = selectedWorkspace?.id ?? ChatSession.standaloneProjectKey
+        subagentParentSession = SubagentListLogic.parentSession(for: session, in: sessions)
         subagentSessions = DatabaseBridge.shared.loadChildSessions(
-            parentID: session.id,
+            parentID: SubagentListLogic.childrenParentID(for: session),
             projectKey: projectKey
         )
     }

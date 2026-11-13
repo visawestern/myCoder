@@ -239,6 +239,10 @@ class AppState: ObservableObject {
     /// between the GitHub tools and the plan. Clicking a row navigates into
     /// the child chat transcript.
     @Published var subagentSessions: [ChatSession] = []
+    /// Parent chat when the selected session is a sub-agent. The right panel
+    /// keeps a back breadcrumb and lists the child's siblings instead of
+    /// emptying itself after navigation.
+    @Published var subagentParentSession: ChatSession?
     @Published var gitBranch = "main"
     @Published var gitBranches: [String] = []
     @Published var gitStatusMessage: String?

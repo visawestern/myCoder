@@ -39,6 +39,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case settingsArchiveInactive, terminalTab, gitTab, terminalWelcome
     case terminalHelpHint, terminalHelpOutput, terminalCommandNotFound, gitToolsTitle
     case subagentsTitle, gitChanges, gitNoChanges, gitBranch
+    case subagentBackToParent
     case gitCommit, gitCommitAuto, gitCommitCustom, gitReviewPush
     case gitPublish, gitPublishTitle, gitRepoName, gitInitTitle
     case gitVisibility, gitPublic, gitPrivate, gitInitialize
