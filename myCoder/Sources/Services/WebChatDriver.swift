@@ -181,6 +181,12 @@ struct WebChatDriver {
             // anchored exactly once per turn; a repeated refusal is accepted
             // honestly instead of looping nudges forever.
             var refusalNudgedThisTurn = false
+            // A final answer that announces an action without a tool call gets
+            // ONE nudge to actually emit the call (live evidence 2026-11-13).
+            var danglingIntentNudgedThisTurn = false
+            // Malformed-block feedback already asks the model to re-emit the
+            // call; a dangling nudge on top of it would stack corrections.
+            var malformedFeedbackSentThisTurn = false
             // Harness-tax C3: idle-loop state for this turn. Fed with every
             // parsed tool call; trips on the third consecutive identical call.
             var idleDetector = IdleLoopDetector()
@@ -364,14 +370,38 @@ struct WebChatDriver {
                     }
                 }
 
+                let maxIterations = Self.effectiveMaxIterations(configured: config.maxToolIterations)
                 if WebToolProtocolEmulator.shouldStopLoop(iteration: iteration,
-                                                          maxIterations: Self.effectiveMaxIterations(configured: config.maxToolIterations),
+                                                          maxIterations: maxIterations,
                                                           lastResponse: response) {
                     if let feedback = WebToolProtocolEmulator.malformedToolBlockFeedback(from: response) {
                         MyCoderAPIServer.appendLog("⚠️ [WebChatDriver] malformed tool JSON, feeding error back")
+                        malformedFeedbackSentThisTurn = true
                         let feedbackBlock = feedback + "\n"
                         responseBaseline = try await sendPossiblyChunked(feedbackBlock, emit: emit)
                         lastSentText = feedbackBlock
+                        iteration += 1
+                        continue
+                    }
+                    // Live 2026-11-13: the model ended a turn with "Проверю
+                    // счётчики ресурсов в JS." and no tool block, so the plan
+                    // never ran. Nudge exactly once, only when one iteration
+                    // remains to execute the call. Never at the ceiling and
+                    // never after malformed-JSON feedback (that path already
+                    // asked for a corrected call).
+                    if !danglingIntentNudgedThisTurn,
+                       !malformedFeedbackSentThisTurn,
+                       iteration + 1 < maxIterations,
+                       WebToolProtocolEmulator.isFinalResponse(response),
+                       DanglingIntentLogic.announcesAction(response) {
+                        danglingIntentNudgedThisTurn = true
+                        MyCoderAPIServer.appendLog("🔁 [WebChatDriver] dangling intent: announced an action without a tool call")
+                        emit(.streaming("The model announced an action without a tool call; asking it to execute it…"))
+                        responseBaseline = try await sendPossiblyChunked(
+                            DanglingIntentLogic.nudgeMessage,
+                            emit: emit
+                        )
+                        lastSentText = DanglingIntentLogic.nudgeMessage
                         iteration += 1
                         continue
                     }

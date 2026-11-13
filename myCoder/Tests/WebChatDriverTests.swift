@@ -137,6 +137,88 @@ struct WebChatDriverTests {
 
         #expect(events.contains(.final("The answer is 42.")))
         #expect(exec.executed.isEmpty)
+        // A genuine final answer is never nudged.
+        #expect(bridge.typed.count == 1)
+    }
+
+    @Test("announced action without a tool call is nudged once and then executed")
+    func danglingIntentIsNudgedThenExecutes() async {
+        let bridge = FakeBridge(responses: [
+            "Проверю счётчики ресурсов в JS.",
+            "```tool\n{\"name\": \"read_file\", \"args\": {\"path\": \"a.js\"}}\n```",
+            "Готово: счётчики в порядке."
+        ])
+        let exec = RecordingExecutor { _ in "const a = 1" }
+        let driver = makeDriver(bridge: bridge, executor: exec)
+
+        var events: [WebChatEvent] = []
+        await driver.runTurn(userMessage: "проверь", isFirstMessage: false) { events.append($0) }
+
+        // First send + nudge + tool-result continuation.
+        #expect(bridge.typed.count == 3)
+        #expect(bridge.typed[1].contains("announced an action"))
+        #expect(exec.executed.map(\.name) == ["read_file"])
+        #expect(events.contains(.toolResult(name: "read_file", result: "const a = 1")))
+        #expect(events.contains(.final("Готово: счётчики в порядке.")))
+    }
+
+    @Test("dangling intent is nudged at most once per turn")
+    func danglingIntentIsNudgedOnlyOnce() async {
+        let announced = "Проверю счётчики ресурсов в JS."
+        let bridge = FakeBridge(responses: [announced, announced])
+        let exec = RecordingExecutor()
+        let driver = makeDriver(bridge: bridge, executor: exec)
+
+        var events: [WebChatEvent] = []
+        await driver.runTurn(userMessage: "проверь", isFirstMessage: false) { events.append($0) }
+
+        #expect(bridge.typed.count == 2)   // first send + exactly one nudge
+        #expect(events.contains(.final(announced)))
+        #expect(exec.executed.isEmpty)
+    }
+
+    @Test("no dangling nudge when the iteration ceiling leaves no room")
+    func danglingIntentDoesNotNudgeAtIterationCeiling() async {
+        let announced = "Проверю счётчики ресурсов в JS."
+        let bridge = FakeBridge(responses: [announced])
+        let exec = RecordingExecutor()
+        var driver = WebChatDriver(
+            bridge: bridge, executor: exec, selectors: selectors,
+            config: WebProviderConfig(
+                vendor: .kimi, toolCallDelayMs: 0,
+                maxToolIterations: 1, acknowledgedToS: true
+            ),
+            projectRoot: "/proj",
+            accessLevel: .askBeforeChanges,
+            randomUnit: { 0.5 }, pollIntervalMs: 0, stabilityChecks: 1
+        )
+        driver.injectModelAndEffortEnabled = false
+
+        var events: [WebChatEvent] = []
+        await driver.runTurn(userMessage: "проверь", isFirstMessage: false) { events.append($0) }
+
+        #expect(bridge.typed.count == 1)
+        #expect(events.contains(.final(announced)))
+    }
+
+    @Test("malformed-block feedback wins over a dangling nudge")
+    func malformedFeedbackSuppressesDanglingNudge() async {
+        // A broken tool block gets the JSON error feedback first; the model's
+        // prose answer after that feedback is accepted instead of nudged again.
+        let malformed = "```tool\n{\"name\": \"read_file\", \"args\": {\"path\": }\n```"
+        let announced = "Проверю счётчики ресурсов в JS."
+        let bridge = FakeBridge(responses: [malformed, announced])
+        let exec = RecordingExecutor()
+        let driver = makeDriver(bridge: bridge, executor: exec)
+
+        var events: [WebChatEvent] = []
+        await driver.runTurn(userMessage: "проверь", isFirstMessage: false) { events.append($0) }
+
+        #expect(bridge.typed.count == 2)   // first send + malformed feedback only
+        #expect(bridge.typed[1].contains("Re-emit the COMPLETE tool call block"))
+        #expect(!bridge.typed[1].contains("announced an action"))
+        #expect(events.contains(.final(announced)))
+        #expect(exec.executed.isEmpty)
     }
 
     @Test func toolCallRoundTripExecutesAndContinues() async {
