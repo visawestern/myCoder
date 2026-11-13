@@ -25,12 +25,15 @@ struct GoalContextLogicTests {
         #expect(!GoalContextLogic.matches(g, context: GoalContext(chatID: nil, projectPath: "/p")))
     }
 
-    @Test("Цель проекта видна в любом чате этого проекта")
-    func projectGoalIsVisibleInProjectChats() {
+    @Test("Цель проекта НЕ видна внутри чата — только в проектном виде без чата")
+    func projectGoalIsNotVisibleInChats() {
         let g = goal(title: "Проект", projectPath: "/p")
-        #expect(GoalContextLogic.matches(g, context: GoalContext(chatID: "chat-a", projectPath: "/p")))
-        #expect(GoalContextLogic.matches(g, context: GoalContext(chatID: "chat-b", projectPath: "/p")))
-        #expect(!GoalContextLogic.matches(g, context: GoalContext(chatID: "chat-a", projectPath: "/other")))
+        // Directive 2026-11-13: opening any chat must not surface a goal that
+        // belongs to the project scope, otherwise it jumps between chats.
+        #expect(!GoalContextLogic.matches(g, context: GoalContext(chatID: "chat-a", projectPath: "/p")))
+        #expect(!GoalContextLogic.matches(g, context: GoalContext(chatID: "chat-b", projectPath: "/p")))
+        #expect(GoalContextLogic.matches(g, context: GoalContext(projectPath: "/p")))
+        #expect(!GoalContextLogic.matches(g, context: GoalContext(projectPath: "/other")))
     }
 
     @Test("Старая цель без привязки видна только вне чата и проекта")
@@ -41,7 +44,7 @@ struct GoalContextLogicTests {
         #expect(!GoalContextLogic.matches(g, context: GoalContext(chatID: nil, projectPath: "/p")))
     }
 
-    @Test("В чате проекта видны и его цели, и цели проекта, и ничего чужого")
+    @Test("В чате видны только его собственные цели, и ничего чужого")
     func visibleGoalsCombinesScopes() {
         let all = [
             goal(title: "Своя", chatID: "chat-a", projectPath: "/p"),
@@ -54,7 +57,24 @@ struct GoalContextLogicTests {
             all,
             context: GoalContext(chatID: "chat-a", projectPath: "/p")
         )
-        #expect(visible.map(\.title) == ["Своя", "Проектная"])
+        #expect(visible.map(\.title) == ["Своя"])
+    }
+
+    @Test("Переключение чатов не переносит цель в другой чат")
+    func switchingChatsNeverCarriesTheGoalOver() {
+        let goals = [
+            goal(title: "Цель A", chatID: "chat-a", projectPath: "/p"),
+            goal(title: "Цель B", chatID: "chat-b", projectPath: "/p")
+        ]
+        let chatA = GoalContextLogic.visibleGoals(
+            goals, context: GoalContext(chatID: "chat-a", projectPath: "/p")
+        )
+        let chatB = GoalContextLogic.visibleGoals(
+            goals, context: GoalContext(chatID: "chat-b", projectPath: "/p")
+        )
+        #expect(chatA.map(\.title) == ["Цель A"])
+        #expect(chatB.map(\.title) == ["Цель B"])
+        #expect(!chatB.contains { $0.title == "Цель A" })
     }
 
     @Test("Standalone-чат не наследует цели выбранного проекта")

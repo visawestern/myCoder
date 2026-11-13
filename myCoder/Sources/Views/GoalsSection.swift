@@ -68,7 +68,7 @@ struct GoalsSection: View {
         .onReceive(NotificationCenter.default.publisher(for: .init("myCoderGoalStoreChanged"))) { _ in
             reload()
         }
-        .onChange(of: appState.selectedSession?.id) { _ in
+        .onChange(of: goalContext) { _ in
             reload()
         }
         // The section must not absorb the panel's leftover height: the goal

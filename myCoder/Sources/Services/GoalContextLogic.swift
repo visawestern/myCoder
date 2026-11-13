@@ -8,10 +8,15 @@ import Foundation
 /// only in its own scope:
 ///
 /// - chat-bound goal (`chatID != nil`) — only that chat;
-/// - project goal (`chatID == nil`, `projectPath != nil`) — every chat of
-///   that project;
+/// - project goal (`chatID == nil`, `projectPath != nil`) — only the
+///   project-level view (no open chat), never inside a chat;
 /// - legacy goal (both nil) — only outside any chat/project, so existing
 ///   goals stay reachable instead of silently disappearing.
+///
+/// Directive 2026-11-13 tightened project goals: opening another chat must
+/// never surface a goal that belongs to a different conversation. A goal is
+/// bound to the chat on launch, which is the only transition from project
+/// scope into a conversation.
 struct GoalContext: Equatable, Sendable {
     var chatID: String?
     var projectPath: String?
@@ -28,22 +33,25 @@ struct GoalContext: Equatable, Sendable {
 enum GoalContextLogic {
 
     /// Whether the goal belongs to this chat/project.
+    ///
+    /// A chat context is strict: only a goal bound to THIS chat matches.
+    /// Project-wide and legacy unbound goals never appear inside a chat, so
+    /// switching chats can never move a goal into another conversation
+    /// (user directive 2026-11-13). Outside a chat (project-level view) a
+    /// project goal stays reachable, and a fully unbound legacy goal is shown
+    /// only when there is no context at all.
     static func matches(_ goal: UserGoal, context: GoalContext) -> Bool {
         let chatID = normalized(context.chatID)
         let projectPath = normalized(context.projectPath)
 
-        if let chatID, normalized(goal.chatID) == chatID {
-            return true
+        if let chatID {
+            return normalized(goal.chatID) == chatID
         }
-        if let projectPath, normalized(goal.chatID) == nil, normalized(goal.projectPath) == projectPath {
-            return true
+        if let projectPath {
+            return normalized(goal.chatID) == nil
+                && normalized(goal.projectPath) == projectPath
         }
-        // Legacy goal without any binding: visible only when the app has no
-        // chat/project context, so it never floats across real chats.
-        if chatID == nil && projectPath == nil {
-            return normalized(goal.chatID) == nil && normalized(goal.projectPath) == nil
-        }
-        return false
+        return normalized(goal.chatID) == nil && normalized(goal.projectPath) == nil
     }
 
     static func visibleGoals(_ goals: [UserGoal], context: GoalContext) -> [UserGoal] {

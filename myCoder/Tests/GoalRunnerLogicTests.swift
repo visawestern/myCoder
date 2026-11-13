@@ -98,4 +98,49 @@ struct GoalRunnerLogicTests {
         #expect(launched)
         #expect(GoalStore.load(homeDirectory: home).first?.state == .active)
     }
+
+    @Test("Запуск проектной цели привязывает её к чату и она больше не прыгает")
+    func launchBindsProjectGoalToFallbackChat() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        // A goal created without a chat (project scope / legacy).
+        let goal = UserGoal(title: "Проектная", projectPath: "/p")
+        try GoalStore.upsert(goal, homeDirectory: home)
+
+        #expect(GoalLauncher.launch(
+            goalID: goal.id,
+            homeDirectory: home,
+            language: .russian,
+            fallbackChatID: "chat-a"
+        ))
+
+        let stored = try #require(GoalStore.load(homeDirectory: home).first)
+        #expect(stored.chatID == "chat-a")
+        #expect(stored.projectPath == "/p")
+        #expect(stored.state == .active)
+        // It is now visible in chat-a and invisible in chat-b.
+        #expect(GoalContextLogic.matches(
+            stored, context: GoalContext(chatID: "chat-a", projectPath: "/p")
+        ))
+        #expect(!GoalContextLogic.matches(
+            stored, context: GoalContext(chatID: "chat-b", projectPath: "/p")
+        ))
+    }
+
+    @Test("Запуск уже привязанной цели не перепривязывает её к другому чату")
+    func launchNeverRebindsAnExistingChatGoal() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let goal = UserGoal(title: "Своя", projectPath: "/p", chatID: "chat-a")
+        try GoalStore.upsert(goal, homeDirectory: home)
+
+        _ = GoalLauncher.launch(
+            goalID: goal.id,
+            homeDirectory: home,
+            language: .russian,
+            fallbackChatID: "chat-b"
+        )
+
+        #expect(GoalStore.load(homeDirectory: home).first?.chatID == "chat-a")
+    }
 }

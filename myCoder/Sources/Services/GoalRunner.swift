@@ -65,8 +65,21 @@ enum GoalLauncher {
               goal.state != .done else {
             return false
         }
+        // A project-scoped or legacy goal becomes bound to the chat it is
+        // launched into. Without this, a chatID-less goal would remain
+        // project-wide and keep appearing in every chat of the project
+        // (user directive 2026-11-13: a goal never jumps between chats).
+        // Bind FIRST, then set the state: the upsert carries the old goal
+        // value and would otherwise overwrite the freshly-active state.
+        let chatID = normalized(goal.chatID) ?? normalized(fallbackChatID)
+        if normalized(goal.chatID) == nil, let chatID {
+            var bound = goal
+            bound.chatID = chatID
+            bound.updatedAt = Date()
+            _ = try? GoalStore.upsert(bound, homeDirectory: homeDirectory)
+            GoalService.notifyChanged()
+        }
         _ = try? GoalStore.setState(id: goal.id, state: .active, homeDirectory: homeDirectory)
-        let chatID = normalized(goal.chatID) ?? fallbackChatID
         let message = GoalRunner.launchMessage(goal: goal, language: language)
         var userInfo: [AnyHashable: Any] = ["message": message]
         if let chatID {

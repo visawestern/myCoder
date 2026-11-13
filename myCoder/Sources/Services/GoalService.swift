@@ -132,7 +132,7 @@ enum GoalService {
     /// Tell the live UI (right-panel goals section, composer goal spoiler) that
     /// the goal store changed so it refreshes — whether the change came from the
     /// `/goal` command, the sidebar buttons, or the HTTP API.
-    private static func notifyChanged() {
+    static func notifyChanged() {
         NotificationCenter.default.post(name: Notification.Name("myCoderGoalStoreChanged"), object: nil)
     }
 }
