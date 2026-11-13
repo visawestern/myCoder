@@ -11,7 +11,9 @@ import Foundation
 /// edit policy, `run_command` only ever executes at `.fullAccess` and runs as a
 /// real bounded shell process against the project directory.
 struct ProjectWebToolExecutor: WebToolExecutor {
-    let projectRoot: String
+    /// Working root of the executor; a project-less chat rebound to a project
+    /// updates it (and `isProjectless`) in place so the SAME turn continues.
+    var projectRoot: String
     let fileManager: FileManager
     let undoManager: ProjectUndoManager?
     let sessionId: String?
@@ -21,7 +23,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     let accessLevel: AccessLevel
     /// True when the open chat has no project folder. File-changing tools are
     /// then refused until the user creates a project (see `ProjectlessWriteLogic`).
-    let isProjectless: Bool
+    var isProjectless: Bool
     /// Host hook that asks the user to create a project folder. Input is the
     /// suggested folder name; output is the created project root, or nil when
     /// the user declined. Called only for file-changing tools in a projectless

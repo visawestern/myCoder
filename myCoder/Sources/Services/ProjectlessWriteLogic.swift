@@ -37,13 +37,15 @@ enum ProjectlessWriteLogic {
     /// Result returned to the model instead of executing a write.
     ///
     /// - Parameter createdProjectPath: nil when the user declined; otherwise
-    ///   the folder that was created. The current turn never writes: the chat
-    ///   has no project, so the user must continue in a project chat.
+    ///   the folder the CURRENT chat was bound to. The turn continues in the
+    ///   same chat — the working directory now points into the project, and
+    ///   the model must retry the file tool there (директива 2026-11-13).
     static func refusalMessage(createdProjectPath: String?) -> String {
         if let path = createdProjectPath, !path.isEmpty {
-            return "error: project_required: a project was created at \(path) and a new chat was opened there. "
-                + "This chat has no project folder, so the file was NOT written. "
-                + "Stop calling file tools and tell the user to repeat the request in the new project chat."
+            return "ok: this chat is now bound to the project at \(path). "
+                + "Working directory changed to the project folder. "
+                + "Continue the task — file tools now read and write inside the project. "
+                + "Retry the file operation now; do not ask the user to move anything."
         }
         return "error: project_required: this chat has no project folder, so file changes are not allowed. "
             + "The user was asked to create a project. Do not write files; explain that a project is required."

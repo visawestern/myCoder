@@ -378,16 +378,16 @@ extension MarkdownAttributedStringBuilder {
         for part in MarkdownInlineParser.parse(content) {
             switch part {
             case .text(let value):
-                appendTextWithFilePaths(value, to: result, font: font, color: color, projectRoot: projectRoot)
+                appendTextWithFilePaths(value, to: result, font: font, color: color, brand: brand, projectRoot: projectRoot)
             case .bold(let value):
                 let boldFont = NSFont.systemFont(ofSize: font.pointSize, weight: .bold)
-                appendTextWithFilePaths(value, to: result, font: boldFont, color: color, projectRoot: projectRoot)
+                appendTextWithFilePaths(value, to: result, font: boldFont, color: color, brand: brand, projectRoot: projectRoot)
             case .italic(let value):
                 let italic = NSFontManager.shared.convert(
                     NSFont.systemFont(ofSize: font.pointSize),
                     toHaveTrait: .italicFontMask
                 )
-                appendTextWithFilePaths(value, to: result, font: italic, color: color, projectRoot: projectRoot)
+                appendTextWithFilePaths(value, to: result, font: italic, color: color, brand: brand, projectRoot: projectRoot)
             case .code(let value):
                 let codeAttributes: [NSAttributedString.Key: Any] = [
                     .font: codeFont,
@@ -397,6 +397,7 @@ extension MarkdownAttributedStringBuilder {
                 let attributedCode = NSMutableAttributedString(string: value, attributes: codeAttributes)
                 if let resolved = ChatFileOpenLogic.resolveFilePath(value, projectRoot: projectRoot) {
                     attributedCode.addAttribute(.chatFilePath, value: resolved, range: NSRange(location: 0, length: attributedCode.length))
+                    attributedCode.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: attributedCode.length))
                 }
                 result.append(attributedCode)
             case .link(let title, let url):
@@ -444,13 +445,14 @@ extension MarkdownAttributedStringBuilder {
     /// Appends plain text while marking any substring that resolves to an
     /// existing file/folder (relative to the project root or absolute) with
     /// `.chatFilePath` so a click opens the "Open with / Reveal in Finder"
-    /// menu. The visual style stays the surrounding text style — file names
-    /// outside inline code do not get repainted (user request 2026-10-31).
+    /// menu. Resolved paths are visually underlined in the brand color so the
+    /// click target is visible (user request 2026-11-13: "как на ссылку").
     private static func appendTextWithFilePaths(
         _ value: String,
         to result: NSMutableAttributedString,
         font: NSFont,
         color: NSColor,
+        brand: NSColor,
         projectRoot: String?
     ) {
         let ns = value as NSString
@@ -476,6 +478,8 @@ extension MarkdownAttributedStringBuilder {
             var attributes = baseAttributes
             if let resolved = ChatFileOpenLogic.resolveFilePath(token, projectRoot: projectRoot) {
                 attributes[.chatFilePath] = resolved
+                attributes[.foregroundColor] = brand
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
             }
             result.append(NSAttributedString(string: token, attributes: attributes))
             last = match.range.location + match.range.length

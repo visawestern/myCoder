@@ -46,10 +46,15 @@ enum ChatFileOpenLogic {
             candidate = (candidate as NSString).expandingTildeInPath
         }
         if !candidate.hasPrefix("/") {
-            guard let root = projectRoot?.trimmingCharacters(in: .whitespacesAndNewlines), !root.isEmpty else {
-                return nil
+            if let root = projectRoot?.trimmingCharacters(in: .whitespacesAndNewlines), !root.isEmpty {
+                candidate = (root as NSString).appendingPathComponent(candidate)
+            } else {
+                // Fallback для standalone-чатов: рабочая папка процесса (только
+                // если файл реально существует — ложных ссылок не создаём).
+                let cwd = FileManager.default.currentDirectoryPath
+                guard cwd != "/" else { return nil }
+                candidate = (cwd as NSString).appendingPathComponent(candidate)
             }
-            candidate = (root as NSString).appendingPathComponent(candidate)
         }
         let standardized = URL(fileURLWithPath: candidate).standardizedFileURL.path
         var isDirectory: ObjCBool = false

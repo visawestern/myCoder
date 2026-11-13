@@ -122,6 +122,14 @@ final class PathClickTextView: NSTextView {
         menuCoordinator?.presentOpenWithMenu(for: path, at: event.locationInWindow)
     }
 
+    /// Правый клик по пути показывает то же меню «Открыть с помощью / Finder».
+    override func rightMouseUp(with event: NSEvent) {
+        super.rightMouseUp(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        guard let path = filePath(at: point) else { return }
+        menuCoordinator?.presentOpenWithMenu(for: path, at: event.locationInWindow)
+    }
+
     private func filePath(at point: NSPoint) -> String? {
         guard let layoutManager, let container = textContainer else { return nil }
         let index = layoutManager.characterIndex(

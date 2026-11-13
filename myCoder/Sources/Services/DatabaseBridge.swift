@@ -344,6 +344,27 @@ class DatabaseBridge: ObservableObject {
         }
     }
 
+    /// Rebind a session to a project (standalone → project upgrade): updates
+    /// the session row (project_id, directory) and the session route so the
+    /// chat keeps its history, model and provider but now belongs to the
+    /// project folder. Returns true only when the row changed.
+    @discardableResult
+    func bindSessionToProject(sessionId id: String, projectId: String, directory: String) -> Bool {
+        let normalized = ChatSession.normalizedPath(projectId)
+        do {
+            let updated = try db.updateSessionProject(
+                sessionId: id,
+                projectId: normalized,
+                directory: ChatSession.normalizedPath(directory)
+            )
+            try db.setSessionRoute(sessionId: id, projectPath: normalized)
+            return updated > 0
+        } catch {
+            print("❌ Failed to bind session \(id) to project \(normalized): \(error)")
+            return false
+        }
+    }
+
     /// Rename a session in the program database.
     /// Returns true only when a row actually changed.
     @discardableResult

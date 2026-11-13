@@ -60,8 +60,8 @@ struct ProjectlessWriteLogicTests {
                 "файл не должен появляться в домашней папке без проекта")
     }
 
-    @Test("После создания проекта текущий ход всё равно не пишет в старый корень")
-    func createdProjectStopsTheWrite() async throws {
+    @Test("После создания проекта текущий ход продолжается в привязанном проекте")
+    func createdProjectBindsAndContinues() async throws {
         let home = try tempDir("home")
         let project = try tempDir("project")
         defer {
@@ -78,12 +78,19 @@ struct ProjectlessWriteLogicTests {
             name: "write_file",
             arguments: ["path": "aquarium_3d.html", "content": "<html></html>"]
         ))
-        #expect(result.contains("project_required"))
+        // Чат привязан к проекту: ответ содержит путь и указание продолжать
+        // (никакого «открой новый чат»).
         #expect(result.contains(project.path),
-                "фактически: \(result) — ожидался путь созданного проекта")
+                "фактически: \(result) — ожидался путь привязанного проекта")
+        #expect(result.contains("bound"),
+                "фактически: \(result) — ожидался статус привязки")
+        #expect(result.contains("Continue"),
+                "фактически: \(result) — модель должна продолжить работу")
+        #expect(!result.contains("new chat opened"))
+        // Сам ход не пишет молча ни в домашнюю папку, ни в новый проект:
+        // модель узнаёт о привязке и повторяет вызов сама.
         #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent("aquarium_3d.html").path))
-        #expect(!FileManager.default.fileExists(atPath: project.appendingPathComponent("aquarium_3d.html").path),
-                "ход должен остановиться, а не писать в новый проект молча")
+        #expect(!FileManager.default.fileExists(atPath: project.appendingPathComponent("aquarium_3d.html").path))
     }
 
     @Test("В проекте запись работает как раньше")

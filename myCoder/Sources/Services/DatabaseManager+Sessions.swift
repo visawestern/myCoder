@@ -55,6 +55,19 @@ extension DatabaseManager {
         ))
     }
 
+    /// Rebind a session to a project: change its owning project id and working
+    /// directory (standalone → project upgrade). Returns the number of rows
+    /// updated so the caller can detect a stale id.
+    @discardableResult
+    func updateSessionProject(sessionId id: String, projectId: String, directory: String) throws -> Int {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        return try db.run(sessions.filter(sessionId == id).update(
+            sessionProjectId <- projectId,
+            sessionDirectory <- directory,
+            sessionUpdatedAt <- Int64(Date().timeIntervalSince1970)
+        ))
+    }
+
     /// Rename a session in the global (standalone) store.
     /// Rename a session. Returns the number of rows updated so the caller can
     /// detect a stale id instead of reporting success for a silent no-op.

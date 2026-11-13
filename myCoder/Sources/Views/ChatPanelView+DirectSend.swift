@@ -437,10 +437,15 @@ extension ChatPanelView {
                     isProjectless: prepared.capturedProjectRoot.isEmpty
                 )
                 loopExecutor.projectlessWritePrompt = { suggested in
-                    await self.promptCreateProjectForFileWrite(
+                    guard let created = await self.promptCreateProjectForFileWrite(
                         suggestedName: suggested,
                         sessionID: sessionID
-                    )
+                    ) else { return nil }
+                    // Тот же чат апгрейднут до проекта: цикл продолжает работу
+                    // с новой рабочей папкой, а не с мертвым корнем.
+                    loopExecutor.projectRoot = created
+                    loopExecutor.isProjectless = false
+                    return created
                 }
                 let loopResult = await AgentToolLoopLogic.run(
                     initialText: firstResponse.textContent,

@@ -16,13 +16,15 @@ import AppKit
 /// (notice) and `TurnNoticeBuilder`.
 extension ChatPanelView {
 
-    /// Asks for a project folder, creates it and opens a new chat there.
+    /// Asks for a project folder and binds the CURRENT chat to it — the chat
+    /// is upgraded in place (same model, history, title), never replaced by a
+    /// new chat. The model sees the notice and continues working there.
     ///
     /// - Parameters:
     ///   - suggestedName: folder name derived from the requested file.
     ///   - sessionID: chat whose turn triggered the write; the notice is
     ///     written there even if the user already switched chats.
-    /// - Returns: the new project root, or nil when the user cancelled.
+    /// - Returns: the project root, or nil when the user cancelled.
     @MainActor
     func promptCreateProjectForFileWrite(suggestedName: String,
                                          sessionID: String?) async -> String? {
@@ -45,14 +47,10 @@ extension ChatPanelView {
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
 
         let path = url.path
-        appState.createNewProject(name: url.lastPathComponent, path: path)
-        let workspace = appState.workspaces.first {
-            ChatSession.normalizedPath($0.path) == ChatSession.normalizedPath(path)
-        }
-        if let workspace {
-            appState.startNewTask(in: workspace)
-        }
-        let notice = L.t(AppLocalizationKey.locProjectlessWriteNotice, path)
+        // Апгрейд текущего чата до проекта: тот же чат продолжает работать в
+        // папке проекта (директива 2026-11-13).
+        appState.bindSessionToProject(sessionID: sessionID, path: path)
+        let notice = L.t(AppLocalizationKey.locProjectReboundNotice, path)
         messageStore.append(TurnNoticeBuilder.warningNotice(notice), to: sessionID)
         return path
     }

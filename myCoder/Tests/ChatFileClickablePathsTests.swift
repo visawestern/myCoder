@@ -125,4 +125,34 @@ struct ChatFileClickablePathsTests {
         }
         #expect(found?.hasSuffix("Sources/App.swift") == true)
     }
+
+    @Test("Разрешённый путь визуально подчёркнут (ссылка видна)")
+    func resolvedPathIsVisiblyUnderlined() throws {
+        let (root, projectRoot) = try makeProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let text = "Смотри Sources/App.swift."
+        let attributed = MarkdownAttributedStringBuilder.build(
+            text: text,
+            fontSize: 14,
+            textColor: .primary,
+            projectRoot: projectRoot
+        )
+        var underlinedRange: NSRange?
+        var hasPath = false
+        attributed.enumerateAttribute(.chatFilePath, in: NSRange(location: 0, length: attributed.length)) { value, range, _ in
+            if value as? String != nil {
+                hasPath = true
+                underlinedRange = range
+            }
+        }
+        #expect(hasPath)
+        let underlineRange = try #require(underlinedRange)
+        let underline = attributed.attribute(
+            .underlineStyle,
+            at: underlineRange.location,
+            effectiveRange: nil
+        ) as? Int
+        #expect(underline == NSUnderlineStyle.single.rawValue)
+    }
 }

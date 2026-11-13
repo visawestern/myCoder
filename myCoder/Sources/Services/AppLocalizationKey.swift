@@ -52,7 +52,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case newProjectTitle, newProjectName, newProjectFolder, newProjectChooseFolder
     case newProjectCreate, newProjectCancel, notificationsTitle, notificationsEmpty
     case locProjectlessWriteTitle, locProjectlessWriteBody, locProjectlessWriteCreate
-    case locProjectlessWriteFolder, locProjectlessWriteNotice
+    case locProjectlessWriteFolder, locProjectlessWriteNotice, locProjectReboundNotice
     case notificationsEmptySubtitle, workspacesTitle, noTasksYet, justNow
     case storageTabTitle, storageStatsTitle, storageDatabaseSize, storageSnapshotSize
     case storageMessageCount, storageActiveSessions, storageArchivedSessions, cleanupTitle
