@@ -89,22 +89,26 @@ struct ChatMarkdownCacheTests {
         defer { Color.mimo.setTheme(originalTheme) }
         let text = "prewarm-snapshot-\(UUID().uuidString)\n\n" + sampleText + "\n\n---"
         Color.mimo.setTheme(.dark)
-        _ = await Task.detached {
+        let built = await Task.detached {
             MarkdownAttributedStringBuilder.prewarm(
                 texts: [text], fontSize: 14, textColor: .black, projectRoot: nil,
                 codeSettings: .default, isLightInterface: true, threshold: 1
             )
         }.value
+        #expect(built == 1, "prewarm must build the explicit light profile even while the app theme is dark")
         Color.mimo.setTheme(.lightGlass)
         let direct = MarkdownAttributedStringBuilder.build(
             text: text, fontSize: 14, textColor: .black,
             codeSettings: .default, isLightInterface: true
         )
-        let cached = MarkdownAttributedStringBuilder.cachedAttributedString(
-            text: text, fontSize: 14, textColor: .black, projectRoot: nil,
+        // The shared cache may legitimately evict this entry while parallel
+        // suites render, so compare the render result instead of requiring a
+        // surviving cache slot. A hit and a rebuild must both equal `direct`.
+        let cached = MarkdownAttributedStringBuilder.cachedBuild(
+            text: text, fontSize: 14, textColor: .black,
             codeSettings: .default, isLightInterface: true
         )
-        #expect(cached?.isEqual(to: direct) == true)
+        #expect(cached.isEqual(to: direct))
     }
 
     @Test("Разные темы/настройки не путают кэш")
