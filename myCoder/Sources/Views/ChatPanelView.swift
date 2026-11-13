@@ -419,6 +419,12 @@ struct ChatPanelView: View {
             // applies, so reload configuration + journal for the new root.
             reloadModelRouting()
         }
+        .onChange(of: appState.appTheme) { _ in
+            // Rows re-render through the colorScheme environment; refresh the
+            // prewarm profile too, otherwise messages loaded after a theme
+            // switch would prewarm the old palette.
+            prepareMarkdownPrewarmProfile()
+        }
         .onChange(of: appState.effectiveSelectedModel()) { newModel in
             handleModelSwitch(to: newModel)
         }

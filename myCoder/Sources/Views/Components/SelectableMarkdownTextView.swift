@@ -12,14 +12,29 @@ import AppKit
 struct SelectableMarkdownTextView: NSViewRepresentable {
     let text: String
     var fontSize: CGFloat = 14
-    var textColor: Color = Color.mimo.textPrimary
+    /// Explicit color for a caller that owns the palette. Nil means "derive
+    /// from the live environment", so a theme switch cannot leave stale white
+    /// text on a light bubble.
+    var textColor: Color? = nil
     var projectRoot: String? = nil
+    /// Explicit render profile for the attributed-string cache. Nil means
+    /// "follow the current color scheme".
+    var isLightInterface: Bool? = nil
 
     @Environment(\.interfaceFontScale) private var interfaceFontScale
     @Environment(\.codeDisplaySettings) private var codeSettings
+    @Environment(\.colorScheme) private var colorScheme
 
     private var scaledFontSize: CGFloat {
         InterfaceTypography.scaled(fontSize, scale: interfaceFontScale)
+    }
+
+    private var resolvedTextColor: Color {
+        textColor ?? Color.mimo.textPrimary
+    }
+
+    private var resolvedIsLight: Bool {
+        isLightInterface ?? (colorScheme == .light)
     }
 
     func makeNSView(context: Context) -> NSTextView {
@@ -49,10 +64,10 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
         let attributed = MarkdownAttributedStringBuilder.cachedBuild(
             text: text,
             fontSize: scaledFontSize,
-            textColor: textColor,
+            textColor: resolvedTextColor,
             projectRoot: projectRoot,
             codeSettings: codeSettings,
-            isLightInterface: Color.mimo.isLightTheme
+            isLightInterface: resolvedIsLight
         )
         guard pathView.attributedString() != attributed else { return }
 
@@ -72,10 +87,10 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
         let height = MarkdownAttributedStringBuilder.cachedMeasuredHeight(
             text: text,
             fontSize: scaledFontSize,
-            textColor: textColor,
+            textColor: resolvedTextColor,
             projectRoot: projectRoot,
             codeSettings: codeSettings,
-            isLightInterface: Color.mimo.isLightTheme,
+            isLightInterface: resolvedIsLight,
             width: width
         ) {
             MarkdownAttributedStringBuilder.measuredHeight(for: textView, width: width)

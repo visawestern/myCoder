@@ -121,6 +121,48 @@ struct ChatMarkdownCacheTests {
         #expect(light !== dark)
     }
 
+    @Test("Смена темы приложения очищает кэш markdown")
+    func appThemeSwitchClearsCaches() {
+        // Regression 2026-11-13: rows kept black surfaces / white text after
+        // Dark → Light because the attributed strings and heights stayed in
+        // the cache and the row bodies were not invalidated.
+        let state = AppState()
+        let original = state.appTheme
+        defer {
+            state.appTheme = original
+            MarkdownAttributedStringBuilder.clearCaches()
+        }
+        MarkdownAttributedStringBuilder.clearCaches()
+        let text = "theme-switch-\(UUID().uuidString)\n\nТело сообщения."
+        _ = MarkdownAttributedStringBuilder.cachedBuild(
+            text: text, fontSize: 14, textColor: .black,
+            codeSettings: .default, isLightInterface: true
+        )
+        let seeded = MarkdownAttributedStringBuilder.cachedAttributedString(
+            text: text,
+            fontSize: 14,
+            textColor: .black,
+            projectRoot: nil,
+            codeSettings: .default,
+            isLightInterface: true
+        )
+        #expect(seeded != nil)
+
+        state.appTheme = original == .dark ? .lightGlass : .dark
+
+        // The cache is process-wide and other suites render in parallel, so
+        // assert on this exact render key instead of the global entry count.
+        let evicted = MarkdownAttributedStringBuilder.cachedAttributedString(
+            text: text,
+            fontSize: 14,
+            textColor: .black,
+            projectRoot: nil,
+            codeSettings: .default,
+            isLightInterface: true
+        )
+        #expect(evicted == nil)
+    }
+
     @Test("prewarm ровно с профилем рендера заполняет кэш")
     func prewarmSeedsExactProfile() {
         let text = "prewarm-\(UUID().uuidString)\n\n" + String(repeating: "строка\n", count: 40)

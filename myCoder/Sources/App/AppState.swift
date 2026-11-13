@@ -293,6 +293,10 @@ class AppState: ObservableObject {
         didSet {
             defaults.set(appTheme.rawValue, forKey: "com.mycoder.theme")
             Color.mimo.setTheme(appTheme)
+            // Cached markdown carries resolved NSColors. Drop it on a theme
+            // switch so no row can reuse the previous palette (white text on
+            // a white bubble after Dark → Light).
+            MarkdownAttributedStringBuilder.clearCaches()
         }
     }
     

@@ -6,6 +6,11 @@ struct MessageRow: View {
     var projectRoot: String = ""
     /// Outlined while a notification tap is walking the user to this row.
     var isHighlighted: Bool = false
+    /// Rows live in a LazyVStack keyed by message id, so their stored inputs
+    /// do not change on a theme switch. Reading `colorScheme` directly makes
+    /// every visible row re-evaluate its palette (and its cards) instead of
+    /// keeping the old black surface or white text.
+    @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
     @State private var showRawText = false
     @State private var showCompiledContext = false
@@ -552,8 +557,8 @@ struct MessageRow: View {
                     SelectableMarkdownTextView(
                         text: prose,
                         fontSize: 14,
-                        textColor: Color.mimo.textPrimary,
-                        projectRoot: projectRoot
+                        projectRoot: projectRoot,
+                        isLightInterface: colorScheme == .light
                     )
                 case .code(let language, let code):
                     CodeBlockSpoilerView(language: language, code: code)
