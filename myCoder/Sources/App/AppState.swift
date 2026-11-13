@@ -435,6 +435,10 @@ class AppState: ObservableObject {
     /// composer currently points at a non-web provider.
     @Published var webBrowserLastProviderID: String?
 
+    /// Always-on cast of the active browser tab. It survives hiding the chat
+    /// panel, so the right-sidebar CHROMECAST PiP keeps showing the live page.
+    let webBrowserCast = WebBrowserCastStore()
+
     @MainActor
     func recordWebBrowserAction(action: String,
                                 config: WebProviderConfig,

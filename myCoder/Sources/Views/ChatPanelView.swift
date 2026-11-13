@@ -154,7 +154,7 @@ struct ChatPanelView: View {
             // Non-web providers leave the panel as is.
             if webBrowserPanelExpanded,
                let panelConfig = appState.webBrowserPanelConfig,
-               let webConfig = WebProviderStore.load().first(where: { $0.id == panelConfig.providerID }) {
+               WebProviderStore.load().contains(where: { $0.id == panelConfig.providerID }) {
                 WebProviderBrowserPanel(
                     config: panelConfig,
                     isExpanded: true,
@@ -162,11 +162,7 @@ struct ChatPanelView: View {
                     onCollapseToMini: { webBrowserPanelExpanded = false },
                     onHide: { appState.hideWebBrowserPanel() }
                 ) { size in
-                    let tabKey = AntiBrowserTabManager.makeKey(providerID: webConfig.id,
-                                                              projectID: panelConfig.projectID,
-                                                              chatID: panelConfig.chatID)
-                    let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-                    CastPanelHost(bridge: bridge)
+                    SharedCastPanelHost(store: appState.webBrowserCast, config: panelConfig)
                         .frame(width: size.width, height: size.height)
                 }
             }
@@ -396,7 +392,7 @@ struct ChatPanelView: View {
             // alive in both modes.
             if !webBrowserPanelExpanded,
                let panelConfig = appState.webBrowserPanelConfig,
-               let webConfig = WebProviderStore.load().first(where: { $0.id == panelConfig.providerID }) {
+               WebProviderStore.load().contains(where: { $0.id == panelConfig.providerID }) {
                 WebProviderBrowserPanel(
                     config: panelConfig,
                     isExpanded: false,
@@ -404,11 +400,7 @@ struct ChatPanelView: View {
                     onCollapseToMini: { webBrowserPanelExpanded = false },
                     onHide: { appState.hideWebBrowserPanel() }
                 ) { size in
-                    let tabKey = AntiBrowserTabManager.makeKey(providerID: webConfig.id,
-                                                              projectID: panelConfig.projectID,
-                                                              chatID: panelConfig.chatID)
-                    let bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
-                    CastPanelHost(bridge: bridge)
+                    SharedCastPanelHost(store: appState.webBrowserCast, config: panelConfig)
                         .frame(width: size.width, height: size.height)
                 }
                 .padding(.trailing, 16)

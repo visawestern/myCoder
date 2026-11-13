@@ -183,3 +183,27 @@ struct CastPanelHost: View {
             .onDisappear { screencast.stop() }
     }
 }
+
+/// Renders the app-wide always-on cast instead of creating a second
+/// screenshot loop. The chat panel and the right-sidebar CHROMECAST PiP share
+/// this controller, so one tab is polled exactly once. If the store has not
+/// reached this tab yet, `.task` activates it on the next runloop.
+struct SharedCastPanelHost: View {
+    @ObservedObject var store: WebBrowserCastStore
+    let config: WebBrowserPanelConfig
+
+    var body: some View {
+        Group {
+            if store.config == config,
+               let screencast = store.controller,
+               let bridge = store.bridge {
+                BrowserCastView(screencast: screencast, bridge: bridge)
+            } else {
+                Color.mimo.background
+            }
+        }
+        .task(id: config) {
+            store.activate(config)
+        }
+    }
+}

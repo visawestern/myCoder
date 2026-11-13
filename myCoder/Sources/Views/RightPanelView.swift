@@ -9,6 +9,10 @@ struct RightPanelView: View {
             
             Divider()
             
+            ChromecastSection()
+            
+            Divider()
+            
             SubagentsSection()
             
             Divider()

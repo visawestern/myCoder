@@ -19,6 +19,20 @@ extension AppState {
             chatID: chatID
         )
         webBrowserLastProviderID = config.id
+        // Start the always-on cast for this tab. It is not stopped by
+        // `hideWebBrowserPanel`, so the right-panel PiP keeps streaming.
+        webBrowserCast.activate(webBrowserPanelConfig)
+    }
+
+    /// Show a specific browser tab (the CHROMECAST thumbnail was clicked).
+    /// Reuses the same live AntiBrowser tab — no new page, no new login.
+    ///
+    /// - Parameter config: tab identity to surface.
+    @MainActor
+    func openWebBrowserPanel(_ config: WebBrowserPanelConfig) {
+        webBrowserPanelConfig = config
+        webBrowserLastProviderID = config.providerID
+        webBrowserCast.activate(config)
     }
 
     /// Hide the visible panel. The AntiBrowser tab keeps its state (login,
@@ -26,6 +40,8 @@ extension AppState {
     /// persistent and the tab is not closed.
     @MainActor
     func hideWebBrowserPanel() {
+        // Only visibility changes. `webBrowserCast` keeps running: CHROMECAST
+        // is always on in the browser (user directive 2026-11-13).
         webBrowserPanelConfig = nil
     }
 
@@ -55,7 +71,7 @@ extension AppState {
         guard let action = webBrowserToggleAction else { return }
         switch action {
         case .show(let config):
-            webBrowserPanelConfig = config
+            openWebBrowserPanel(config)
         case .hide:
             hideWebBrowserPanel()
         }
@@ -75,6 +91,7 @@ extension AppState {
             projectID: projectID,
             chatID: chatID
         )
+        webBrowserCast.activate(webBrowserPanelConfig)
     }
 
     /// Идентификатор удалённого чата. Отдельного номера входа больше нет:
