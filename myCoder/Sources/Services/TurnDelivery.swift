@@ -30,6 +30,8 @@ enum TurnDelivery {
                 // Fable-style conduct on one line: the full block would push
                 // emulated web pastes over vendor budgets (Kimi ~4000B).
                 + "\n\n" + HarnessPromptQuality.compactConductLine
+                // The 0.1 uncertainty contract must reach web routes too.
+                + "\n\n" + HarnessPromptQuality.compactUncertaintyLine
         default:
             // Blended: OpenCode-style collaboration core + Claude Code evidence
             // discipline, on top of the native tool contract.

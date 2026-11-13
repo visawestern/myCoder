@@ -78,6 +78,70 @@ struct HarnessPromptQualityTests {
         #expect(HarnessPromptQuality.collaborationCore.contains(HarnessPromptQuality.codeDiscipline))
     }
 
+    // MARK: - User-interface pipeline (approved 2026-11-13)
+
+    @Test func codeDisciplineCarriesTheInterfacePipelineVerbatim() {
+        let discipline = HarnessPromptQuality.codeDiscipline.lowercased()
+        // The user-approved playplan, not a paraphrase: inventory → stories →
+        // canonical spreadsheet → test all stories → document errors → fix
+        // logical/UX errors → retest every behaviour.
+        #expect(discipline.contains("every single feature"))
+        #expect(discipline.contains("user story"))
+        #expect(discipline.contains("expected behaviour based on the code"))
+        #expect(discipline.contains("one canonical spreadsheet"))
+        #expect(discipline.contains("single source of truth"))
+        #expect(discipline.contains("testing every user story"))
+        #expect(discipline.contains("documenting all errors"))
+        #expect(discipline.contains("logistical error"))
+        #expect(discipline.contains("ux error"))
+        #expect(discipline.contains("test every user behaviour again"))
+        // Meaningful interfaces: start ⇒ pause/stop, real states, modern layout.
+        #expect(discipline.contains("pause and stop"))
+        #expect(discipline.contains("layout and composition"))
+        #expect(discipline.contains("adaptivity"))
+        #expect(discipline.contains("reduced motion"))
+        #expect(discipline.contains("accessibility"))
+    }
+
+    @Test func interfacePipelineReachesEveryRoute() {
+        for route in [
+            SendRoute.mimoServe,
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            #expect(prompt.lowercased().contains("user-interface pipeline"),
+                    "route \(route) должна нести UI-конвейер")
+            #expect(prompt.lowercased().contains("every single feature"))
+        }
+    }
+
+    @Test func uncertaintyRuleCoversAutonomousChangesAndNormGap() {
+        let guidance = HarnessPromptQuality.humanProblemSolvingGuidance.lowercased()
+        #expect(guidance.contains("greater than 0.1"))
+        #expect(guidance.contains("0.1 or lower"))
+        #expect(guidance.contains("autonomous"))
+        #expect(guidance.contains("explicitly agreed"))
+        #expect(guidance.contains("universally accepted norm"))
+    }
+
+    @Test func uncertaintyRuleReachesWebRoutesInCompactForm() {
+        for route in [
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            let lower = prompt.lowercased()
+            #expect(lower.contains("greater than 0.1"), "route \(route) должна нести порог неопределённости")
+            #expect(lower.contains("clarifying questions"))
+            #expect(lower.contains("autonomous"))
+        }
+    }
+
     @Test func webAndOpenAIRoutesCarryTheSameCodeDiscipline() {
         // Железное покрытие: эмулированная web/OpenAI-ветка получает ту же
         // дисциплину кода, что и нативная — через общий канонический блок.

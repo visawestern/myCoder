@@ -50,6 +50,15 @@ enum HarnessPromptQuality {
     - Verify as you go: compile and test each unit the moment it is written, not after the whole program exists. Never write a large chunk and then dig through it to find errors.
     - When a bug appears, isolate it to the smallest module, fix it at that level, and run that module's tests before moving on. Do not debug inside a finished program when a unit test can pinpoint the fault.
     - Prefer many small, pure, composable functions over a few large ones; separation makes each piece testable in isolation and reusable elsewhere.
+
+    # User-interface pipeline — mandatory when a task creates or changes an interface
+    - Before building or changing an interface, go over every single feature in this app and create a user story for each one with its expected behaviour based on the code. Keep one canonical spreadsheet tracking every feature's status; it is the single source of truth for this work.
+    - When the inventory is done, switch the loop to testing every user story and documenting all errors: expected behaviour, actual behaviour, exact steps, severity and evidence.
+    - When testing is done, fix every logistical error and every UX error found.
+    - After the fixes, test every user behaviour again and update the same spreadsheet; a story counts as complete only when its retest passes.
+    - Build meaningful interfaces: if a flow can be started, it must also have pause and stop where applicable; no dead-end controls; every loading, empty, error and success state must be visible and explained.
+    - Follow modern layout and composition rules for the platform: clear hierarchy, grouping and reading order; consistent spacing and alignment; meaningful transitions; adaptivity to window sizes, keyboard, RTL and light/dark themes; respect reduced motion and accessibility.
+    - Do not invent requirements. If a behaviour is not defined by the code, the request or a platform convention, ask before implementing it.
     """
 
     /// The collaboration/communication/codebase core, modeled on OpenCode's
@@ -104,6 +113,12 @@ enum HarnessPromptQuality {
     /// full `responseConduct` block would push the paste over vendor budgets.
     static let compactConductLine = "Work autonomously; state the main point first; never claim a result before its tool result; do not invent facts; own mistakes; never bypass host safety gates."
 
+    /// Compact uncertainty contract for emulated web/OpenAI-compatible routes.
+    /// Input: none. Output: one paragraph appended to the web system prompt.
+    /// Depends on nothing; mirrors `humanProblemSolvingGuidance` so the 0.1
+    /// threshold and the autonomous-change clause reach EVERY route.
+    static let compactUncertaintyLine = "Before answering, estimate the uncertainty of your answer; if it is greater than 0.1 (10%), ask focused clarifying questions until it is 0.1 or lower — including uncertainty that appears during autonomous creation or modification and anything not explicitly agreed with the user beforehand and not a universally accepted norm. Never present contradictory options across questions."
+
     // MARK: - Human-like problem solving (least-resistance path + uncertainty)
 
     /// Universal guidance: act like a human searching for the lowest-resistance
@@ -120,9 +135,14 @@ enum HarnessPromptQuality {
       asset/model hubs (Hugging Face) → free cloud/hosted solutions →
       paid cloud/commercial options → manual build as the LAST resort,
       explicitly warning about the quality/effort risk.
-    - When uncertain (> 0.1, i.e. ~10%), ask the user one focused clarifying
-      question instead of guessing — a single questionnaire or a short
-      sequence, never contradictory options across questions.
+    - Before answering, estimate the uncertainty of your answer. If it is
+      greater than 0.1 (10%), ask the user focused clarifying questions until
+      the uncertainty is 0.1 or lower.
+    - This also applies to uncertainty that appears during autonomous creation
+      or modification, and to anything that was not explicitly agreed with the
+      user beforehand and is not a universally accepted norm.
+    - Ask one questionnaire or a short sequence of focused questions; never
+      present contradictory options across questions.
     """
 
     // MARK: - Claude Code-style structural checkpoint
