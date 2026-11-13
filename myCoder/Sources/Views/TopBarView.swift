@@ -120,15 +120,27 @@ struct TopBarView: View {
 
             Spacer()
 
-            // Copy entire chat — only when session is selected
+            // Copy / save the entire chat — eight variants in one dropdown.
+            // Only when a session is selected.
             if appState.selectedSession != nil {
-                Button(action: copyEntireChat) {
+                Menu {
+                    ForEach(ChatExportVariant.allCases.filter(\.isCopy)) { variant in
+                        Button(variant.menuTitle) { exportChat(variant) }
+                    }
+                    Divider()
+                    ForEach(ChatExportVariant.allCases.filter { !$0.isCopy }) { variant in
+                        Button(variant.menuTitle) { exportChat(variant) }
+                    }
+                } label: {
                     Image(systemName: chatCopied ? "checkmark" : "doc.on.doc")
                         .interfaceFont(size: 14)
                         .foregroundColor(chatCopied ? Color.mimo.success : Color.mimo.textSecondary)
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .buttonStyle(HandCursorButtonStyle())
-                .help(chatCopied ? L.t(AppLocalizationKey.locCopied) : L.t(AppLocalizationKey.locCopyChat))
+                .help(L.t("Copy or save the chat — 8 formats"))
             }
 
             // Browser hide/show: the panel is per chat and its AntiBrowser tab
@@ -175,8 +187,15 @@ struct TopBarView: View {
         }
     }
 
-    private func copyEntireChat() {
-        NotificationCenter.default.post(name: .copyEntireChat, object: nil)
+    /// Ask the chat panel to copy or save this chat in the chosen variant.
+    /// Input: menu variant. Output: none (the panel handles pasteboard/file).
+    /// Dependencies: the `.exportChat` notification.
+    private func exportChat(_ variant: ChatExportVariant) {
+        NotificationCenter.default.post(
+            name: .exportChat,
+            object: nil,
+            userInfo: ["variant": variant.rawValue]
+        )
     }
 }
 

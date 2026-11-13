@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 extension ChatPanelView {
     @MainActor
@@ -206,6 +207,63 @@ extension ChatPanelView {
                 name: didCopy ? .copyEntireChatCompleted : .copyEntireChatUnavailable,
                 object: nil
             )
+        }
+    }
+
+    /// Copy or save the chat in one of the eight export variants.
+    /// Input: the variant chosen in the top-bar menu. Output: none; copy
+    /// variants fill the pasteboard, save variants open a real save panel and
+    /// write the file. Dependencies: `ChatExportLogic`, `ChatHTMLBook`,
+    /// AppState (title + user-visible notice).
+    @MainActor
+    func exportChat(variant: ChatExportVariant) {
+        let title = appState.selectedSession?.title ?? L.t("Chat")
+        guard let content = ChatExportLogic.content(
+            for: variant,
+            messages: messageStore.messages,
+            title: title
+        ) else {
+            NotificationCenter.default.post(name: .copyEntireChatUnavailable, object: nil)
+            appState.shellActionNotice = L.t("Nothing to export in this chat yet.")
+            appState.shellActionNoticeTone = .warning
+            return
+        }
+        if variant.isCopy {
+            NSPasteboard.general.clearContents()
+            let didCopy = NSPasteboard.general.setString(content, forType: .string)
+            NotificationCenter.default.post(
+                name: didCopy ? .copyEntireChatCompleted : .copyEntireChatUnavailable,
+                object: nil
+            )
+            return
+        }
+        saveExport(content: content, variant: variant, title: title)
+    }
+
+    /// Write one save variant through the system save panel.
+    /// Input: already-rendered content + variant + chat title. Output: none;
+    /// success and failure surface through `shellActionNotice`.
+    /// Dependencies: NSSavePanel, UniformTypeIdentifiers.
+    @MainActor
+    private func saveExport(content: String, variant: ChatExportVariant, title: String) {
+        let panel = NSSavePanel()
+        if let extensionName = variant.fileExtension,
+           let type = UTType(filenameExtension: extensionName) {
+            panel.allowedContentTypes = [type]
+        } else {
+            panel.allowedContentTypes = [.plainText]
+        }
+        panel.nameFieldStringValue = ChatExportLogic.fileName(title: title, variant: variant)
+        panel.canCreateDirectories = true
+        panel.prompt = L.t("Save")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            appState.shellActionNotice = L.t("Saved %@", url.lastPathComponent)
+            appState.shellActionNoticeTone = .success
+        } catch let error {
+            appState.shellActionNotice = L.t("Could not save the chat: %@", error.localizedDescription)
+            appState.shellActionNoticeTone = .error
         }
     }
     

@@ -50,7 +50,7 @@ enum WebToolAccessGate {
         switch tool {
         // Read-only tools — always allowed inside the project.
         case .readFile, .listDir, .grep, .gitStatus, .gitDiff, .gitLog, .glob, .todoRead,
-             .webFetch, .browserFetch, .skill, .taskList, .codeSearch, .readSymbol:
+             .webFetch, .browserFetch, .skill, .taskList, .codeSearch, .readSymbol, .lsp:
             return .allow
         // File-modifying tools — ask before mutating; higher edit levels allow
         // execution after the user has chosen the corresponding global policy.
@@ -93,7 +93,7 @@ enum WebToolAccessGate {
         arguments: [String: String]
     ) -> String? {
         switch tool {
-        case .readFile, .writeFile, .editFile, .listDir, .grep, .glob, .readSymbol:
+        case .readFile, .writeFile, .editFile, .listDir, .grep, .glob, .readSymbol, .lsp:
             return arguments["path"]
         default:
             return nil

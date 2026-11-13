@@ -18,9 +18,13 @@ struct LSPServersSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Text(L.t("Language Servers (LSP)"))
+            Text(L.t("LSP — Language Servers"))
                 .interfaceFont(size: 24, weight: .bold)
                 .foregroundColor(Color.mimo.textPrimary)
+
+            Text(L.t("Language servers work like an IDE: they check syntax and types, report errors and warnings after every edit, and answer go-to-definition, find references, hover and autocomplete requests. The agent uses them automatically and can call the lsp tool explicitly."))
+                .interfaceFont(size: 14)
+                .foregroundColor(Color.mimo.textSecondary)
 
             Text(L.t("Local language servers the agent can choose from. Only servers whose binary is found on PATH are shown."))
                 .interfaceFont(size: 14)

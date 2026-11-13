@@ -44,6 +44,9 @@ enum WebEmulatedTool: String, CaseIterable {
     // Project code graph (symbols + edges), built by the host from source.
     case codeSearch = "code_search"
     case readSymbol = "read_symbol"
+    // Language-server intelligence (diagnostics, definition, references,
+    // hover, completion) from the real LSP servers enabled in Settings.
+    case lsp = "lsp"
     case todoRead = "todo_read"
     case todoWrite = "todo_write"
     // Sub-agent / task tool
@@ -79,7 +82,8 @@ enum WebEmulatedTool: String, CaseIterable {
         case .gitPull: return #"{"remote": "<remote name>", "branch": "<branch name>"}"#
         case .glob: return #"{"pattern": "<glob pattern>", "path": "<relative path>"}"#
         case .codeSearch: return #"{"query": "<symbol name or code text>", "limit": "<optional max hits>"}"#
-        case .readSymbol: return #"{"id": "<symbol id from code_search>", "path": "<optional file>", "name": "<optional symbol>", "line": "<optional 1-based line>"}"#
+        case .readSymbol: return #"{"id": "<code_search id>", "path": "...", "name": "...", "line": 1}"#
+        case .lsp: return #"{"operation": "diagnostics|definition|references|hover|completion", "path": "...", "line": 1}"#
         case .todoRead: return #"{}"#
         case .todoWrite: return #"{"todos": [{"id": "<id>", "content": "<text>", "status": "<pending|in_progress|completed>"}]}"#
         case .task: return #"{"description": "<task description>", "prompt": "<detailed prompt>", "subagentType": "<general|code|debug|review>"}"#
@@ -111,6 +115,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .glob: return "Find files matching a glob pattern."
         case .codeSearch: return "Search the project code graph for functions, types and variables; returns exact line ranges and graph neighbors."
         case .readSymbol: return "Read one indexed symbol by id (or path + name) with its exact line range; refuses stale line numbers."
+        case .lsp: return "Ask the real language server about a file: diagnostics (errors/warnings), definition, references, hover or completion at a 1-based line/column."
         case .todoRead: return "Read the current execution plan and todo checklist."
         case .todoWrite: return "Write/update the todo checklist (replaces the whole list)."
         case .task: return "Launch a sub-agent for a complex task (runs in background, returns result)."

@@ -64,6 +64,9 @@ final class MyCoderAppDelegate: NSObject, NSApplicationDelegate {
         // иначе последний запрос может уйти в мост, который сейчас умрёт.
         MyCoderAPIServer.shared.stop()
         EngineStatusCenter.shared.stop()
+        // Language servers are children of the app; stop them synchronously
+        // so none survives as an orphan after the app exits.
+        LSPProcessRegistry.shared.terminateAll()
         // На случай если движок был поднят мимо центра — зачищаем и сам
         // процесс по его порту.
         BrowserProcess.terminateAnyRunningEngine()

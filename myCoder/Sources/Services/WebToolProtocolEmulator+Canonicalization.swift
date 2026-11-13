@@ -52,6 +52,9 @@ extension WebToolProtocolEmulator {
             return WebEmulatedTool.codeSearch.rawValue
         case "read_symbol", "readsymbol", "symbol_read", "read_definition", "go_to_definition":
             return WebEmulatedTool.readSymbol.rawValue
+        // Real language-server operations (diagnostics/navigation).
+        case "lsp", "language_server", "language_server_lsp", "langserver", "lsp_tool":
+            return WebEmulatedTool.lsp.rawValue
         case "todo_read", "todos", "todo", "todoread", "read_todos", "plan", "plan_read", "current_plan":
             return WebEmulatedTool.todoRead.rawValue
         case "todo_write", "todowrite", "write_todos", "set_todos":
@@ -116,6 +119,11 @@ extension WebToolProtocolEmulator {
                      "path": ["path", "file_path", "filepath", "file", "filename"],
                      "name": ["name", "symbol", "function", "type", "declaration"],
                      "line": ["line", "start_line", "startline"]]
+        case .lsp:
+            table = ["operation": ["operation", "op", "action", "method"],
+                     "path": ["path", "file_path", "filepath", "file", "filename"],
+                     "line": ["line", "start_line", "startline"],
+                     "column": ["column", "col", "character", "char"]]
         case .runCommand:
             table = ["command": ["command", "cmd", "cmdline", "bash_command", "shell_command", "command_line", "script"]]
         case .gitBranch, .gitCheckout:

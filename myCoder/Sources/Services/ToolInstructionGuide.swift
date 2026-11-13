@@ -43,6 +43,8 @@ enum ToolInstructionGuide {
             return "query selects indexed symbols or code terms; limit bounds hits. Inspect incoming/outgoing graph neighbors and their confidence: heuristic links require confirmation from source."
         case .readSymbol:
             return "Use an id returned by code_search, or path plus name (optionally line to disambiguate). The host verifies current file content and refuses stale line numbers; refresh the search after a stale result."
+        case .lsp:
+            return "operation is diagnostics, definition, references, hover or completion. path selects the file; line and column are 1-based and default to 1:1. diagnostics waits for the language server to publish after the file changes; definition, references, hover and completion answer at that exact position. Requires an enabled server for the file's language in Settings → LSP."
         case .todoRead:
             return "No arguments. Read current task/checklist state before replacing or changing it."
         case .todoWrite:

@@ -315,6 +315,21 @@ enum LocalizationRuntime {
         "per 1M tokens": "за 1 млн токенов",
         "input per 1M tokens": "вход за 1 млн токенов",
         "output per 1M tokens": "выход за 1 млн токенов",
+        "LSP — Language Servers": "LSP — языковые серверы",
+        "Language servers work like an IDE: they check syntax and types, report errors and warnings after every edit, and answer go-to-definition, find references, hover and autocomplete requests. The agent uses them automatically and can call the lsp tool explicitly.": "Языковые серверы работают как в IDE: проверяют синтаксис и типы, показывают ошибки и предупреждения после каждой правки, а также отвечают на запросы «перейти к определению», «найти ссылки», «подсказка» и «автодополнение». Агент использует их автоматически и может вызывать инструмент lsp явно.",
+        "Chat": "Чат",
+        "Copy or save the chat — 8 formats": "Скопировать или сохранить чат — 8 форматов",
+        "Copy — text, no tool results": "Копировать — текст без результатов инструментов",
+        "Copy — text with tool calls, no results": "Копировать — текст с вызовами инструментов, без результатов",
+        "Copy — text with tool results": "Копировать — текст с результатами инструментов",
+        "Copy — full JSON": "Копировать — полный JSON",
+        "Save — text with results (.txt)": "Сохранить — текст с результатами (.txt)",
+        "Save — Markdown with results (.md)": "Сохранить — Markdown с результатами (.md)",
+        "Save — JSON with results (.json)": "Сохранить — JSON с результатами (.json)",
+        "Save — HTML book with results (.html)": "Сохранить — HTML-книга с результатами (.html)",
+        "Nothing to export in this chat yet.": "В этом чате пока нечего экспортировать.",
+        "Saved %@": "Сохранено: %@",
+        "Could not save the chat: %@": "Не удалось сохранить чат: %@",
     ]
 
     static func t(_ key: String) -> String {

@@ -72,10 +72,11 @@ enum SubagentRunner {
             Message(role: .system, content: systemPrompt),
             Message(role: .user, content: prompt)
         ]
-        let executor = ProjectWebToolExecutor(
+        var executor = ProjectWebToolExecutor(
             projectRoot: context.projectRoot,
             accessLevel: .fullAccess
         )
+        executor.automaticDiagnostics = true
         var finalText = ""
         var failed = false
 

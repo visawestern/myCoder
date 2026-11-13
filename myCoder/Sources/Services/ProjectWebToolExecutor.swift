@@ -32,6 +32,10 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     let homeDirectory: URL
     var bridge: BrowserAutomationBridge?
     var selectors: WebVendorSelectors?
+    /// When true, a successful write/edit of a code file appends the language
+    /// server's diagnostics to the tool result. Production turns enable it;
+    /// unit tests stay hermetic (no server processes).
+    var automaticDiagnostics = false
 
     init(projectRoot: String,
          fileManager: FileManager = .default,
@@ -77,6 +81,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             isProjectless: isProjectless
         )
         executor.bridge = AntiBrowserTabManager.shared.bridge(tabKey: tabKey)
+        executor.automaticDiagnostics = true
         return executor
     }
 
@@ -115,7 +120,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     /// An absolute path is used as it is: `appendingPathComponent` would glue
     /// it onto the root and produce a path that does not exist, so every
     /// absolute path outside the project resolved to a missing file.
-    private func url(for path: String) -> URL {
+    func url(for path: String) -> URL {
         if path.hasPrefix("/") {
             return URL(fileURLWithPath: path)
         }
@@ -186,7 +191,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
                 try performFileOperation(operation: "write_file", fileURL: url, execute: {
                     try content.write(to: url, atomically: true, encoding: .utf8)
                 })
-                return "ok: wrote \(content.count) chars to \(path)"
+                return await fileWriteResult(path: url.path, displayPath: path, contentCount: content.count)
             } catch { return "error: \(error.localizedDescription)" }
         case .editFile:
             guard let path = call.arguments["path"],
@@ -217,7 +222,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
                 try performFileOperation(operation: "edit_file", fileURL: url, execute: {
                     try updated.write(to: url, atomically: true, encoding: .utf8)
                 })
-                return "ok: edited \(path)"
+                return await fileEditResult(path: url.path, displayPath: path)
             } catch { return "error: \(error.localizedDescription)" }
         case .listDir:
             let path = call.arguments["path"] ?? "."
@@ -325,6 +330,8 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             } catch {
                 return "error: \(error.localizedDescription)"
             }
+        case .lsp:
+            return await lspToolResult(call: call)
         case .todoRead:
             return todoRead()
         case .todoWrite:

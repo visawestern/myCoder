@@ -178,6 +178,8 @@ extension ChatPanelView {
                 sessionDirectory: appState.selectedSession?.directory
             )
         )
+        // Real language-server checks after every code write/edit.
+        executor.automaticDiagnostics = true
         executor.projectlessWritePrompt = { suggested in
             await self.promptCreateProjectForFileWrite(
                 suggestedName: suggested,

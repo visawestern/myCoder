@@ -482,6 +482,11 @@ struct ChatPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .copyEntireChat)) { _ in
             copyEntireChat()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .exportChat)) { notification in
+            guard let raw = notification.userInfo?["variant"] as? String,
+                  let variant = ChatExportVariant(rawValue: raw) else { return }
+            exportChat(variant: variant)
+        }
         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             handleImportedFiles(result)
         }
