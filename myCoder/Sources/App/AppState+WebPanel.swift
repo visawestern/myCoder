@@ -18,6 +18,7 @@ extension AppState {
             projectID: projectID,
             chatID: chatID
         )
+        webBrowserLastProviderID = config.id
     }
 
     /// Hide the visible panel. The AntiBrowser tab keeps its state (login,
@@ -26,6 +27,38 @@ extension AppState {
     @MainActor
     func hideWebBrowserPanel() {
         webBrowserPanelConfig = nil
+    }
+
+    /// Next action of the top-bar Browser button, or nil when there is no web
+    /// provider to open (the button is hidden in that case).
+    ///
+    /// Input: visible panel, composer provider, last shown web provider and
+    /// the configured web providers. Output: `.hide`, `.show(config)` or nil.
+    /// Dependencies: `WebBrowserToggleLogic` (pure rules).
+    @MainActor
+    var webBrowserToggleAction: WebBrowserToggleAction? {
+        WebBrowserToggleLogic.action(
+            panelConfig: webBrowserPanelConfig,
+            selectedProviderOptionID: selectedProviderID,
+            activeProviderID: webBrowserLastProviderID,
+            configs: WebProviderStore.load(defaults: defaults),
+            projectID: selectedWorkspace?.id ?? selectedWorkspace?.path ?? "global",
+            chatID: selectedSession?.id ?? "provider-default"
+        )
+    }
+
+    /// Hide a visible browser panel or re-open it for the current chat.
+    /// The AntiBrowser tab itself is never closed: hiding only stops showing
+    /// the cast, so login and an in-flight stream survive.
+    @MainActor
+    func toggleWebBrowserPanel() {
+        guard let action = webBrowserToggleAction else { return }
+        switch action {
+        case .show(let config):
+            webBrowserPanelConfig = config
+        case .hide:
+            hideWebBrowserPanel()
+        }
     }
 
     /// User directive 2026-09-09: switching to another chat/project surfaces

@@ -425,6 +425,12 @@ class AppState: ObservableObject {
     /// web provider's page).
     @Published var webBrowserPanelConfig: WebBrowserPanelConfig?
 
+    /// Last web provider whose panel was shown. Hiding the panel clears
+    /// `webBrowserPanelConfig` but keeps this id, so the top-bar Browser
+    /// button can re-open the same tab (login and stream intact) even when the
+    /// composer currently points at a non-web provider.
+    @Published var webBrowserLastProviderID: String?
+
     @MainActor
     func recordWebBrowserAction(action: String,
                                 config: WebProviderConfig,

@@ -131,6 +131,21 @@ struct TopBarView: View {
                 .help(chatCopied ? L.t(AppLocalizationKey.locCopied) : L.t(AppLocalizationKey.locCopyChat))
             }
 
+            // Browser hide/show: the panel is per chat and its AntiBrowser tab
+            // stays alive when hidden, so one click re-opens the SAME page
+            // (login + in-flight stream) instead of starting a new web turn.
+            if let browserAction = appState.webBrowserToggleAction {
+                TopBarButton(
+                    icon: "globe",
+                    label: L.t(AppLocalizationKey.locBrowser),
+                    isActive: browserAction == .hide,
+                    action: { appState.toggleWebBrowserPanel() }
+                )
+                .help(browserAction == .hide
+                      ? L.t(AppLocalizationKey.locBrowserHide)
+                      : L.t(AppLocalizationKey.locBrowserShow))
+            }
+
             // Action buttons — always visible
             TopBarButton(
                 icon: "flag",

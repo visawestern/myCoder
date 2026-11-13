@@ -179,6 +179,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case locTerminalTitle, locTerminalEmpty, locTerminalOpen, locTerminalCancel
     case locTerminalCopyCommand, locTerminalCopyOutput, locTerminalRemove, locTerminalCopied
     case locTerminal, locCopyChat, locPickElement, locNotConfigured
+    case locBrowser, locBrowserShow, locBrowserHide
     case locConnectionFailed, locRequiresAPIKey, locEnableToolCalling, locEnableACP
     case locAlertRemoveSkill, locAlertRemoveMCPServer, locUpdate, locUpdateAvailable
     case locInstall, locUninstall, locRequires, locDependenciesSatisfied
