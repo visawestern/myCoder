@@ -1,17 +1,20 @@
 import SwiftUI
 import Foundation
 
-/// One goal card: status rail, title, status chip, progress, plan spoiler and
-/// the goal's lifecycle actions.
+/// One goal card: status rail, title, status chip, progress and the goal's
+/// lifecycle actions.
+///
+/// The card deliberately has NO plan list (user directive 2026-11-13): the
+/// plan is ONE — the chat's step list in the right panel — and is marked
+/// there. The card only shows progress derived from that same plan
+/// (`goal.plan` is kept in sync with the chat steps by `GoalPlanSyncService`).
 struct GoalRow: View {
     enum Action {
         case start, pause, resume, delete
     }
 
     let goal: UserGoal
-    let expanded: Bool
     let language: AppLanguage
-    let onToggle: () -> Void
     let onAction: (Action) -> Void
     let onEdit: (String) -> Void
 
@@ -32,14 +35,8 @@ struct GoalRow: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 titleBlock
-                if presentation.showsPlanHint {
-                    planHint
-                } else {
+                if presentation.showsProgress {
                     progressBlock
-                    planDisclosure
-                }
-                if expanded && presentation.showsPlanDisclosure {
-                    planList
                 }
                 actionBar
                 fullPromptDisclosure
@@ -169,7 +166,7 @@ struct GoalRow: View {
         }
     }
 
-    // MARK: - Progress
+    // MARK: - Progress (of the ONE shared plan)
 
     private var progressBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -195,80 +192,6 @@ struct GoalRow: View {
                 }
             }
         }
-    }
-
-    private var planHint: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "wand.and.stars")
-                .interfaceFont(size: 10)
-                .foregroundColor(Color.mimo.textMuted)
-            Text(L.t(AppLocalizationKey.locGoalPlanHint))
-                .interfaceFont(size: 10)
-                .foregroundColor(Color.mimo.textMuted)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var planDisclosure: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 5) {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .interfaceFont(size: 9, weight: .semibold)
-                    .foregroundColor(Color.mimo.textMuted)
-                Text(L.t(AppLocalizationKey.locGoalPlan))
-                    .interfaceFont(size: 10, weight: .medium)
-                    .foregroundColor(Color.mimo.textSecondary)
-                Spacer()
-                Text("\(presentation.totalCount)")
-                    .interfaceFont(size: 9, weight: .medium)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Color.mimo.backgroundAlt)
-                    .clipShape(Capsule())
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(HandCursorButtonStyle())
-    }
-
-    private var planList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(goal.plan.enumerated()), id: \.offset) { index, item in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: statusIcon(for: item.status))
-                        .interfaceFont(size: 11)
-                        .foregroundColor(statusColor(for: item.status))
-                        .frame(width: 14)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .interfaceFont(size: 11)
-                            .foregroundColor(item.status == .done
-                                             ? Color.mimo.textMuted
-                                             : Color.mimo.textSecondary)
-                            .strikethrough(item.status == .done, color: Color.mimo.textMuted)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let note = item.note, !note.isEmpty {
-                            Text(note)
-                                .interfaceFont(size: 9.5)
-                                .foregroundColor(Color.mimo.textMuted)
-                                .lineLimit(2)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 4)
-                if index < goal.plan.count - 1 {
-                    Rectangle()
-                        .fill(Color.mimo.border)
-                        .frame(height: 1)
-                        .padding(.leading, 22)
-                }
-            }
-        }
-        .padding(.leading, 2)
     }
 
     // MARK: - Actions
@@ -352,24 +275,6 @@ struct GoalRow: View {
             }
             .buttonStyle(HandCursorButtonStyle())
             .help(L.t(AppLocalizationKey.locGoalDeleteHint))
-        }
-    }
-
-    private func statusIcon(for status: UserGoal.PlanItem.Status) -> String {
-        switch status {
-        case .done: return "checkmark.circle.fill"
-        case .inProgress: return "circle.circle"
-        case .blocked: return "exclamationmark.triangle.fill"
-        case .todo: return "circle"
-        }
-    }
-
-    private func statusColor(for status: UserGoal.PlanItem.Status) -> Color {
-        switch status {
-        case .done: return Color.mimo.success
-        case .inProgress: return Color.mimo.brand
-        case .blocked: return Color.mimo.error
-        case .todo: return Color.mimo.textMuted
         }
     }
 }

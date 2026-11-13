@@ -95,7 +95,10 @@ struct QuotaGateTests {
             limits: limits, tokenEstimate: 10, now: now
         )
         #expect(decision.waitSeconds > 0)
-        #expect(decision.waitMessage.contains("requests/min"))
+        // The wait message is localized (current runtime language may vary
+        // across suites) — assert the semantic content, not a fixed language.
+        #expect(decision.waitMessage.contains("2"))
+        #expect(decision.waitMessage.contains("ждем") || decision.waitMessage.contains("waiting"))
     }
 
     @Test func perKeyLimitSwitchesPoolKey() async {
@@ -134,7 +137,42 @@ struct QuotaGateTests {
             limits: limits, tokenEstimate: 1, now: now
         )
         #expect(decision.waitSeconds > 0)
-        #expect(decision.waitMessage.contains("250000/min"))
+        #expect(decision.waitMessage.contains("250000"))
+        #expect(decision.waitMessage.contains("ждем") || decision.waitMessage.contains("waiting"))
+    }
+
+    // MARK: - Localization of wait messages (all 10 languages)
+
+    @Test func waitMessagesLocalizeForSelectedLanguage() {
+        let en = QuotaWaitMessage.requestLimit(limit: 10, waitSeconds: 5, language: .english)
+        #expect(en.contains("Rate limit 10 requests/min"))
+
+        let ru = QuotaWaitMessage.requestLimit(limit: 10, waitSeconds: 5, language: .russian)
+        #expect(ru.contains("Достигнут лимит запросов 10 в минуту"))
+
+        let es = QuotaWaitMessage.tokenQuota(quota: 250_000, waitSeconds: 7, language: .spanish)
+        #expect(es.contains("cuota de 250000 tokens/min"))
+
+        let fr = QuotaWaitMessage.tokenQuota(quota: 250_000, waitSeconds: 7, language: .french)
+        #expect(fr.contains("Quota de 250000 tokens/min"))
+
+        let de = QuotaWaitMessage.allKeysExhausted(waitSeconds: 3, language: .german)
+        #expect(de.contains("Alle API-Schlüssel aufgebraucht"))
+
+        let zh = QuotaWaitMessage.allKeysExhausted(waitSeconds: 3, language: .chineseSimplified)
+        #expect(zh.contains("密钥已用尽"))
+
+        let ja = QuotaWaitMessage.requestLimit(limit: 5, waitSeconds: 2, language: .japanese)
+        #expect(ja.contains("5リクエスト"))
+
+        let ko = QuotaWaitMessage.requestLimit(limit: 5, waitSeconds: 2, language: .korean)
+        #expect(ko.contains("5회"))
+
+        let pt = QuotaWaitMessage.tokenQuota(quota: 1000, waitSeconds: 4, language: .portuguese)
+        #expect(pt.contains("1000 tokens/min"))
+
+        let ar = QuotaWaitMessage.tokenQuota(quota: 1000, waitSeconds: 4, language: .arabic)
+        #expect(ar.contains("1000"))
     }
 
     // MARK: - Resolver
@@ -197,7 +235,8 @@ struct QuotaGateTests {
             limits: limits, tokenEstimate: 10, now: now
         )
         #expect(second.waitSeconds > 0)
-        #expect(second.message.contains("requests/min"))
+        #expect(second.message.contains("1"))
+        #expect(second.message.contains("ждем") || second.message.contains("waiting"))
     }
 
     @Test func sendBlocksWhenLimitIsFarFromReset() async throws {
@@ -233,7 +272,8 @@ struct QuotaGateTests {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
-            #expect(message.contains("requests/min"))
+            #expect(message.contains("1"))
+            #expect(message.contains("ждем") || message.contains("waiting"))
         }
     }
 

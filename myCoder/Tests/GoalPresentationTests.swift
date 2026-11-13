@@ -27,22 +27,20 @@ struct GoalPresentationTests {
         #expect(abs(p.progress - 0.5) < 0.0001)
     }
 
-    @Test("Пустой план: прогресс 0 и показывается подсказка вместо прогресс-бара")
+    @Test("Пустой план: прогресс 0, без прогресс-бара")
     func emptyPlan() {
         let p = GoalPresentation(goal: goal(state: .pending))
         #expect(p.progress == 0)
         #expect(p.showsProgress == false)
-        #expect(p.showsPlanHint == true)
-        #expect(p.showsPlanDisclosure == false)
+        #expect(p.showsPlanSpoiler == false)
     }
 
-    @Test("Есть план: показываются прогресс и спойлер шагов")
+    @Test("Есть план: показывается только прогресс, списка плана в карточке нет")
     func planPresent() {
         let plan = [UserGoal.PlanItem(title: "a", status: .todo)]
         let p = GoalPresentation(goal: goal(state: .active, plan: plan))
         #expect(p.showsProgress == true)
-        #expect(p.showsPlanHint == false)
-        #expect(p.showsPlanDisclosure == true)
+        #expect(p.showsPlanSpoiler == false)
     }
 
     @Test("Главное действие зависит от состояния цели")

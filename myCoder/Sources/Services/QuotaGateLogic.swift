@@ -139,17 +139,34 @@ enum QuotaScopeKind: String, Equatable {
 
 /// Human-readable wait message the app writes to the chat while it waits:
 /// “Rate limit 10 req/min reached — waiting…” / “Token quota 250000/min
-/// reached — waiting…”. Pure formatting, fully testable.
+/// reached — waiting…”. Localized for the app's selected language (all 10
+/// languages). Pure formatting, fully testable — `language` defaults to the
+/// current runtime language so callers never have to pass it.
 enum QuotaWaitMessage {
-    static func requestLimit(limit: Int, waitSeconds: Int) -> String {
-        "Rate limit \(limit) requests/min reached — waiting \(waitSeconds)s"
+    static func requestLimit(limit: Int, waitSeconds: Int,
+                             language: AppLanguage = LocalizationRuntime.currentLanguage) -> String {
+        let template = AppLocalization.string(
+            forEnglish: "Rate limit %@ requests/min reached — waiting %@s",
+            language: language
+        )
+        return String(format: template, String(limit), String(waitSeconds))
     }
 
-    static func tokenQuota(quota: Int, waitSeconds: Int) -> String {
-        "Token quota \(quota)/min reached — waiting \(waitSeconds)s"
+    static func tokenQuota(quota: Int, waitSeconds: Int,
+                           language: AppLanguage = LocalizationRuntime.currentLanguage) -> String {
+        let template = AppLocalization.string(
+            forEnglish: "Token quota %@/min reached — waiting %@s",
+            language: language
+        )
+        return String(format: template, String(quota), String(waitSeconds))
     }
 
-    static func allKeysExhausted(waitSeconds: Int) -> String {
-        "All API keys exhausted — waiting \(waitSeconds)s"
+    static func allKeysExhausted(waitSeconds: Int,
+                                 language: AppLanguage = LocalizationRuntime.currentLanguage) -> String {
+        let template = AppLocalization.string(
+            forEnglish: "All API keys exhausted — waiting %@s",
+            language: language
+        )
+        return String(format: template, String(waitSeconds))
     }
 }

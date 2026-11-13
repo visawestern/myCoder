@@ -17,7 +17,6 @@ import Foundation
 struct GoalsSection: View {
     @EnvironmentObject var appState: AppState
     @State private var goals: [UserGoal] = []
-    @State private var expandedGoalID: UUID?
     @State private var isCreating = false
     @State private var newGoalTitle = ""
 
@@ -50,13 +49,7 @@ struct GoalsSection: View {
                     ForEach(goals) { goal in
                         GoalRow(
                             goal: goal,
-                            expanded: expandedGoalID == goal.id,
                             language: language,
-                            onToggle: {
-                                withAnimation(.easeOut(duration: 0.15)) {
-                                    expandedGoalID = expandedGoalID == goal.id ? nil : goal.id
-                                }
-                            },
                             onAction: { action in apply(action, to: goal) },
                             onEdit: { newTitle in applyEdit(newTitle, to: goal) }
                         )
@@ -174,7 +167,6 @@ struct GoalsSection: View {
         newGoalTitle = ""
         withAnimation(.easeOut(duration: 0.15)) {
             isCreating = false
-            expandedGoalID = goal.id
             reload()
         }
     }

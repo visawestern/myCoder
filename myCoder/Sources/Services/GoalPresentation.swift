@@ -73,14 +73,11 @@ struct GoalPresentation: Equatable, Sendable {
         totalCount > 0
     }
 
-    /// Without a plan there is nothing to expand — the card explains when the
-    /// plan will appear instead of showing an empty spoiler.
-    var showsPlanHint: Bool {
-        !showsProgress
-    }
-
-    var showsPlanDisclosure: Bool {
-        showsProgress
+    /// The goal card never renders its own plan list: the plan is ONE — the
+    /// chat's step list in the right panel. This contract keeps the card from
+    /// ever duplicating the plan (user directive 2026-11-13).
+    var showsPlanSpoiler: Bool {
+        false
     }
 
     // MARK: - Actions
