@@ -100,7 +100,11 @@ extension DatabaseManager {
     func getMessagesBySession(sessionId: String, limit: Int? = nil, offset: Int = 0) throws -> [MessageRecord] {
         guard let db = db else { throw DatabaseError.notInitialized }
         
-        var query = messages.filter(messageSessionId == sessionId).order(messageCreatedAt.asc)
+        // created_at has one-second resolution; rowid keeps messages saved in
+        // the same second in insertion order. Every paging query must use this
+        // exact total order or a window boundary can skip a row.
+        var query = messages.filter(messageSessionId == sessionId)
+            .order(messageCreatedAt.asc, messageRowID.asc)
         if let limit = limit {
             query = query.limit(limit, offset: offset)
         }
@@ -195,6 +199,102 @@ extension DatabaseManager {
         return results
     }
     
+    // MARK: - Navigator index and window paging
+
+    /// Lightweight index of every user message in a session: id + only the
+    /// first `prefixLength` characters. A megabyte paste is never read just to
+    /// draw a 100-character navigator tooltip.
+    ///
+    /// - Parameters:
+    ///   - sessionIdValue: chat session id.
+    ///   - prefixLength: stored character budget (must exceed the preview).
+    /// - Returns: rows in the same total order as history paging.
+    func getUserMessageIndex(
+        sessionId sessionIdValue: String,
+        prefixLength: Int = UserMessageIndexLogic.storedPrefixLength
+    ) throws -> [UserMessageIndexRecord] {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        let sql = """
+            SELECT id, substr(content, 1, ?), length(content) > ?
+            FROM messages
+            WHERE session_id = ? AND role = 'user' AND content != ''
+            ORDER BY created_at ASC, rowid ASC
+        """
+        let rows = try SQLiteSafeQuery.rows(db.prepare(
+            sql,
+            [prefixLength, prefixLength, sessionIdValue]
+        ))
+        return rows.compactMap { row in
+            guard let id = row[0] as? String else { return nil }
+            let prefix = (row[1] as? String) ?? ""
+            let truncated = (row[2] as? Int64) == 1
+            return UserMessageIndexRecord(
+                id: id,
+                contentPrefix: prefix,
+                isTruncated: truncated
+            )
+        }
+    }
+
+    /// How many user messages with visible text precede `index` in the
+    /// session's total order. Used to number the navigator when a middle
+    /// window is loaded instead of the tail.
+    ///
+    /// - Parameters:
+    ///   - sessionIdValue: chat session id.
+    ///   - index: 0-based position in display order.
+    /// - Returns: user-message count before that position.
+    func countUserMessagesBefore(
+        sessionId sessionIdValue: String,
+        index: Int
+    ) throws -> Int {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        guard index > 0 else { return 0 }
+        let sql = """
+            SELECT COUNT(*) FROM (
+                SELECT role, content FROM messages
+                WHERE session_id = ?
+                ORDER BY created_at ASC, rowid ASC
+                LIMIT ?
+            ) WHERE role = 'user' AND content != ''
+        """
+        let value = try db.scalar(sql, [sessionIdValue, index])
+        return (value as? Int64).map(Int.init) ?? 0
+    }
+
+    /// 0-based display position of one message, or nil when it does not exist.
+    ///
+    /// - Parameters:
+    ///   - sessionIdValue: chat session id.
+    ///   - messageID: target message id.
+    /// - Returns: position in the `created_at, rowid` total order.
+    func messagePosition(
+        sessionId sessionIdValue: String,
+        messageID: String
+    ) throws -> Int? {
+        guard let db = db else { throw DatabaseError.notInitialized }
+        let exists = try db.scalar(
+            messages.filter(messageId == messageID).count
+        )
+        guard exists > 0 else { return nil }
+        let sql = """
+            SELECT COUNT(*) FROM messages
+            WHERE session_id = ?
+              AND (
+                created_at < (SELECT created_at FROM messages WHERE id = ?)
+                OR (
+                    created_at = (SELECT created_at FROM messages WHERE id = ?)
+                    AND rowid < (SELECT rowid FROM messages WHERE id = ?)
+                )
+              )
+        """
+        let value = try db.scalar(
+            sql,
+            [sessionIdValue, messageID, messageID, messageID]
+        )
+        return (value as? Int64).map(Int.init)
+    }
+
     // MARK: - Full-Text Search
     
     func searchMessages(query: String, limit: Int = 50) throws -> [String] {

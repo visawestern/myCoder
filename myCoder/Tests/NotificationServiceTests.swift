@@ -177,57 +177,65 @@ struct NotificationServiceTests {
     @Test("Task completed notification creates success type")
     func taskCompletedNotification() {
         let service = NotificationService()
+        // Capture the locale-dependent expectation BEFORE the call so a
+        // concurrent suite switching the language cannot skew the assertion.
+        let expectedTitle = L.t(AppLocalizationKey.locTaskComplete)
         service.taskCompleted(sessionTitle: "Test task", sessionID: "s1")
-        
+
         #expect(service.notifications.first?.type == .success)
-        #expect(service.notifications.first?.title == "Task Complete")
+        #expect(service.notifications.first?.title == expectedTitle)
         #expect(service.notifications.first?.message.contains("Test task") == true)
     }
-    
+
     @Test("Generation stopped notification creates info type")
     func generationStoppedNotification() {
         let service = NotificationService()
+        let expectedTitle = L.t(AppLocalizationKey.locGenerationStopped)
         service.generationStopped()
-        
+
         #expect(service.notifications.first?.type == .info)
-        #expect(service.notifications.first?.title == "Generation stopped")
+        #expect(service.notifications.first?.title == expectedTitle)
     }
-    
+
     @Test("Git operation notification creates success type")
     func gitOperationNotification() {
         let service = NotificationService()
+        let expectedTitle = L.t(AppLocalizationKey.locGitOperation, "Commit")
         service.gitOperationComplete(operation: "Commit", details: "Initial commit")
-        
+
         #expect(service.notifications.first?.type == .success)
-        #expect(service.notifications.first?.title == "Git Commit")
+        #expect(service.notifications.first?.title == expectedTitle)
         #expect(service.notifications.first?.action == .openGit)
     }
-    
+
     @Test("Server disconnected notification creates warning type")
     func serverDisconnectedNotification() {
         let service = NotificationService()
+        let expectedTitle = L.t(AppLocalizationKey.locServerDisconnected)
         service.serverDisconnected()
-        
+
         #expect(service.notifications.first?.type == .warning)
-        #expect(service.notifications.first?.title == "Server Disconnected")
+        #expect(service.notifications.first?.title == expectedTitle)
     }
-    
+
     @Test("Server connected notification creates success type")
     func serverConnectedNotification() {
         let service = NotificationService()
+        let expectedTitle = L.t(AppLocalizationKey.locServerConnected)
         service.serverConnected()
-        
+
         #expect(service.notifications.first?.type == .success)
-        #expect(service.notifications.first?.title == "Server Connected")
+        #expect(service.notifications.first?.title == expectedTitle)
     }
-    
+
     @Test("Session busy notification creates warning type")
     func sessionBusyNotification() {
         let service = NotificationService()
+        let expectedTitle = L.t(AppLocalizationKey.locSessionBusy)
         service.sessionBusy()
-        
+
         #expect(service.notifications.first?.type == .warning)
-        #expect(service.notifications.first?.title == "Session Busy")
+        #expect(service.notifications.first?.title == expectedTitle)
     }
     
     // MARK: - NotificationType

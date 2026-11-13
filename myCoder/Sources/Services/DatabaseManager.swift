@@ -95,6 +95,10 @@ class DatabaseManager {
     let messageParentMessageId = Expression<String?>("parent_message_id")
     let messageEditOfMessageId = Expression<String?>("edit_of_message_id")
     let messageMetadata = Expression<String?>("metadata")
+    /// Stable tie-breaker for messages saved within the same second. History
+    /// paging and the navigator index must use the SAME total order, otherwise
+    /// a window can skip or duplicate a row at a page boundary.
+    let messageRowID = Expression<Int64>("rowid")
     
     // Message Parts table
     let messageParts = Table("message_parts")

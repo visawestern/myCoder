@@ -69,10 +69,17 @@ struct ChatPanelView: View {
     /// Последняя известная высота контента: рост при ленивой раскладке
     /// отличается от пользовательского скролла (offset не меняется, maxY растёт).
     @State var lastKnownMaxOffset: CGFloat = 0
-    /// Content-relative frames of user rows. Stable during scrolling (unlike
-    /// the old scroll-space frames that changed every tick and made the view
-    /// re-evaluate per frame).
-    @State var userRowFrames: [String: CGRect] = [:]
+    /// Persistent content-space frames of loaded rows. LazyVStack reports only
+    /// materialised rows, so frames are merged instead of replaced: off-screen
+    /// rows keep their last known position and the navigator never loses the
+    /// active number while the reader is between two messages.
+    @State var chatRowFrames: [String: CGRect] = [:]
+    /// True while a navigator jump loads a window and scrolls to it. Prefetch
+    /// and auto-scroll are suppressed for that beat so the jump cannot fight
+    /// the pagination anchor.
+    @State var isNavigatorJumpInFlight = false
+    /// Newer-page load guard after a jump into old history.
+    @State var isLoadingNewerMessages = false
     /// Latest assistant row bottom in content coordinates. Unlike a document
     /// maximum this anchor remains valid when streamed text is replaced by a
     /// much shorter tool card.
@@ -310,8 +317,12 @@ struct ChatPanelView: View {
                                 messageCount: displayMessages.count
                             ) {
                                 ScrollToBottomButton {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+                                    if messageStore.hasNewerMessages {
+                                        jumpToLatest(proxy: proxy)
+                                    } else {
+                                        withAnimation(.easeOut(duration: 0.2)) {
+                                            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+                                        }
                                     }
                                 }
                                 .padding(.trailing, 16)
@@ -322,13 +333,10 @@ struct ChatPanelView: View {
                         }
                         .overlay(alignment: .trailing) {
                             UserMessageNavigator(
-                                messages: displayMessages,
-                                currentMessageID: currentUserMessageID,
-                                offset: messageStore.olderUserMessageCount
+                                entries: messageStore.navigatorIndex,
+                                currentMessageID: currentUserMessageID
                             ) { messageID in
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    proxy.scrollTo(messageID, anchor: .top)
-                                }
+                                jumpToNavigatorMessage(messageID, proxy: proxy)
                             }
                             .padding(.trailing, 12)
                         }

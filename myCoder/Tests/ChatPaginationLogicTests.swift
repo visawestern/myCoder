@@ -18,6 +18,27 @@ struct ChatPaginationLogicTests {
         #expect(!ChatPaginationLogic.shouldPrefetch(offsetY: 100, viewportHeight: 0))
     }
 
+    @Test("Догрузка вниз — только у нижней кромки окна")
+    func prefetchNewerWindow() {
+        #expect(!ChatPaginationLogic.shouldPrefetchNewer(
+            offsetY: 0, viewportHeight: 600, maxOffsetY: 5_000
+        ))
+        #expect(!ChatPaginationLogic.shouldPrefetchNewer(
+            offsetY: 3_000, viewportHeight: 600, maxOffsetY: 5_000
+        ))
+        // 4400 + 600 = 5000 — нижняя кромка, порог 600 уже сработал.
+        #expect(ChatPaginationLogic.shouldPrefetchNewer(
+            offsetY: 4_400, viewportHeight: 600, maxOffsetY: 5_000
+        ))
+        // Окно короче экрана: скролла нет, но новые строки всё равно нужны.
+        #expect(ChatPaginationLogic.shouldPrefetchNewer(
+            offsetY: 0, viewportHeight: 600, maxOffsetY: 0
+        ))
+        #expect(!ChatPaginationLogic.shouldPrefetchNewer(
+            offsetY: 0, viewportHeight: 0, maxOffsetY: 5_000
+        ))
+    }
+
     @Test("Смещение компенсирует высоту вставленного блока и клампится")
     func preservedOffset() {
         #expect(ChatPaginationLogic.preservedOffset(oldOffset: 500, anchorShift: 800, maxOffset: 2000) == 1300)

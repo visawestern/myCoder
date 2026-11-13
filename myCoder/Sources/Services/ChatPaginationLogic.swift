@@ -26,6 +26,23 @@ enum ChatPaginationLogic {
         return offsetY > 0 && offsetY <= threshold
     }
 
+    /// Пора ли догружать сообщения НИЖЕ окна (после прыжка в старую историю).
+    ///
+    /// Вход: `offsetY`/`viewportHeight` текущего вьюпорта, `maxOffsetY` —
+    /// максимальный скролл окна, `threshold` — запас в точках.
+    /// Выход: true, когда до низа окна осталось меньше порога (включая
+    /// короткое окно, которое целиком помещается на экране).
+    /// Зависимости: нет (чистая функция).
+    static func shouldPrefetchNewer(
+        offsetY: CGFloat,
+        viewportHeight: CGFloat,
+        maxOffsetY: CGFloat,
+        threshold: CGFloat = prefetchDistance
+    ) -> Bool {
+        guard viewportHeight > 0 else { return false }
+        return offsetY + viewportHeight >= maxOffsetY - threshold
+    }
+
     /// Выбирает первую строку, пересекающую верх вьюпорта, для компенсации
     /// prepend. Вход: стабильные content-relative кадры и offset; выход: id
     /// ближайшей видимой строки. Без UI/БД, чтобы правило проверялось тестом.

@@ -97,7 +97,8 @@ extension ChatPanelView {
         updateCurrentVisibleUserMessage(snapshot: snapshot)
         // Подгрузка начинается заранее, за экран до верха: к моменту, когда
         // читатель дойдёт до края, страница уже в памяти.
-        if ChatPaginationLogic.shouldPrefetch(offsetY: snapshot.offsetY,
+        if !isNavigatorJumpInFlight,
+           ChatPaginationLogic.shouldPrefetch(offsetY: snapshot.offsetY,
                                               viewportHeight: snapshot.viewportHeight),
            messageStore.hasMoreMessages,
            canLoadOlderMessages,
@@ -105,15 +106,63 @@ extension ChatPanelView {
            pendingPaginationAnchor == nil {
             loadOlderMessages(proxy: proxy)
         }
+        // After a navigator jump the feed can be a middle window: fill the
+        // newer direction too, otherwise the chat dead-ends at the window edge.
+        if !isNavigatorJumpInFlight,
+           messageStore.hasNewerMessages,
+           !isLoadingNewerMessages,
+           ChatPaginationLogic.shouldPrefetchNewer(
+               offsetY: snapshot.offsetY,
+               viewportHeight: snapshot.viewportHeight,
+               maxOffsetY: snapshot.maxOffsetY
+           ) {
+            loadNewerMessages()
+        }
     }
 
     /// Кадры пользовательских строк в content-пространстве. Меняются только
     /// при изменении контента; здесь же компенсируется вставка страницы
     /// истории, чтобы вьюпорт не прыгал.
     func handleUserRowFrames(_ value: [String: CGRect]) {
-        if value != userRowFrames {
-            userRowFrames = value
+        let validIDs = Set(displayMessages.map(\.id))
+
+        // A prepended page moves every remembered row down by the same delta.
+        // Prefer the dedicated anchor; if it was recycled, any row measured in
+        // both passes reveals the same shift. Without a pending anchor this is
+        // ordinary content growth, so nothing is shifted globally.
+        if let pending = pendingPaginationAnchor {
+            var shift: CGFloat?
+            if let newFrame = value[pending.messageID] {
+                let delta = newFrame.minY - pending.oldMinY
+                if abs(delta) > 0.5 { shift = delta }
+            }
+            if shift == nil {
+                shift = ChatNavigatorLayoutLogic.shift(from: chatRowFrames, reported: value)
+            }
+            if let shift {
+                chatRowFrames = ChatNavigatorLayoutLogic.shifted(chatRowFrames, by: shift)
+                let snapshot = ChatScrollBridge.shared.currentSnapshot()
+                let target = ChatPaginationLogic.preservedOffset(
+                    oldOffset: pending.oldOffset,
+                    anchorShift: shift,
+                    maxOffset: snapshot.maxOffsetY
+                )
+                ChatScrollBridge.shared.setOffset(target)
+                pendingPaginationAnchor = nil
+            }
         }
+
+        // Merge, never replace: LazyVStack stops reporting off-screen rows and
+        // the navigator must still know where they are.
+        let merged = ChatNavigatorLayoutLogic.merged(
+            stored: chatRowFrames,
+            reported: value,
+            validIDs: validIDs
+        )
+        if merged != chatRowFrames {
+            chatRowFrames = merged
+        }
+
         if let latestID = displayMessages.last?.id, let frame = value[latestID] {
             latestContentBottom = frame.maxY
             if isChatBottomVisible, pendingPaginationAnchor == nil,
@@ -123,18 +172,6 @@ extension ChatPanelView {
                ) {
                 followLatestContent()
             }
-        }
-        if let pending = pendingPaginationAnchor,
-           let newFrame = value[pending.messageID],
-           abs(newFrame.minY - pending.oldMinY) > 0.5 {
-            let snapshot = ChatScrollBridge.shared.currentSnapshot()
-            let target = ChatPaginationLogic.preservedOffset(
-                oldOffset: pending.oldOffset,
-                anchorShift: newFrame.minY - pending.oldMinY,
-                maxOffset: snapshot.maxOffsetY
-            )
-            ChatScrollBridge.shared.setOffset(target)
-            pendingPaginationAnchor = nil
         }
         updateCurrentVisibleUserMessage()
     }
@@ -170,6 +207,10 @@ extension ChatPanelView {
             newSessionID: newID
         ) else { return }
         scrolledSessionID = newID
+        // Frames belong to the previous chat's content. Keeping them would
+        // resolve a highlight against the wrong rows for one layout pass.
+        chatRowFrames = [:]
+        currentUserMessageID = nil
         DispatchQueue.main.async {
             proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
         }

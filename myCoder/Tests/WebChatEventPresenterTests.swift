@@ -9,10 +9,13 @@ struct WebChatEventPresenterTests {
 
     @Test func captchaEventProducesInlineCaptcha() {
         let png = Data("PNGDATA".utf8)
+        // Capture the locale-dependent expectation BEFORE the call so a
+        // concurrent suite switching the language cannot skew the assertion.
+        let expectedNote = L.t(AppLocalizationKey.locCaptchaSolveNote)
         let p = WebChatEventPresenter.present(.captchaDetected(screenshotPNG: png))
         if case .captcha(let b64, let note) = p {
             #expect(b64 == png.base64EncodedString())
-            #expect(note.contains("captcha"))
+            #expect(note == expectedNote)
         } else {
             Issue.record("expected .captcha, got \(p)")
         }

@@ -13,6 +13,8 @@ extension ChatPanelView {
             // mid-stream and their feeds must stay intact.
             messageStore.detach()
             messageStore.currentSessionID = sessionID
+            chatRowFrames = [:]
+            currentUserMessageID = nil
         }
         messageStore.loadingSessionID = sessionID
 
@@ -78,6 +80,13 @@ extension ChatPanelView {
                     }
                     messageStore.mergeLatestMessages(from: loadedMessages)
                     messageStore.hasMoreMessages = canLoadMore
+                    // The server may return rows that were never persisted
+                    // locally; merge them so the navigator lists the whole
+                    // session instead of only the tail.
+                    messageStore.refreshNavigatorIndex(
+                        sessionId: sessionID,
+                        using: loadedMessages.map { MessageStore.message(from: $0) }
+                    )
                 }
 
                 if !isSameSessionRefresh {

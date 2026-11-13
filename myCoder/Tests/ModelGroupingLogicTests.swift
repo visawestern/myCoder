@@ -2,7 +2,10 @@ import Testing
 import Foundation
 @testable import myCoder
 
-@MainActor
+// Suite-level work here is pure CPU (grouping/family parsing): no UI, no main
+// actor. Keeping it nonisolated stops these 12k-element tests from queueing
+// behind other heavy @MainActor suites in the shared process, which previously
+// blew the 60s time limit (2026-11-13).
 @Suite("Model grouping and capability badges")
 struct ModelGroupingLogicTests {
 

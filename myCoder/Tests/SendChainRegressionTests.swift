@@ -231,7 +231,10 @@ struct SendChainRegressionTests {
         guard case .replaceText(let text, let finished, _) = m else {
             Issue.record("expected replaceText, got \(m)"); return
         }
-        #expect(text.contains("empty response"), "An empty model answer must be reported, got \(text)")
+        // The mutation must substitute the localized "empty response" notice —
+        // never keep the blank string. Compare against the same key the
+        // presenter uses so the check is locale-independent.
+        #expect(text == L.t(AppLocalizationKey.locWebEmptyResponse), "Empty model answer must be reported, got \(text)")
         #expect(finished)
     }
 

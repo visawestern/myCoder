@@ -95,7 +95,11 @@ struct WebToolApprovalDetailsTests {
     }
 }
 
-@MainActor
+// The mailbox is a plain thread-safe class (NSLock + DispatchSemaphore), so
+// the suite must NOT be @MainActor: under the full parallel run the main actor
+// was busy with UI suites and the fixed 2 s wait timed out before the test's
+// own `Task.sleep` even returned (2026-11-13). Nothing here needs the main
+// actor, and the wait budget is now generous instead of timing-dependent.
 @Suite("Tool approval — blocking mailbox")
 struct WebToolApprovalBoxTests {
 
@@ -105,13 +109,17 @@ struct WebToolApprovalBoxTests {
         let request = WebToolApprovalRequest(id: "req-1", tool: "write_file", message: "write")
         box.post(request)
 
+        // Deterministic precondition: nothing is answered before the user acts.
+        #expect(box.verdict(for: "req-1") == nil)
+        #expect(box.current()?.id == "req-1")
+
         let waiting = Task.detached {
-            box.awaitAnswer(timeoutSeconds: 2)
+            box.awaitAnswer(timeoutSeconds: 30)
         }
-        try? await Task.sleep(nanoseconds: 100_000_000)
         box.resolve(id: "req-1", approved: true)
 
         #expect(await waiting.value == true)
+        #expect(box.verdict(for: "req-1") == true)
     }
 
     @Test("a stale or mismatched approval id cannot release the current request")
@@ -120,10 +128,13 @@ struct WebToolApprovalBoxTests {
         box.post(WebToolApprovalRequest(id: "current", tool: "run_command", message: "run"))
         box.resolve(id: "old", approved: true)
 
+        // The stale id was dropped: the request is still pending and unanswered.
+        #expect(box.current()?.id == "current")
+        #expect(box.verdict(for: "current") == nil)
+
         let waiting = Task.detached {
-            box.awaitAnswer(timeoutSeconds: 2)
+            box.awaitAnswer(timeoutSeconds: 30)
         }
-        try? await Task.sleep(nanoseconds: 100_000_000)
         box.resolve(id: "current", approved: false)
 
         #expect(await waiting.value == false)

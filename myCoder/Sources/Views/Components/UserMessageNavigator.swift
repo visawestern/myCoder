@@ -1,28 +1,37 @@
 import SwiftUI
 
-/// Floating vertical navigator for the user's own messages. It stays pinned
-/// to the trailing edge (like the scroll-to-bottom button), scrolls when the
-/// chat has many turns, and shows a 100-character preview on hover.
+/// Floating vertical navigator for the user's own messages.
+///
+/// It renders the SESSION-WIDE index (`UserMessageIndexEntry`), not the loaded
+/// history page: every question the user ever asked gets a number, even when
+/// its page is not in memory. The list is lazy and scrollable, so a chat with
+/// thousands of messages still opens instantly. Selecting a number asks the
+/// chat to load the target window and jump to it without animation.
+///
+/// Input: ordered entries, the active message id, and a selection callback.
+/// Output: the numbered list + up/down step buttons.
+/// Dependencies: `UserMessageNavigatorLogic` for preview/step rules.
 struct UserMessageNavigator: View {
-    let messages: [Message]
+    let entries: [UserMessageIndexEntry]
     let currentMessageID: String?
-    /// User messages that precede the loaded page — the numbering continues
-    /// from here so it matches the whole session.
-    var offset: Int = 0
     let onSelect: (String) -> Void
 
     @State private var hoveredID: String?
-
-    private var userMessages: [Message] {
-        UserMessageNavigatorLogic.userMessages(messages)
-    }
+    /// While the pointer is over the list the user is scrolling it manually;
+    /// auto-centering would fight that gesture and look like the list is
+    /// "rushing". Centering resumes when the pointer leaves.
+    @State private var isHoveringList = false
+    /// Debounce for highlight-driven centering. Scrolling the chat changes the
+    /// active message many times per second; centering on every change made
+    /// the navigator jump around.
+    @State private var centerTask: Task<Void, Never>?
 
     private var currentIndex: Int? {
-        userMessages.firstIndex { $0.id == currentMessageID }
+        entries.firstIndex { $0.id == currentMessageID }
     }
 
     var body: some View {
-        if !userMessages.isEmpty {
+        if !entries.isEmpty {
             VStack(spacing: 3) {
                 stepButton(icon: "chevron.up",
                            enabled: currentIndex != nil && currentIndex != 0) {
@@ -32,29 +41,37 @@ struct UserMessageNavigator: View {
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 5) {
-                            ForEach(Array(userMessages.enumerated()), id: \.element.id) { index, message in
-                                navigatorButton(index: index, message: message)
+                        // Lazy: only the visible numbers are built. A 10k
+                        // message chat must not create 10k buttons on open.
+                        LazyVStack(spacing: 5) {
+                            ForEach(entries) { entry in
+                                navigatorButton(entry: entry)
                             }
                         }
                         .padding(.vertical, 6 + UserMessageNavigatorLogic.verticalPadding(
-                            itemCount: userMessages.count
+                            itemCount: entries.count
                         ))
                         .frame(maxWidth: .infinity)
                     }
-                    // Держим текущий номер в поле зрения навигатора: при
-                    // длинном чате он иначе уезжает за границу 280pt и
-                    // «положение не видно».
+                    .onHover { hovering in
+                        isHoveringList = hovering
+                        if !hovering {
+                            scheduleCenter(using: scrollProxy)
+                        }
+                    }
+                    // Держим текущий номер в поле зрения навигатора, но без
+                    // анимации и с задержкой: иначе каждый тик скролла чата
+                    // перезапускал анимированную прокрутку списка.
                     .onChange(of: currentMessageID) { _ in
-                        centerCurrent(using: scrollProxy, animated: true)
+                        scheduleCenter(using: scrollProxy)
                     }
                     .onAppear {
-                        centerCurrent(using: scrollProxy, animated: false)
+                        scheduleCenter(using: scrollProxy)
                     }
                 }
 
                 stepButton(icon: "chevron.down",
-                           enabled: currentIndex != nil && currentIndex != userMessages.count - 1) {
+                           enabled: currentIndex != nil && currentIndex != entries.count - 1) {
                     jump(direction: .down)
                 }
                 .accessibilityLabel(L.t("Next message"))
@@ -73,10 +90,10 @@ struct UserMessageNavigator: View {
             .overlayPreferenceValue(UserMessageNavigatorAnchors.self) { anchors in
                 GeometryReader { proxy in
                     if let hoveredID,
-                       let message = userMessages.first(where: { $0.id == hoveredID }),
+                       let entry = entries.first(where: { $0.id == hoveredID }),
                        let anchor = anchors[hoveredID] {
                         let rect = proxy[anchor]
-                        tooltip(for: message)
+                        tooltip(for: entry)
                             .position(
                                 x: rect.minX - 118,
                                 y: min(max(rect.midY, 32), proxy.size.height - 32)
@@ -90,24 +107,18 @@ struct UserMessageNavigator: View {
         }
     }
 
-    /// Центрирует текущий номер во вьюпорте навигатора.
+    /// Debounced, non-animated centering of the active number.
     ///
-    /// Вход: `proxy` — прокрутка списка; `animated` — анимировать переход.
-    /// Выход: нет.
-    /// Зависимости: `currentMessageID`.
-    ///
-    /// `scrollTo` внутри `onAppear` выполняется до первого layout-прохода и
-    /// молча игнорируется — поэтому откладываем его на следующий цикл
-    /// runloop. Это и есть причина, по которой при 23+ сообщениях текущий
-    /// номер оставался за границей 280pt.
-    private func centerCurrent(using proxy: ScrollViewProxy, animated: Bool) {
-        guard let id = currentMessageID else { return }
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(.easeOut(duration: 0.15)) {
-                    proxy.scrollTo(id, anchor: .center)
-                }
-            } else {
+    /// - Parameter proxy: navigator list scroll proxy.
+    private func scheduleCenter(using proxy: ScrollViewProxy) {
+        centerTask?.cancel()
+        guard let id = currentMessageID, !isHoveringList else { return }
+        centerTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled, !isHoveringList else { return }
+            // `scrollTo` before the first layout pass is ignored; the next
+            // runloop tick is when the lazy list has real rows.
+            DispatchQueue.main.async {
                 proxy.scrollTo(id, anchor: .center)
             }
         }
@@ -118,9 +129,9 @@ struct UserMessageNavigator: View {
               let next = UserMessageNavigatorLogic.steppedIndex(
                 from: currentIndex,
                 direction: direction,
-                messageCount: userMessages.count
+                messageCount: entries.count
               ) else { return }
-        onSelect(userMessages[next].id)
+        onSelect(entries[next].id)
     }
 
     private func stepButton(icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -135,17 +146,17 @@ struct UserMessageNavigator: View {
         .disabled(!enabled)
     }
 
-    private func navigatorButton(index: Int, message: Message) -> some View {
-        let isCurrent = message.id == currentMessageID
+    private func navigatorButton(entry: UserMessageIndexEntry) -> some View {
+        let isCurrent = entry.id == currentMessageID
         return Button {
-            onSelect(message.id)
+            onSelect(entry.id)
         } label: {
-            Text(UserMessageNavigatorLogic.buttonTitle(index: index, offset: offset))
+            Text("\(entry.ordinal)")
                 .font(.system(size: 9, weight: .semibold, design: .rounded))
                 .foregroundColor(
                     isCurrent
                         ? Color.white
-                        : (hoveredID == message.id
+                        : (hoveredID == entry.id
                             ? Color.mimo.textPrimary
                             : Color.mimo.textSecondary)
                 )
@@ -156,7 +167,7 @@ struct UserMessageNavigator: View {
                     Circle().fill(
                         isCurrent
                             ? Color.mimo.brand
-                            : (hoveredID == message.id
+                            : (hoveredID == entry.id
                                 ? Color.mimo.brand.opacity(0.35)
                                 : Color.mimo.surface.opacity(0.9))
                     )
@@ -176,21 +187,21 @@ struct UserMessageNavigator: View {
         .buttonStyle(HandCursorButtonStyle())
         .onHover { hovering in
             if hovering {
-                hoveredID = message.id
-            } else if hoveredID == message.id {
+                hoveredID = entry.id
+            } else if hoveredID == entry.id {
                 hoveredID = nil
             }
         }
         .anchorPreference(
             key: UserMessageNavigatorAnchors.self,
             value: .bounds
-        ) { [message.id: $0] }
-        .accessibilityLabel(L.t("Your message %d", index + offset + 1))
-        .accessibilityValue(UserMessageNavigatorLogic.preview(for: message))
+        ) { [entry.id: $0] }
+        .accessibilityLabel(L.t("Your message %d", entry.ordinal))
+        .accessibilityValue(entry.preview)
     }
 
-    private func tooltip(for message: Message) -> some View {
-        Text(UserMessageNavigatorLogic.preview(for: message))
+    private func tooltip(for entry: UserMessageIndexEntry) -> some View {
+        Text(entry.preview)
             .font(.system(size: 10))
             .foregroundColor(Color.mimo.textPrimary)
             .lineLimit(4)

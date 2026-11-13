@@ -75,17 +75,24 @@ extension ChatPanelView {
     }
     
     /// The user message the navigator should mark as current: resolved from
-    /// the reported row frames against the visible viewport band.
+    /// the persistent row frames against the visible viewport band.
+    ///
+    /// Input: an optional scroll snapshot (nil = read the bridge).
+    /// Output: updates `currentUserMessageID` only when it changes.
+    /// Dependencies: `chatRowFrames`, `messageStore.navigatorIndex`.
     func updateCurrentVisibleUserMessage(snapshot: ChatScrollBridge.Snapshot? = nil) {
         let current = snapshot ?? ChatScrollBridge.shared.currentSnapshot()
         guard current.viewportHeight > 0 else { return }
         // Кадры строк — в content-пространстве, поэтому видимая область —
         // это просто [offsetY, offsetY + viewportHeight].
         let visible = CGRect(x: 0, y: current.offsetY, width: 1, height: current.viewportHeight)
-        let resolved = UserMessageNavigatorLogic.currentUserMessageID(
+        let entries = messageStore.navigatorIndex.isEmpty
+            ? UserMessageIndexLogic.entries(fromMessages: displayMessages)
+            : messageStore.navigatorIndex
+        let resolved = ChatNavigatorLayoutLogic.currentUserMessageID(
             visibleRect: visible,
-            frames: userRowFrames,
-            messages: displayMessages
+            frames: chatRowFrames,
+            entries: entries
         )
         // Обновляем только при смене сообщения: иначе скролл перестраивал бы
         // навигатор и весь чат на каждом кадре.
@@ -102,7 +109,7 @@ extension ChatPanelView {
         guard !messageStore.isLoadingOlder else { return }  // Prevent cascade
         let before = ChatScrollBridge.shared.currentSnapshot()
         let anchorMessageID = ChatPaginationLogic.visibleAnchor(
-            frames: userRowFrames,
+            frames: chatRowFrames,
             offsetY: before.offsetY
         )
             ?? currentUserMessageID
@@ -114,7 +121,7 @@ extension ChatPanelView {
         // Запоминаем точку привязки ДО вставки. После подгрузки та же строка
         // уедет вниз ровно на высоту страницы — компенсируем это смещением
         // скролла в том же layout-проходе, без отдельного `scrollTo`.
-        if let anchorMessageID, let frame = userRowFrames[anchorMessageID] {
+        if let anchorMessageID, let frame = chatRowFrames[anchorMessageID] {
             pendingPaginationAnchor = PaginationAnchor(
                 messageID: anchorMessageID,
                 oldMinY: frame.minY,
@@ -148,6 +155,132 @@ extension ChatPanelView {
                 }
             }
         }
+    }
+
+    // MARK: - Navigator jump (whole-session list)
+
+    /// Jump to a message chosen in the navigator.
+    ///
+    /// If the row is already materialised it scrolls instantly. Otherwise the
+    /// database returns a window around the target, so even the FIRST message
+    /// of a 10k-message chat opens in one query instead of paging through
+    /// hundreds of pages. No animation is used: animating a multi-thousand-
+    /// point jump forces SwiftUI to lay out every intermediate row and is what
+    /// made the navigator "rush" before.
+    ///
+    /// - Parameters:
+    ///   - messageID: target message id.
+    ///   - proxy: chat scroll proxy.
+    func jumpToNavigatorMessage(_ messageID: String, proxy: ScrollViewProxy) {
+        // A jump is an explicit navigation act: never let the auto-scroll or
+        // prefetch yank the reader while the target window is being laid out.
+        lastUserScrollAt = Date()
+        lastUserWheelDirection = .up
+        if messageStore.messages.contains(where: { $0.id == messageID }) {
+            revealNavigatorMessage(messageID, proxy: proxy)
+            return
+        }
+        guard let sessionID = messageStore.currentSessionID else { return }
+        isNavigatorJumpInFlight = true
+        Task { @MainActor in
+            var loaded = messageStore.jumpToMessage(
+                sessionId: sessionID,
+                messageID: messageID
+            )
+            if !loaded {
+                // Server-only history: the local window query found nothing.
+                loaded = await loadOlderPagesUntil(
+                    sessionID: sessionID,
+                    messageID: messageID
+                )
+            }
+            guard loaded else {
+                isNavigatorJumpInFlight = false
+                return
+            }
+            revealNavigatorMessage(messageID, proxy: proxy)
+            // One layout beat for LazyVStack to materialise the target row.
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            revealNavigatorMessage(messageID, proxy: proxy)
+            isNavigatorJumpInFlight = false
+        }
+    }
+
+    /// Scroll to one message without animation and mark it active immediately.
+    ///
+    /// - Parameters:
+    ///   - messageID: target id.
+    ///   - proxy: chat scroll proxy.
+    func revealNavigatorMessage(_ messageID: String, proxy: ScrollViewProxy) {
+        currentUserMessageID = messageID
+        DispatchQueue.main.async {
+            guard messageStore.messages.contains(where: { $0.id == messageID }) else {
+                return
+            }
+            proxy.scrollTo(messageID, anchor: .top)
+        }
+    }
+
+    /// Append one newer page below a middle window.
+    ///
+    /// - Parameter pageSize: rows to append (default 20).
+    func loadNewerMessages(pageSize: Int = 20) {
+        guard !isLoadingNewerMessages,
+              let sessionID = messageStore.currentSessionID else { return }
+        isLoadingNewerMessages = true
+        Task { @MainActor in
+            defer { isLoadingNewerMessages = false }
+            _ = messageStore.loadNewerFromDatabase(
+                sessionId: sessionID,
+                pageSize: pageSize
+            )
+            if isChatBottomVisible {
+                followLatestContent()
+            }
+        }
+    }
+
+    /// Replace a middle window with the newest tail (scroll-to-bottom button).
+    ///
+    /// - Parameter proxy: chat scroll proxy.
+    func jumpToLatest(proxy: ScrollViewProxy) {
+        guard let sessionID = messageStore.currentSessionID else { return }
+        lastUserScrollAt = Date()
+        isNavigatorJumpInFlight = true
+        messageStore.resetToTail(
+            sessionId: sessionID,
+            limit: MessageHistoryPaginationLogic.initialLimit
+        )
+        DispatchQueue.main.async {
+            proxy.scrollTo(ChatScrollLogic.bottomAnchorID, anchor: .bottom)
+            isNavigatorJumpInFlight = false
+            settleAtBottom()
+        }
+    }
+
+    /// Fallback for server-only history: page older rows until the target is
+    /// in the feed. Bounded so a stale request can never loop forever.
+    ///
+    /// - Parameters:
+    ///   - sessionID: chat session id.
+    ///   - messageID: target message id.
+    /// - Returns: true when the message is loaded.
+    func loadOlderPagesUntil(sessionID: String, messageID: String) async -> Bool {
+        var attempts = 0
+        while !messageStore.messages.contains(where: { $0.id == messageID }) {
+            guard messageStore.hasMoreMessages, attempts < 200 else { return false }
+            attempts += 1
+            _ = await messageStore.loadHistory(
+                sessionID: sessionID,
+                client: appState.mimoClient
+            )
+            if !messageStore.hasMoreMessages {
+                let loaded = messageStore.loadOlderFromDatabase(sessionId: sessionID)
+                if !loaded { return false }
+            }
+            guard messageStore.currentSessionID == sessionID else { return false }
+        }
+        return true
     }
 
     func loadMessageIntoComposer(_ message: Message) {

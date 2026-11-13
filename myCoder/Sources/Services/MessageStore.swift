@@ -11,11 +11,23 @@ import SwiftUI
 /// conversation it belongs to — and is saved to that conversation's database.
 class MessageStore: ObservableObject {
     /// Loaded state of one conversation.
-    private struct SessionFeed {
+    ///
+    /// A feed is normally the newest tail, but a navigator jump can replace it
+    /// with a window in the middle of the chat. `windowStart` is the global
+    /// position of `messages.first`; `hasMoreMessages` means older rows exist,
+    /// `hasNewerMessages` means newer rows exist below the window.
+    struct SessionFeed {
         var messages: [Message] = []
         var hasMoreMessages = true
+        var hasNewerMessages = false
         var historyLimit = MessageHistoryPaginationLogic.initialLimit
         var olderUserMessageCount = 0
+        /// 0-based position of `messages.first` in the whole session, when the
+        /// feed came from the local database. `nil` for server-only feeds.
+        var windowStart: Int?
+        /// Every user message of the session, numbered 1…n. Built once per
+        /// chat load and kept in memory, independent of the loaded page.
+        var navigatorIndex: [UserMessageIndexEntry] = []
     }
 
     /// Session currently shown by the panel. Changing it swaps the visible
@@ -44,12 +56,12 @@ class MessageStore: ObservableObject {
         loadingSessionID != nil
     }
 
-    private var feeds: [String: SessionFeed] = [:]
-    private let maxVisible: Int
-    private let pruneBuffer: Int
+    var feeds: [String: SessionFeed] = [:]
+    let maxVisible: Int
+    let pruneBuffer: Int
 
     // Database integration
-    private var dbBridge: DatabaseBridge {
+    var dbBridge: DatabaseBridge {
         DatabaseBridge.shared
     }
 
@@ -71,7 +83,7 @@ class MessageStore: ObservableObject {
 
     /// Стриминговые обновления пишутся в БД через троттлер, а не на каждый
     /// чанк (подробности — в `StreamingMessageWriter`). Инъекция нужна тестам.
-    private var streamingWriter: StreamingMessageWriter!
+    var streamingWriter: StreamingMessageWriter!
 
     /// Kept in sync with the chat's bottom anchor. While the user reads old
     /// history, pruning is deferred so rows never disappear under the cursor;
@@ -96,7 +108,7 @@ class MessageStore: ObservableObject {
 
     // MARK: - Visible feed accessors
 
-    private var visibleKey: String {
+    var visibleKey: String {
         currentSessionID ?? ""
     }
 
@@ -130,6 +142,24 @@ class MessageStore: ObservableObject {
     /// only the page that happens to be loaded.
     var olderUserMessageCount: Int {
         feeds[visibleKey]?.olderUserMessageCount ?? 0
+    }
+
+    /// Every user message of the visible chat, numbered 1…n. Unlike
+    /// `messages`, this list does not shrink when only one history page is
+    /// loaded — the navigator can show and jump to the whole session.
+    var navigatorIndex: [UserMessageIndexEntry] {
+        feeds[visibleKey]?.navigatorIndex ?? []
+    }
+
+    /// True when the loaded window is not the newest tail. The chat must then
+    /// page DOWN as well as up (after a navigator jump to old history).
+    var hasNewerMessages: Bool {
+        feeds[visibleKey]?.hasNewerMessages ?? false
+    }
+
+    /// Global position of the first loaded message, when known.
+    var windowStart: Int? {
+        feeds[visibleKey]?.windowStart
     }
 
     // MARK: - Cross-session access
@@ -177,6 +207,14 @@ class MessageStore: ObservableObject {
         objectWillChange.send()
         var feed = feeds[key] ?? SessionFeed()
         feed.messages.append(message)
+        // Keep the session-wide navigator list in sync without re-querying the
+        // database on every streamed chunk.
+        if message.role == .user {
+            feed.navigatorIndex = UserMessageIndexLogic.appending(
+                message,
+                to: feed.navigatorIndex
+            )
+        }
         feeds[key] = feed
         prune(key)
 
@@ -218,7 +256,17 @@ class MessageStore: ObservableObject {
         guard let key = feeds.first(where: { $0.value.messages.contains { $0.id == id } })?.key,
               let index = feeds[key]?.messages.firstIndex(where: { $0.id == id }) else { return false }
         objectWillChange.send()
-        feeds[key]?.messages.remove(at: index)
+        // Read-modify-write through a local feed: evaluating the RHS while a
+        // mutating subscript access to `feeds` is open is an exclusivity
+        // violation (and crashed the test runner).
+        if var feed = feeds[key] {
+            feed.messages.remove(at: index)
+            feed.navigatorIndex = UserMessageIndexLogic.removing(
+                id: id,
+                from: feed.navigatorIndex
+            )
+            feeds[key] = feed
+        }
         // Не даём отложенной записи воскресить удалённое сообщение.
         streamingWriter.cancel(id: id)
         if !key.isEmpty {
@@ -231,10 +279,14 @@ class MessageStore: ObservableObject {
     func setPendingApprovals(_ approvalsByAssistant: [String: [PendingToolApproval]]) {
         guard !messages.isEmpty else { return }
         objectWillChange.send()
-        for index in feeds[visibleKey]!.messages.indices {
-            feeds[visibleKey]!.messages[index].pendingApprovals =
-                approvalsByAssistant[feeds[visibleKey]!.messages[index].id] ?? []
+        // Mutate a local copy: assigning into `feeds[...]` while the RHS reads
+        // the same dictionary is an exclusivity violation.
+        guard var feed = feeds[visibleKey] else { return }
+        for index in feed.messages.indices {
+            feed.messages[index].pendingApprovals =
+                approvalsByAssistant[feed.messages[index].id] ?? []
         }
+        feeds[visibleKey] = feed
     }
 
     func setFinished(id: String) {
@@ -277,20 +329,26 @@ class MessageStore: ObservableObject {
         prune(visibleKey)
     }
 
-    private func prune(_ key: String) {
+    func prune(_ key: String) {
         guard var feed = feeds[key] else { return }
         guard feed.messages.count > maxVisible + pruneBuffer else { return }
         if key == visibleKey && !isPinnedToBottom { return }
 
-        let dropped = feed.messages.prefix(feed.messages.count - maxVisible)
+        let dropCount = feed.messages.count - maxVisible
+        let dropped = feed.messages.prefix(dropCount)
+        if let start = feed.windowStart {
+            // A windowed feed remembers its global position, so dropping rows
+            // from the top just moves the window forward.
+            feed.windowStart = start + dropCount
+        }
         feed.olderUserMessageCount += UserMessageNavigatorLogic.userMessageCount(Array(dropped))
-        feed.messages.removeFirst(feed.messages.count - maxVisible)
+        feed.messages.removeFirst(dropCount)
         // Dropped history stays reachable through "Load earlier messages".
         feed.hasMoreMessages = true
         feeds[key] = feed
     }
 
-    private func refreshStreamingSessions() {
+    func refreshStreamingSessions() {
         var ids: Set<String> = []
         for (key, feed) in feeds where !key.isEmpty {
             if feed.messages.contains(where: { $0.isStreaming }) {
@@ -314,7 +372,7 @@ class MessageStore: ObservableObject {
     /// code blocks and images have their own views. Prewarming the raw message
     /// text would therefore build entries no row ever asks for, so the same
     /// split is applied here.
-    private func scheduleMarkdownPrewarm(for messages: [Message]? = nil) {
+    func scheduleMarkdownPrewarm(for messages: [Message]? = nil) {
         let source = messages ?? self.messages
         let proseTexts = MarkdownMediaSegmentLogic.proseTexts(
             from: source.filter { !$0.isStreaming }.map(\.content)
@@ -341,222 +399,4 @@ class MessageStore: ObservableObject {
         }
     }
 
-    // MARK: - History
-
-    /// Загрузить сообщения сессии из локальной БД (вместо API).
-    /// Грузит ХВОСТ (новейшие `limit`) — oldest-first прятал бы все новые
-    /// сообщения, как только сессия перерастает страницу.
-    @MainActor
-    func loadFromDatabase(sessionId: String, limit: Int? = nil) {
-        // История читается из БД — сначала сбросим отложенные записи, иначе
-        // БД может оказаться старше уже показанного в памяти ответа.
-        streamingWriter.flushAll()
-        self.currentSessionID = sessionId
-        let loadedMessages = dbBridge.loadMessageTail(sessionId: sessionId, take: limit)
-
-        objectWillChange.send()
-        var feed = feeds[sessionId] ?? SessionFeed()
-        if feed.messages.isEmpty {
-            feed.messages = loadedMessages
-        } else {
-            // Refresh of a chat that already has a live feed: keep newer
-            // in-memory rows (a running stream can be ahead of the database)
-            // and only fill in messages this feed does not know yet.
-            var indexByID = Dictionary(
-                uniqueKeysWithValues: feed.messages.enumerated().map { ($1.id, $0) }
-            )
-            for message in loadedMessages {
-                if let index = indexByID[message.id] {
-                    if !feed.messages[index].isStreaming {
-                        feed.messages[index] = message
-                    }
-                } else {
-                    feed.messages.append(message)
-                    indexByID[message.id] = feed.messages.count - 1
-                }
-            }
-        }
-
-        if !feed.messages.isEmpty {
-            feed.hasMoreMessages = dbBridge.messageCount(sessionId: sessionId) > feed.messages.count
-        } else {
-            feed.hasMoreMessages = false
-        }
-        feed.olderUserMessageCount = max(
-            0,
-            dbBridge.userMessageCount(sessionId: sessionId) - UserMessageNavigatorLogic.userMessageCount(feed.messages)
-        )
-        feeds[sessionId] = feed
-        refreshStreamingSessions()
-        scheduleMarkdownPrewarm(for: loadedMessages)
-    }
-
-    /// Догрузить одну страницу более старых сообщений из локальной БД
-    /// (для сессий без серверной истории: local/auto-free). Дубликаты по id
-    /// пропускаются — хвост мог сдвинуться живыми дописываниями.
-    @MainActor
-    @discardableResult
-    func loadOlderFromDatabase(sessionId: String, pageSize: Int = 20) -> Bool {
-        var feed = feeds[sessionId] ?? SessionFeed()
-        let page = dbBridge.loadOlderPage(
-            sessionId: sessionId,
-            loadedCount: feed.messages.count,
-            pageSize: pageSize
-        )
-        let existingIDs = Set(feed.messages.map(\.id))
-        let fresh = page.messages.filter { !existingIDs.contains($0.id) }
-        guard !fresh.isEmpty else {
-            feed.hasMoreMessages = page.hasMore
-            feeds[sessionId] = feed
-            objectWillChange.send()
-            return false
-        }
-        objectWillChange.send()
-        feed.messages = fresh + feed.messages
-        feed.hasMoreMessages = page.hasMore
-        feed.olderUserMessageCount = max(
-            0,
-            feed.olderUserMessageCount - UserMessageNavigatorLogic.userMessageCount(fresh)
-        )
-        feeds[sessionId] = feed
-        return true
-    }
-
-    static func message(from serverMsg: MimoMessageResponse) -> Message {
-        let role: MessageRole = serverMsg.info?.role == "user" ? .user : .assistant
-        var content = ""
-        var reasoningText = ""
-        var parts: [MessagePartContent] = []
-        var attachedImages: [ClipboardImage] = []
-
-        if let responseParts = serverMsg.parts {
-            for part in responseParts {
-                switch part {
-                case .text(let t):
-                    content = t
-                    parts.append(.text(t))
-                case .reasoning(let r):
-                    reasoningText = r
-                    parts.append(.reasoning(r))
-                case .stepStart:
-                    parts.append(.stepStart)
-                case .stepFinish:
-                    parts.append(.stepFinish)
-                case .toolInvocation(let name, let input, let result, let callID):
-                    parts.append(.toolCall(name: name, args: input ?? "{}", result: result, callID: callID))
-                case .image(let mediaType, let data):
-                    parts.append(.image(base64: data, mimeType: mediaType))
-                    if role == .user, !data.isEmpty {
-                        attachedImages.append(ClipboardImage(base64: data, mimeType: mediaType))
-                    }
-                case .other:
-                    break
-                }
-            }
-        }
-
-        if content.isEmpty {
-            content = serverMsg.textContent
-        }
-
-        return Message(
-            id: serverMsg.info?.id ?? UUID().uuidString,
-            role: role,
-            content: content,
-            parts: parts,
-            reasoning: reasoningText,
-            isFinished: true,
-            attachedImages: attachedImages.isEmpty ? nil : attachedImages
-        )
-    }
-
-    @MainActor
-    @discardableResult
-    func mergeOlderMessages(from serverMessages: [MimoMessageResponse]) -> Bool {
-        let loadedMessages = serverMessages.map { Self.message(from: $0) }
-        let existingIDs = Set(messages.map(\.id))
-        let newMessages = loadedMessages.filter { !existingIDs.contains($0.id) }
-        let allServerIDs = Set(loadedMessages.map(\.id))
-
-        guard !newMessages.isEmpty else {
-            hasMoreMessages = false
-            return false
-        }
-
-        objectWillChange.send()
-        var feed = feeds[visibleKey] ?? SessionFeed()
-        feed.messages = newMessages + feed.messages
-        feeds[visibleKey] = feed
-
-        let localIDs = Set(messages.map(\.id))
-        if allServerIDs.isSubset(of: localIDs) {
-            hasMoreMessages = false
-        }
-        scheduleMarkdownPrewarm(for: newMessages)
-        return true
-    }
-
-    /// Incremental refresh: keeps existing messages untouched, updates changed
-    /// ones in place and appends only the genuinely new tail. Never clears the
-    /// feed, so unchanged rows are not re-created (no screen flicker).
-    @MainActor
-    @discardableResult
-    func mergeLatestMessages(from serverMessages: [MimoMessageResponse]) -> Int {
-        let incoming = serverMessages.map { Self.message(from: $0) }
-        var appendedCount = 0
-
-        objectWillChange.send()
-        var feed = feeds[visibleKey] ?? SessionFeed()
-        for message in incoming {
-            if let index = feed.messages.firstIndex(where: { $0.id == message.id }) {
-                if Self.hasDisplayChanges(existing: feed.messages[index], incoming: message) {
-                    feed.messages[index] = message
-                }
-            } else {
-                feed.messages.append(message)
-                appendedCount += 1
-            }
-        }
-        feeds[visibleKey] = feed
-
-        pruneIfNeeded()
-        scheduleMarkdownPrewarm(for: incoming)
-        return appendedCount
-    }
-
-    static func hasDisplayChanges(existing: Message, incoming: Message) -> Bool {
-        existing.content != incoming.content
-            || existing.reasoning != incoming.reasoning
-            || existing.parts.count != incoming.parts.count
-    }
-
-    @MainActor
-    func loadHistory(sessionID: String, client: MimoServeClient) async -> Bool {
-        guard !isLoadingOlder, hasMoreMessages else { return false }
-        isLoadingOlder = true
-        defer { isLoadingOlder = false }
-
-        do {
-            let requestedLimit = MessageHistoryPaginationLogic.nextLimit(after: currentHistoryLimit)
-            let serverMessages = try await client.getMessages(
-                sessionID: sessionID,
-                limit: requestedLimit
-            )
-            guard !serverMessages.isEmpty else {
-                hasMoreMessages = false
-                return false
-            }
-            let loadedNewMessages = mergeOlderMessages(from: serverMessages)
-            currentHistoryLimit = requestedLimit
-            hasMoreMessages = loadedNewMessages
-                && MessageHistoryPaginationLogic.hasMore(
-                    receivedCount: serverMessages.count,
-                    requestedLimit: requestedLimit
-                )
-            return loadedNewMessages
-        } catch {
-            hasMoreMessages = false
-            return false
-        }
-    }
 }
