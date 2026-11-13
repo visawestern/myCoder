@@ -22,13 +22,22 @@ extension ChatPanelView {
         assistantID: String,
         timelineParts: [MessagePartContent]
     ) async throws -> DirectChatResult {
+        let notifyQuotaWait = { (message: String) in
+            self.messageStore.update(id: assistantID) { msg in
+                let statusLine = "⏳ \(message)"
+                if !msg.content.contains(statusLine) {
+                    msg.content = msg.content.isEmpty ? statusLine : msg.content + "\n" + statusLine
+                }
+            }
+        }
         do {
             return try await DirectChatStreamer.stream(
                 baseURL: baseURL,
                 apiKey: apiKey,
                 model: model,
                 messages: messages,
-                parameters: parameters
+                parameters: parameters,
+                onQuotaWait: notifyQuotaWait
             ) { update in
                 let reasoning = update.reasoning.isEmpty ? nil : update.reasoning
                 self.messageStore.update(id: assistantID) { msg in
@@ -58,7 +67,8 @@ extension ChatPanelView {
                     apiKey: apiKey,
                     model: model,
                     messages: messages,
-                    parameters: parameters
+                    parameters: parameters,
+                    onQuotaWait: notifyQuotaWait
                 )
             }
             throw error

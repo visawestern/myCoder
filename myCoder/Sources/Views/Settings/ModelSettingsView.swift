@@ -89,6 +89,10 @@ struct ModelSettingsProviderColumns: View {
     @State var newModelDraft: String = ""
     @State var editingModelID: String = ""
     @State var editingModelDraft: String = ""
+    @State var customRequestLimitDraft: String = ""
+    @State var customTokenQuotaDraft: String = ""
+    @State var customPerKeyLimitDraft: String = ""
+    @State var apiKeysPoolText: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

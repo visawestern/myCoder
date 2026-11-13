@@ -201,17 +201,41 @@ enum DirectChatStreamer {
         parameters: ModelCallParameters = ModelCallParameters(),
         timeout: TimeInterval = 300,
         updateInterval: TimeInterval = 0.12,
+        quotaGate: QuotaGate? = QuotaGate.shared,
+        quotaProviders: [CustomProvider] = CustomProviderCatalogStore.load(),
+        onQuotaWait: ((String) -> Void)? = nil,
+        maxWaitSeconds: Int = 60,
         onUpdate: @escaping @MainActor (DirectChatStreamUpdate) -> Void
     ) async throws -> DirectChatResult {
         let url = baseURL.hasSuffix("/") ? "\(baseURL)chat/completions" : "\(baseURL)/chat/completions"
         guard let requestURL = URL(string: url) else {
             throw DirectChatError.transport("Invalid provider URL: \(url)")
         }
+
+        // Quota pre-flight: pick the pool key and (when limited) wait.
+        let resolved = QuotaPolicyResolver.resolve(
+            baseURL: baseURL, model: model,
+            providers: quotaProviders
+        )
+        let providerID = resolved.providerID ?? "provider:\(baseURL)"
+        let effectiveKey = try await QuotaPreflight.run(
+            gate: quotaGate,
+            providerID: providerID,
+            model: model,
+            primaryKey: resolved.primaryKey ?? apiKey,
+            pool: resolved.pool,
+            limits: resolved.limits,
+            contextBytes: messages.reduce(0) { $0 + $1.content.utf8.count },
+            parameters: parameters,
+            maxWaitSeconds: maxWaitSeconds,
+            onWait: onQuotaWait
+        )
+
         var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        if let key = apiKey, !key.isEmpty {
+        if let key = effectiveKey, !key.isEmpty {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
         let body = DirectChatClient.requestBody(
@@ -279,6 +303,14 @@ enum DirectChatStreamer {
             reasoning: accumulator.reasoning,
             usage: accumulator.usage
         )
+        if let gate = quotaGate, let usage = final.usage {
+            await gate.recordUsage(
+                providerID: providerID,
+                model: model,
+                apiKey: effectiveKey,
+                tokens: usage.promptTokens + usage.completionTokens
+            )
+        }
         await MainActor.run { onUpdate(final) }
         return accumulator.result()
     }

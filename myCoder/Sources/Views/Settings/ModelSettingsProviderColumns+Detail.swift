@@ -153,6 +153,60 @@ extension ModelSettingsProviderColumns {
                 .toggleStyle(VuexySwitchStyle())
                 .interfaceFont(size: 11)
             }
+
+            quotaFields(custom)
+        }
+    }
+
+    /// Quota settings for one custom provider: provider-wide request limit
+    /// (cross-chat), token quota per minute (e.g. Google ~250k/min), per-key
+    /// request limit, and the API-key pool (one key per line). All default to
+    /// 0 = unlimited. Live usage for this provider is shown below the editor.
+    func quotaFields(_ custom: CustomProvider) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L.t("Quotas"))
+                .interfaceFont(size: 12, weight: .semibold)
+                .foregroundColor(Color.mimo.textPrimary)
+
+            InlineEditableField(
+                title: L.t("Request limit per minute (0 = unlimited)"),
+                value: custom.requestLimitPerMinute > 0 ? String(custom.requestLimitPerMinute) : "0",
+                placeholder: "0"
+            ) { value in
+                customRequestLimitDraft = value
+                commitCustomProviderDraft(custom.id)
+            }
+
+            InlineEditableField(
+                title: L.t("Token quota per minute, e.g. 250000 (0 = unlimited)"),
+                value: custom.tokenQuotaPerMinute > 0 ? String(custom.tokenQuotaPerMinute) : "0",
+                placeholder: "0"
+            ) { value in
+                customTokenQuotaDraft = value
+                commitCustomProviderDraft(custom.id)
+            }
+
+            InlineEditableField(
+                title: L.t("Per-API-key request limit per minute (0 = unlimited)"),
+                value: custom.apiKeyLimitPerMinute > 0 ? String(custom.apiKeyLimitPerMinute) : "0",
+                placeholder: "0"
+            ) { value in
+                customPerKeyLimitDraft = value
+                commitCustomProviderDraft(custom.id)
+            }
+
+            Text(L.t("API key pool (one per line; the primary key above is used first)"))
+                .interfaceFont(size: 11, weight: .medium)
+                .foregroundColor(Color.mimo.textSecondary)
+            TextEditor(text: $apiKeysPoolText)
+                .frame(height: 64)
+                .zcodeTextFieldStyle()
+                .interfaceFont(size: 11, design: .monospaced)
+                .onChange(of: apiKeysPoolText) { _ in
+                    commitCustomProviderDraft(custom.id)
+                }
+
+            QuotaStatusView(providerID: custom.id)
         }
     }
 
@@ -232,6 +286,10 @@ extension ModelSettingsProviderColumns {
         if let custom = customProvider(for: option.id) {
             customBaseURLDraft = custom.baseURL
             customAPIKeyDraft = custom.getSecureAPIKey() ?? ""
+            customRequestLimitDraft = custom.requestLimitPerMinute > 0 ? String(custom.requestLimitPerMinute) : ""
+            customTokenQuotaDraft = custom.tokenQuotaPerMinute > 0 ? String(custom.tokenQuotaPerMinute) : ""
+            customPerKeyLimitDraft = custom.apiKeyLimitPerMinute > 0 ? String(custom.apiKeyLimitPerMinute) : ""
+            apiKeysPoolText = ProviderAPIKeyPoolStore.load(providerID: custom.id).joined(separator: "\n")
         }
         if let local = localProvider(for: option.id) {
             localHostDraft = local.host

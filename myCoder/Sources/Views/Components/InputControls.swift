@@ -179,6 +179,8 @@ struct ModelParametersButton: View {
     @State private var maxTokensText = ""
     @State private var topPText = ""
     @State private var systemText = ""
+    @State private var requestLimitText = ""
+    @State private var tokenQuotaText = ""
     @State private var validationMessage: String?
 
     var body: some View {
@@ -194,9 +196,11 @@ struct ModelParametersButton: View {
                 Text("\(L.t(AppLocalizationKey.locParametersFor)) — \(ModelSelectionPresentationLogic.displayModel(selectedModel: appState.selectedModel, effectiveModel: appState.effectiveSelectedModel()) ?? L.t(AppLocalizationKey.locModelPlaceholder))")
                     .interfaceFont(size: 12, weight: .semibold)
                     .foregroundColor(Color.mimo.textPrimary)
-                field("Temperature (0–2)", text: $temperatureText, placeholder: L.t(AppLocalizationKey.locDefault))
-                field("Max tokens", text: $maxTokensText, placeholder: L.t(AppLocalizationKey.locDefault))
-                field("Top P (0–1)", text: $topPText, placeholder: L.t(AppLocalizationKey.locDefault))
+                field(L.t("Temperature (0–2)"), text: $temperatureText, placeholder: L.t(AppLocalizationKey.locDefault))
+                field(L.t("Max tokens"), text: $maxTokensText, placeholder: L.t(AppLocalizationKey.locDefault))
+                field(L.t("Top P (0–1)"), text: $topPText, placeholder: L.t(AppLocalizationKey.locDefault))
+                field(L.t("Request limit per minute (0 = unlimited)"), text: $requestLimitText, placeholder: "0")
+                field(L.t("Token quota per minute (0 = unlimited)"), text: $tokenQuotaText, placeholder: "0")
                 Text(L.t(AppLocalizationKey.locSystemPrompt)).interfaceFont(size: 11).foregroundColor(Color.mimo.textMuted)
                 TextEditor(text: $systemText)
                     .frame(height: 60).font(.system(size: 12))
@@ -218,7 +222,7 @@ struct ModelParametersButton: View {
                         .buttonStyle(HandCursorButtonStyle()).foregroundColor(Color.mimo.brand).interfaceFont(size: 12, weight: .medium)
                 }
             }
-            .padding(14).frame(width: 260)
+            .padding(14).frame(width: 280)
         }
     }
 
@@ -235,6 +239,8 @@ struct ModelParametersButton: View {
         temperatureText = params.temperature.map { String($0) } ?? ""
         maxTokensText = params.maxTokens.map { String($0) } ?? ""
         topPText = params.topP.map { String($0) } ?? ""
+        requestLimitText = params.requestLimitPerMinute.map { String($0) } ?? ""
+        tokenQuotaText = params.tokenQuotaPerMinute.map { String($0) } ?? ""
         systemText = params.systemPrompt ?? ""
     }
 
@@ -244,9 +250,11 @@ struct ModelParametersButton: View {
             temperature: temperatureText,
             maxTokens: maxTokensText,
             topP: topPText,
-            systemPrompt: systemText
+            systemPrompt: systemText,
+            requestLimit: requestLimitText,
+            tokenQuota: tokenQuotaText
         ) else {
-            validationMessage = "Invalid values. Temperature must be 0–2, Top P must be 0–1, and Max tokens must be a positive integer."
+            validationMessage = "Invalid values. Temperature must be 0–2, Top P must be 0–1, Max tokens a positive integer, and quota limits non-negative integers."
             return false
         }
         guard let modelID = ModelSelectionPresentationLogic.parameterModelID(selectedModel: appState.selectedModel, effectiveModel: appState.effectiveSelectedModel()) else {
@@ -261,6 +269,7 @@ struct ModelParametersButton: View {
 
     private func resetAll() {
         temperatureText = ""; maxTokensText = ""; topPText = ""; systemText = ""
+        requestLimitText = ""; tokenQuotaText = ""
         validationMessage = nil
         guard let modelID = ModelSelectionPresentationLogic.parameterModelID(selectedModel: appState.selectedModel, effectiveModel: appState.effectiveSelectedModel()) else { return }
         ModelCallParametersStore.set(ModelCallParameters(), for: modelID)

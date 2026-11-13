@@ -267,15 +267,51 @@ enum DirectChatClient {
 
     /// Send a chat completion and return the assistant text plus any usage the
     /// provider reported, or throws.
+    ///
+    /// Quota enforcement (directive 2026-11-13): before the POST the request
+    /// passes `QuotaGate` (per-provider cross-chat request limit, per-model
+    /// limit, per-API-key limit and token quotas). When a limit is reached the
+    /// gate answers with the wait in seconds; `onQuotaWait` is called with a
+    /// human-readable message (the app writes it to the chat), the call waits
+    /// (bounded by `maxWaitSeconds`), then retries. The API key is resolved
+    /// from the provider's pool by the gate — the key that actually runs is
+    /// returned in the result. Real token usage from the response is recorded
+    /// back into the gate.
     static func send(baseURL: String,
                     apiKey: String?,
                     model: String,
                     messages: [DirectChatMessage],
                     parameters: ModelCallParameters = ModelCallParameters(),
-                    transport: DirectChatTransport = URLSessionDirectChatTransport()) async throws -> DirectChatResult {
+                    transport: DirectChatTransport = URLSessionDirectChatTransport(),
+                    quotaGate: QuotaGate? = QuotaGate.shared,
+                    quotaProviders: [CustomProvider] = CustomProviderCatalogStore.load(),
+                    quotaDefaults: UserDefaults = .standard,
+                    onQuotaWait: ((String) -> Void)? = nil,
+                    maxWaitSeconds: Int = 60) async throws -> DirectChatResult {
         let url = baseURL.hasSuffix("/") ? "\(baseURL)chat/completions" : "\(baseURL)/chat/completions"
+
+        // Quota pre-flight: pick the pool key and (when limited) wait.
+        let resolved = QuotaPolicyResolver.resolve(
+            baseURL: baseURL, model: model,
+            providers: quotaProviders,
+            defaults: quotaDefaults
+        )
+        let providerID = resolved.providerID ?? "provider:\(baseURL)"
+        let effectiveKey = try await QuotaPreflight.run(
+            gate: quotaGate,
+            providerID: providerID,
+            model: model,
+            primaryKey: resolved.primaryKey ?? apiKey,
+            pool: resolved.pool,
+            limits: resolved.limits,
+            contextBytes: messages.reduce(0) { $0 + $1.content.utf8.count },
+            parameters: parameters,
+            maxWaitSeconds: maxWaitSeconds,
+            onWait: onQuotaWait
+        )
+
         var headers = ["Content-Type": "application/json"]
-        if let key = apiKey, !key.isEmpty { headers["Authorization"] = "Bearer \(key)" }
+        if let key = effectiveKey, !key.isEmpty { headers["Authorization"] = "Bearer \(key)" }
         let body = requestBody(model: model, messages: messages, parameters: parameters)
         let data = try JSONSerialization.data(withJSONObject: body)
         if StreamDiagnostics.isEnabled {
@@ -296,6 +332,15 @@ enum DirectChatClient {
             }
             throw DirectChatError.decode
         }
+        // Record real token usage (prompt + completion) into the gate.
+        if let gate = quotaGate, let usage = result.usage {
+            await gate.recordUsage(
+                providerID: providerID,
+                model: model,
+                apiKey: effectiveKey,
+                tokens: usage.promptTokens + usage.completionTokens
+            )
+        }
         let rawBody = String(data: respData, encoding: .utf8) ?? ""
         return DirectChatResult(content: result.content,
                                 reasoning: result.reasoning,
@@ -309,6 +354,9 @@ enum DirectChatError: Error, Equatable, LocalizedError {
     case http(status: Int, body: String)
     case decode
     case emptyResponse
+    /// All configured quotas are exhausted and the wait exceeded the caller's
+    /// patience; `message` is the human-readable text for the chat.
+    case quotaBlocked(String)
 
     /// User-facing message shown in the chat when a direct send fails
     /// (audit P5 — generic localizedDescription was useless).
@@ -323,6 +371,8 @@ enum DirectChatError: Error, Equatable, LocalizedError {
             return "The provider's response could not be parsed (unexpected format)."
         case .emptyResponse:
             return "The provider returned an empty response. Check the selected model and retry."
+        case .quotaBlocked(let message):
+            return message
         }
     }
 }

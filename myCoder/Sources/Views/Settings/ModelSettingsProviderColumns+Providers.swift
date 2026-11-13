@@ -65,10 +65,28 @@ extension ModelSettingsProviderColumns {
         var updated = appState.customProviders[index]
         let url = customBaseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = customAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard url != updated.baseURL || key != (updated.getSecureAPIKey() ?? "") else { return }
+        let requestLimit = Int(customRequestLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let tokenQuota = Int(customTokenQuotaDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let perKeyLimit = Int(customPerKeyLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        let poolLines = apiKeysPoolText.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let poolChanged = poolLines != ProviderAPIKeyPoolStore.load(providerID: providerID)
+        let fieldsChanged = url != updated.baseURL
+            || key != (updated.getSecureAPIKey() ?? "")
+            || requestLimit != updated.requestLimitPerMinute
+            || tokenQuota != updated.tokenQuotaPerMinute
+            || perKeyLimit != updated.apiKeyLimitPerMinute
+        guard fieldsChanged || poolChanged else { return }
         updated.baseURL = url
         updated.apiKey = key
+        updated.requestLimitPerMinute = max(0, requestLimit)
+        updated.tokenQuotaPerMinute = max(0, tokenQuota)
+        updated.apiKeyLimitPerMinute = max(0, perKeyLimit)
         appState.updateCustomProvider(updated)
+        if poolChanged {
+            ProviderAPIKeyPoolStore.save(providerID: providerID, pool: poolLines)
+        }
     }
 
     func commitLocalProviderDraft(_ providerID: String) {

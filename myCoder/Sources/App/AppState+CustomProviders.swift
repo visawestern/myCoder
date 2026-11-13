@@ -42,6 +42,7 @@ extension AppState {
 
     func removeCustomProvider(_ provider: CustomProvider) {
         DatabaseBridge.shared.deleteProviderAPIKey(providerId: provider.id)
+        ProviderAPIKeyPoolStore.remove(providerID: provider.id, defaults: defaults)
         ProviderEnablementStore.clear(providerID: provider.id, defaults: defaults)
         customProviders.removeAll { $0.id == provider.id }
         saveCustomProviders()

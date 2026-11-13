@@ -96,6 +96,14 @@ struct CustomProvider: Identifiable, Codable {
     /// Discovered ids the user removed or renamed away; a refresh must not
     /// resurrect them.
     var hiddenModels: [String]
+    /// Provider-wide request limit (requests per 60 s window) across ALL chats
+    /// and API keys. 0 = no limit (default). Enforced by `QuotaGate`.
+    var requestLimitPerMinute: Int
+    /// Provider-wide token quota per 60 s window (e.g. Google ~250k
+    /// tokens/min). 0 = no quota (default).
+    var tokenQuotaPerMinute: Int
+    /// Per-API-key request limit inside the key pool (0 = no limit per key).
+    var apiKeyLimitPerMinute: Int
 
     init(
         id: String = UUID().uuidString,
@@ -109,7 +117,10 @@ struct CustomProvider: Identifiable, Codable {
         acpEnabled: Bool = false,
         requiresAPIKey: Bool = true,
         customModels: [String] = [],
-        hiddenModels: [String] = []
+        hiddenModels: [String] = [],
+        requestLimitPerMinute: Int = 0,
+        tokenQuotaPerMinute: Int = 0,
+        apiKeyLimitPerMinute: Int = 0
     ) {
         self.id = id
         self.name = name
@@ -123,6 +134,9 @@ struct CustomProvider: Identifiable, Codable {
         self.requiresAPIKey = requiresAPIKey
         self.customModels = customModels
         self.hiddenModels = hiddenModels
+        self.requestLimitPerMinute = requestLimitPerMinute
+        self.tokenQuotaPerMinute = tokenQuotaPerMinute
+        self.apiKeyLimitPerMinute = apiKeyLimitPerMinute
     }
 
     init(from decoder: Decoder) throws {
@@ -139,6 +153,9 @@ struct CustomProvider: Identifiable, Codable {
         requiresAPIKey = try container.decodeIfPresent(Bool.self, forKey: .requiresAPIKey) ?? true
         customModels = try container.decodeIfPresent([String].self, forKey: .customModels) ?? []
         hiddenModels = try container.decodeIfPresent([String].self, forKey: .hiddenModels) ?? []
+        requestLimitPerMinute = try container.decodeIfPresent(Int.self, forKey: .requestLimitPerMinute) ?? 0
+        tokenQuotaPerMinute = try container.decodeIfPresent(Int.self, forKey: .tokenQuotaPerMinute) ?? 0
+        apiKeyLimitPerMinute = try container.decodeIfPresent(Int.self, forKey: .apiKeyLimitPerMinute) ?? 0
     }
 }
 

@@ -8,12 +8,22 @@ struct ModelCallParameters: Codable, Equatable, Hashable {
     var maxTokens: Int?
     var topP: Double?
     var systemPrompt: String?
+    /// Per-model request limit (requests per 60 s window). nil = inherit
+    /// provider setting / no limit. Enforced by `QuotaGate`.
+    var requestLimitPerMinute: Int?
+    /// Per-model token quota per 60 s window. nil = inherit / no quota.
+    var tokenQuotaPerMinute: Int?
 
-    init(temperature: Double? = nil, maxTokens: Int? = nil, topP: Double? = nil, systemPrompt: String? = nil) {
+    init(temperature: Double? = nil, maxTokens: Int? = nil, topP: Double? = nil,
+         systemPrompt: String? = nil,
+         requestLimitPerMinute: Int? = nil,
+         tokenQuotaPerMinute: Int? = nil) {
         self.temperature = temperature
         self.maxTokens = maxTokens
         self.topP = topP
         self.systemPrompt = systemPrompt
+        self.requestLimitPerMinute = requestLimitPerMinute
+        self.tokenQuotaPerMinute = tokenQuotaPerMinute
     }
 
     /// Whether any parameter is customized (for a badge/indicator).
@@ -22,6 +32,8 @@ struct ModelCallParameters: Codable, Equatable, Hashable {
             || maxTokens != nil
             || topP != nil
             || !(systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || requestLimitPerMinute != nil
+            || tokenQuotaPerMinute != nil
     }
 }
 
