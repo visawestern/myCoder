@@ -278,7 +278,7 @@ enum AccessLevel: String, CaseIterable, Identifiable {
     var description: String {
         switch self {
         case .askBeforeChanges: return "Ask before file changes."
-        case .editAutomatically: return "Edit files automatically."
+        case .editAutomatically: return "Edit project files automatically; ask before leaving the project folder."
         case .fullAccess: return "Run with fewer confirmations."
         }
     }

@@ -168,7 +168,7 @@ extension ChatPanelView {
                 )
             } else if validationError == nil,
                       !PlanModeToolPolicy.bypassesApproval(for: call, mode: agentMode),
-                      WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
+                      WebToolAccessGate.permission(for: call, accessLevel: accessLevel, projectRoot: projectRoot) == .requireApproval {
                 let details = WebToolApprovalDetails(
                     call: call,
                     projectRoot: projectRoot,

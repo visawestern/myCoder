@@ -91,7 +91,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         // executed, it is reported back to the model as needing approval.
         // NOTE: when the driver already collected an Allow verdict it calls
         // execute(_:userApproved:) — this gate must not fire twice (F4).
-        if WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
+        if WebToolAccessGate.permission(for: call, accessLevel: accessLevel, projectRoot: projectRoot) == .requireApproval {
             return approvalMessage(for: call)
         }
         return await run(call)
@@ -104,7 +104,7 @@ struct ProjectWebToolExecutor: WebToolExecutor {
         if userApproved { return await run(call) }
         // Do not re-enter execute(_:) here: it would run the project gate a
         // second time and ask the user twice.
-        if WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
+        if WebToolAccessGate.permission(for: call, accessLevel: accessLevel, projectRoot: projectRoot) == .requireApproval {
             return approvalMessage(for: call)
         }
         return await run(call)
@@ -361,19 +361,6 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             }
             return taskUpdate(id: id, content: call.arguments["content"], status: call.arguments["status"])
         }
-    }
-
-    /// Message fed back to the model when the access gate blocks a tool.
-    /// Includes the tool name and the level that is required, so the model can
-    /// report the limitation honestly instead of silently skipping work.
-    /// Live 2026-09-12 (last chat): a blocked `run_command` ended the task in
-    /// a dead-end — the model had no read-only alternative to fall back on.
-    /// The message now names the concrete fallback so the model can continue
-    /// instead of stalling.
-    private func approvalMessage(for call: WebToolCall) -> String {
-        let base = "\(call.name) requires approval (AccessLevel: \(accessLevel.rawValue)); not executed"
-        guard WebEmulatedTool(rawValue: call.name) == .runCommand else { return base }
-        return base + ". Read-only commands (cat, grep, head, tail, sed print, git log/diff/status, ls, wc) run WITHOUT approval — re-issue one of those instead, or page files with read_file offset/limit."
     }
 
     // MARK: - Shell-safe git command construction (Round 29 R1)

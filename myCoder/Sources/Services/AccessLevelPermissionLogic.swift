@@ -6,7 +6,10 @@ enum AccessLevelPermissionLogic {
         case .askBeforeChanges:
             return ["edit": "ask"]
         case .editAutomatically:
-            return ["edit": "allow"]
+            // Every edit inside the project runs without a prompt, exactly
+            // like Full access; leaving the project folder is an explicit
+            // user decision (the local agent asks via external_directory).
+            return ["edit": "allow", "external_directory": "ask"]
         case .fullAccess:
             return [
                 "edit": "allow",

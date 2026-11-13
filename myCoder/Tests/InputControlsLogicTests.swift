@@ -163,7 +163,7 @@ struct AccessLevelModelTests {
         let full = AccessLevel.fullAccess
 
         #expect(ask.description == "Ask before file changes.")
-        #expect(edit.description == "Edit files automatically.")
+        #expect(edit.description == "Edit project files automatically; ask before leaving the project folder.")
         #expect(full.description == "Run with fewer confirmations.")
 
         let descriptions = Set(AccessLevel.allCases.map(\.description))
@@ -866,11 +866,12 @@ struct AccessLevelPermissionLogicCoverageTests {
         #expect(patch.count == 1)
     }
 
-    @Test("permissionPatch for editAutomatically returns edit=allow")
+    @Test("permissionPatch for editAutomatically returns edit=allow and asks outside the project")
     func permissionPatchEditAutomatically() {
         let patch = AccessLevelPermissionLogic.permissionPatch(for: .editAutomatically)
         #expect(patch["edit"] as? String == "allow")
-        #expect(patch.count == 1)
+        #expect(patch["external_directory"] as? String == "ask")
+        #expect(patch.count == 2)
     }
 
     @Test("permissionPatch for fullAccess returns all permissions")

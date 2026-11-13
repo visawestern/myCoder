@@ -16,7 +16,11 @@ enum WebToolPermission: Equatable {
 /// running them; this gate decides *and* the executor enforces it.
 enum WebToolAccessGate {
 
-    static func permission(for call: WebToolCall, accessLevel: AccessLevel) -> WebToolPermission {
+    static func permission(
+        for call: WebToolCall,
+        accessLevel: AccessLevel,
+        projectRoot: String = ""
+    ) -> WebToolPermission {
         // Resolve aliases FIRST: an alias like "Bash" must face the
         // run_command gate, never slip through as unknown (.none → allow).
         let call = WebToolProtocolEmulator.canonicalized(call)
@@ -31,14 +35,30 @@ enum WebToolAccessGate {
         // empty lookup would vacantly pass isReadOnlyCommand (""/allow) —
         // letting a mutating command through without approval.
         let args = WebToolProtocolEmulator.normalizedArguments(for: tool, from: call.arguments)
+
+        // Project boundary. Below Full access, a path outside the project
+        // folder is always the user's decision — including at Edit
+        // automatically, whose promise is "all edits INSIDE the project".
+        // TODO/task tools carry no path and stay host-managed. `projectRoot`
+        // is empty only in legacy/unit call sites, where the boundary check
+        // is skipped; every production caller passes the real root.
+        if accessLevel != .fullAccess,
+           outOfProjectPath(for: call, projectRoot: projectRoot) != nil {
+            return .requireApproval
+        }
+
         switch tool {
-        // Read-only tools — always allowed
+        // Read-only tools — always allowed inside the project.
         case .readFile, .listDir, .grep, .gitStatus, .gitDiff, .gitLog, .glob, .todoRead,
              .webFetch, .browserFetch, .skill, .taskList, .codeSearch, .readSymbol:
             return .allow
         // File-modifying tools — ask before mutating; higher edit levels allow
         // execution after the user has chosen the corresponding global policy.
-        case .writeFile, .editFile, .todoWrite, .taskCreate, .taskUpdate:
+        case .writeFile, .editFile:
+            return accessLevel == .askBeforeChanges ? .requireApproval : .allow
+        // The whole todo/task checklist is host-managed and belongs to the
+        // session, so Edit automatically may rewrite all of it.
+        case .todoWrite, .taskCreate, .taskUpdate:
             return accessLevel == .askBeforeChanges ? .requireApproval : .allow
         // Git mutating operations
         case .gitBranch, .gitCheckout, .gitCommit, .gitPush, .gitPull:
@@ -56,6 +76,51 @@ enum WebToolAccessGate {
         case .task:
             return accessLevel == .askBeforeChanges ? .requireApproval : .allow
         }
+    }
+
+    /// Path argument that must stay inside the project for this tool, if any.
+    ///
+    /// TODO/task tools have no path (their store is host-managed), and git
+    /// commands run inside the project root by construction, so neither is
+    /// boundary-checked here.
+    ///
+    /// - Parameters:
+    ///   - tool: canonical emulated tool.
+    ///   - arguments: normalized arguments of the call.
+    /// - Returns: the path to check, or nil when the tool is not path-bound.
+    private static func projectPathArgument(
+        for tool: WebEmulatedTool,
+        arguments: [String: String]
+    ) -> String? {
+        switch tool {
+        case .readFile, .writeFile, .editFile, .listDir, .grep, .glob, .readSymbol:
+            return arguments["path"]
+        default:
+            return nil
+        }
+    }
+
+    /// The path of `call` when it leaves the project folder, else nil.
+    ///
+    /// Used by the gate and by approval cards so both name the same concrete
+    /// path. A call without a path (TODO/task, git, shell) is not boundary
+    /// checked here: those tools either have no filesystem path or run inside
+    /// the project root by construction.
+    ///
+    /// - Parameters:
+    ///   - call: raw model call (aliases and argument spellings accepted).
+    ///   - projectRoot: project folder; empty disables the check.
+    /// - Returns: the offending path, or nil when the call stays inside.
+    static func outOfProjectPath(for call: WebToolCall, projectRoot: String) -> String? {
+        guard !projectRoot.isEmpty else { return nil }
+        let call = WebToolProtocolEmulator.canonicalized(call)
+        guard let tool = WebEmulatedTool(rawValue: call.name) else { return nil }
+        let args = WebToolProtocolEmulator.normalizedArguments(for: tool, from: call.arguments)
+        guard let path = projectPathArgument(for: tool, arguments: args),
+              !WebToolProtocolEmulator.isPathInsideRoot(path, root: projectRoot) else {
+            return nil
+        }
+        return path
     }
 
     /// Whether a shell command only inspects the environment and cannot mutate

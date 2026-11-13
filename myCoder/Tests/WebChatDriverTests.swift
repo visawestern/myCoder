@@ -306,7 +306,7 @@ struct WebChatDriverTests {
         #expect(!events.contains(.iterationLimitReached))
     }
 
-    @Test func invalidToolPathReturnsValidationErrorNotExecution() async {
+    @Test func outOfProjectPathAsksForApprovalNotExecution() async {
         let bridge = FakeBridge(responses: [
             "```tool\n{\"name\": \"read_file\", \"args\": {\"path\": \"../../etc/passwd\"}}\n```",
             "stopped."
@@ -315,13 +315,15 @@ struct WebChatDriverTests {
         let driver = makeDriver(bridge: bridge, executor: exec)
         var events: [WebChatEvent] = []
         await driver.runTurn(userMessage: "hack", isFirstMessage: false) { events.append($0) }
-        // Executor never runs the escaping path; a validation error is fed back.
+        // Executor never runs the escaping path: below Full access the host
+        // asks for access to the outside folder first. With no approval box in
+        // this unit test the request is auto-declined.
         #expect(exec.executed.isEmpty)
-        let hasValidationResult = events.contains { e in
-            if case .toolResult(_, let r) = e { return r.contains("validation error") }
+        let hasApprovalRequest = events.contains { e in
+            if case .approvalRequest(let request) = e { return request.tool == "read_file" }
             return false
         }
-        #expect(hasValidationResult)
+        #expect(hasApprovalRequest)
     }
 
     @Test func sessionLimitTriggersRestartWithCarryOver() async {

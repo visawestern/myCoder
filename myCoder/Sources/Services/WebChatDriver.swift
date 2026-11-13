@@ -424,7 +424,7 @@ struct WebChatDriver {
                         emit(.toolResult(name: call.name, result: msg))
                         continue
                     }
-                    if WebToolAccessGate.permission(for: call, accessLevel: accessLevel) == .requireApproval {
+                    if WebToolAccessGate.permission(for: call, accessLevel: accessLevel, projectRoot: projectRoot) == .requireApproval {
                         // Ask the user and WAIT for the verdict (bounded by
                         // approvalWaitSeconds). Deny/timeout → an honest
                         // tool_result goes back to the model so it can adapt;
@@ -432,7 +432,16 @@ struct WebChatDriver {
                         let request = WebToolApprovalRequest(
                             id: UUID().uuidString,
                             tool: call.name,
-                            message: "\(call.name) requires approval (AccessLevel: \(accessLevel.rawValue))"
+                            message: WebToolAccessGate.outOfProjectPath(
+                                for: call,
+                                projectRoot: projectRoot
+                            ).map {
+                                OutOfProjectAccessLogic.approvalMessage(
+                                    tool: call.name,
+                                    path: $0,
+                                    projectRoot: projectRoot
+                                )
+                            } ?? "\(call.name) requires approval (AccessLevel: \(accessLevel.rawValue))"
                         )
                         approvalBox?.post(request)
                         emit(.approvalRequest(request))

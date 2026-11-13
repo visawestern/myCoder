@@ -21,14 +21,14 @@ struct AccessLevelPermissionLogicTests {
         #expect(patch.count == 1)
     }
 
-    @Test("editAutomatically permission patch contains only edit=allow")
+    @Test("editAutomatically allows edits but asks outside the project folder")
     func editAutomaticallyPatch() {
         let patch = AccessLevelPermissionLogic.permissionPatch(for: .editAutomatically)
         #expect(patch["edit"] as? String == "allow")
         #expect(patch["bash"] == nil)
         #expect(patch["webfetch"] == nil)
-        #expect(patch["external_directory"] == nil)
-        #expect(patch.count == 1)
+        #expect(patch["external_directory"] as? String == "ask")
+        #expect(patch.count == 2)
     }
 
     @Test("fullAccess permission patch contains all keys set to allow")
@@ -145,7 +145,7 @@ struct AccessLevelPermissionLogicTests {
     @Test("AccessLevel descriptions are non-empty")
     func accessLevelDescriptions() {
         #expect(AccessLevel.askBeforeChanges.description == "Ask before file changes.")
-        #expect(AccessLevel.editAutomatically.description == "Edit files automatically.")
+        #expect(AccessLevel.editAutomatically.description == "Edit project files automatically; ask before leaving the project folder.")
         #expect(AccessLevel.fullAccess.description == "Run with fewer confirmations.")
     }
 

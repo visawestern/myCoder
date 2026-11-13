@@ -69,7 +69,7 @@ extension ToolInstructionGuide {
         ```
         Never report success before receiving the corresponding tool_result. Read errors, approval requests and truncation notices as execution outcomes; do not invent missing output or retry a mutating call blindly.
         Schemas below describe parameter names and meanings; angle-bracket values are placeholders. Omit optional parameters rather than sending placeholder text. Paths are relative to the configured working directory unless an absolute path is supplied; host validation still applies.
-        Host permissions: at askBeforeChanges, file writes, checklist mutations, Git mutations and sub-agent requests require approval. Read-only tools and recognized read-only shell commands are allowed by the current gate. Other run_command calls require approval below fullAccess. Permission does not guarantee that a provider, browser session, skill, repository or external service is configured.
+        Host permissions: at askBeforeChanges, file writes, checklist mutations, Git mutations and sub-agent requests require approval. At editAutomatically, every file edit and the whole todo/task checklist run without approval inside the project folder; a path outside the project folder asks the user first. Read-only tools and recognized read-only shell commands are allowed by the current gate. Other run_command calls require approval below fullAccess. Permission does not guarantee that a provider, browser session, skill, repository or external service is configured.
         """
         var parts = [protocolGuide]
         // M1/refactor: the canonical coding-discipline contract rides EVERY

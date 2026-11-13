@@ -512,4 +512,23 @@ extension ProjectWebToolExecutor {
         }
         return out + "$"
     }
+
+    /// Message fed back to the model when the access gate blocks a tool.
+    /// Includes the tool name and the level that is required, so the model can
+    /// report the limitation honestly instead of silently skipping work.
+    /// Live 2026-09-12 (last chat): a blocked `run_command` ended the task in
+    /// a dead-end — the model had no read-only alternative to fall back on.
+    /// The message now names the concrete fallback so the model can continue
+    /// instead of stalling.
+    ///
+    /// Input: the blocked call. Output: model-facing refusal text.
+    /// Dependencies: `WebToolAccessGate` (project boundary) and `accessLevel`.
+    func approvalMessage(for call: WebToolCall) -> String {
+        if let path = WebToolAccessGate.outOfProjectPath(for: call, projectRoot: projectRoot) {
+            return "\(call.name) requires approval to access \(path), which is outside the project folder \(projectRoot); not executed. Ask the user to allow that folder, or work inside \(projectRoot)."
+        }
+        let base = "\(call.name) requires approval (AccessLevel: \(accessLevel.rawValue)); not executed"
+        guard WebEmulatedTool(rawValue: call.name) == .runCommand else { return base }
+        return base + ". Read-only commands (cat, grep, head, tail, sed print, git log/diff/status, ls, wc) run WITHOUT approval — re-issue one of those instead, or page files with read_file offset/limit."
+    }
 }
