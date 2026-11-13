@@ -373,15 +373,10 @@ struct ProgressSection: View {
     
     private var language: AppLanguage { appState.appLanguage }
     
-    var steps: [TaskStep] {
-        if appState.currentSteps.isEmpty {
-            return [TaskStep(title: AppLocalization.string(.noStepsYet, language: language), status: .waiting)]
-        }
-        return appState.currentSteps
-    }
-    
-    var progress: TaskProgress { TaskProgress(steps: steps) }
-    var hasRealSteps: Bool { !appState.currentSteps.isEmpty }
+    private var steps: [TaskStep] { appState.currentSteps }
+    private var progress: TaskProgress { TaskProgress(steps: steps) }
+    private var hasRealSteps: Bool { !steps.isEmpty }
+    private var currentStepID: TaskStep.ID? { PlanListLogic.currentStepID(steps: steps) }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -395,10 +390,11 @@ struct ProgressSection: View {
                         .interfaceFont(size: 12)
                         .foregroundColor(Color.mimo.textMuted)
                 }
+                Spacer(minLength: 0)
             }
             
             if hasRealSteps {
-                progressContent
+                planList
             } else {
                 placeholderRow
             }
@@ -406,42 +402,37 @@ struct ProgressSection: View {
         .padding(16)
     }
     
-    @ViewBuilder
-    private var progressContent: some View {
-        let completed = RightPanelProgressDisplay.completedSteps(steps)
-        let inProgress = RightPanelProgressDisplay.inProgressSteps(steps)
-        let inlineWaiting = RightPanelProgressDisplay.inlineWaitingSteps(steps)
-        let collapsedWaiting = RightPanelProgressDisplay.collapsedWaitingCount(steps)
-        
-        if !completed.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: RightPanelLayout.completedHeaderIcon)
-                    .interfaceFont(size: 9, weight: .semibold)
-                    .foregroundColor(Color.mimo.textMuted)
-                Text(String(format: AppLocalization.string(.completedSteps, language: language), completed.count))
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
+    /// Fixed-height list: at most ten rows are visible and longer plans scroll
+    /// inside this viewport (user directive 2026-11-13). The list follows the
+    /// current step without animating, so plan updates never "rush" the panel.
+    private var planList: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical,
+                       showsIndicators: PlanListLogic.shouldScroll(total: steps.count)) {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(steps) { step in
+                        progressRow(step: step)
+                            .frame(height: PlanListLogic.rowHeight, alignment: .top)
+                            .id(step.id)
+                    }
+                }
+            }
+            .frame(height: PlanListLogic.listHeight(total: steps.count))
+            .clipped()
+            .onAppear { revealCurrentStep(proxy: proxy) }
+            .onChange(of: currentStepID) { _ in
+                revealCurrentStep(proxy: proxy)
             }
         }
-        
-        ForEach(inProgress) { step in
-            progressRow(step: step, icon: RightPanelLayout.stepInProgressIcon, color: Color.mimo.warning, weight: .semibold)
-        }
-        
-        ForEach(inlineWaiting) { step in
-            progressRow(step: step, icon: RightPanelLayout.stepWaitingIcon, color: Color.mimo.textMuted, weight: .regular)
-        }
-        
-        if collapsedWaiting > 0 {
-            HStack(spacing: 6) {
-                Image(systemName: RightPanelLayout.waitingHeaderIcon)
-                    .interfaceFont(size: 9, weight: .semibold)
-                    .foregroundColor(Color.mimo.textMuted)
-                Text(String(format: AppLocalization.string(.waitingSteps, language: language), collapsedWaiting))
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
-            }
-            .padding(.top, 2)
+    }
+    
+    /// Center the current plan step after the lazy list has real rows.
+    ///
+    /// - Parameter proxy: plan list scroll proxy.
+    private func revealCurrentStep(proxy: ScrollViewProxy) {
+        guard let id = currentStepID else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(id, anchor: .center)
         }
     }
     
@@ -456,20 +447,40 @@ struct ProgressSection: View {
         }
     }
     
-    private func progressRow(step: TaskStep, icon: String, color: Color, weight: Font.Weight) -> some View {
+    private func progressRow(step: TaskStep) -> some View {
         HStack(alignment: .top, spacing: 6) {
-            Image(systemName: icon)
-                .interfaceFont(size: 10, weight: weight)
-                .foregroundColor(color)
+            Image(systemName: statusIcon(step.status))
+                .interfaceFont(size: 10, weight: step.status == .inProgress ? .semibold : .regular)
+                .foregroundColor(statusColor(step.status))
                 .frame(width: 12, alignment: .center)
-                .padding(.top, 1)
+                .padding(.top, 2)
             
             Text(step.title)
                 .interfaceFont(size: 11)
                 .foregroundColor(step.status == .completed ? Color.mimo.textMuted : Color.mimo.textPrimary)
                 .strikethrough(step.status == .completed)
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .help(step.title)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(step.title)
+    }
+    
+    private func statusIcon(_ status: StepStatus) -> String {
+        switch status {
+        case .completed: return "checkmark"
+        case .inProgress: return RightPanelLayout.stepInProgressIcon
+        case .waiting: return RightPanelLayout.stepWaitingIcon
+        }
+    }
+    
+    private func statusColor(_ status: StepStatus) -> Color {
+        switch status {
+        case .completed: return Color.mimo.success
+        case .inProgress: return Color.mimo.warning
+        case .waiting: return Color.mimo.textMuted
         }
     }
 }
