@@ -4,6 +4,11 @@ import SwiftUI
 struct MessageRow: View {
     let message: Message
     var projectRoot: String = ""
+    /// Сессия чата и номер пары (вопрос + ответ) — ключ кэша
+    /// отрендеренных сообщений. `nil` отключает кэширование (строка вне
+    /// чата), но рендер остаётся рабочим.
+    var sessionID: String? = nil
+    var pairIndex: Int? = nil
     /// Outlined while a notification tap is walking the user to this row.
     var isHighlighted: Bool = false
     /// Rows live in a LazyVStack keyed by message id, so their stored inputs
@@ -13,7 +18,9 @@ struct MessageRow: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
     @State private var showRawText = false
-    @State private var showCompiledContext = false
+    /// Internal: используется расширением частей в отдельном файле
+    /// (`MessageRowView+Parts.swift`).
+    @State var showCompiledContext = false
 
     /// The sheet content is derived from the message itself — the persisted
     /// `.compiledContext` part and `contextSummary`. Transient `@State` could
@@ -111,11 +118,24 @@ struct MessageRow: View {
 
     /// Resolved image paths found in the message's text (plan item 13.1).
     /// Uses the display text, so protocol blocks are already stripped.
+    /// Берутся из кэша отрендеренных строк, когда он доступен (иначе —
+    /// прямой разбор).
+    @MainActor
     private var inlineImagePaths: [String] {
-        ChatImagePathLogic.extractImagePaths(
-            from: messageText,
-            projectRoot: projectRoot.isEmpty ? nil : projectRoot
-        )
+        guard let key = renderedKey else {
+            return ChatImagePathLogic.extractImagePaths(
+                from: messageText,
+                projectRoot: projectRoot.isEmpty ? nil : projectRoot
+            )
+        }
+        return RenderedMessageStore.shared.row(
+            sessionID: key.sessionID,
+            pairIndex: key.pairIndex,
+            messageID: message.id,
+            contentHash: RenderedPairBuilder.contentHash(message: message)
+        ) {
+            RenderedPairBuilder.buildRow(message: message, projectRoot: projectRoot)
+        }.inlineImagePaths
     }
 
     var body: some View {
@@ -428,115 +448,21 @@ struct MessageRow: View {
         )
     }
 
-    @ViewBuilder
-    private func partView(_ part: MessagePartContent) -> some View {
-        switch part {
-        case .text(let text):
-            if let sanitized = MessageContentSanitizerLogic.sanitizedTextPart(text) {
-                markdownBubble(sanitized)
-            }
-        case .reasoning(let text):
-            if !text.isEmpty {
-                ThinkingSpoilerView(
-                    reasoning: text,
-                    duration: nil,
-                    isThinking: message.isStreaming && !MessageDisplayLogic.hasVisibleAnswer(message)
-                )
-            }
-        case .stepStart, .stepFinish:
-            EmptyView()
-        case .toolCall:
-            EmptyView()
-        case .routeInfo:
-            EmptyView()
-        case .compiledContext(let text):
-            compiledContextButton(text)
-        case .image(let base64, let mimeType):
-            if !base64.isEmpty {
-                TappableChatImage(image: ClipboardImage(base64: base64, mimeType: mimeType))
-            }
-        }
-    }
-
-    /// The point context that was compiled locally for this message — the
-    /// button opens it in full (user directive D2: no summary).
-    @ViewBuilder
-    private func compiledContextButton(_ text: String) -> some View {
-        if !text.isEmpty {
-            Button {
-                showCompiledContext = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                    Text(L.t(AppLocalizationKey.locShowCompiledContext))
-                }
-                .interfaceFont(size: 11, weight: .medium)
-                .foregroundColor(Color.mimo.brand)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.mimo.brand.opacity(0.12))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(HandCursorButtonStyle())
-        }
-    }
-
-    /// Честная кнопка «Контекст», когда пакет не собран: показывает причину
-    /// (первый промпт, чат без проекта, нет соответствий, ошибка) вместо
-    /// пустого окна (user complaint 2026-10-30).
-    @ViewBuilder
-    private func contextSummaryButton(_ summary: String) -> some View {
-        Button {
-            showCompiledContext = true
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "doc.text.magnifyingglass")
-                Text(L.t(AppLocalizationKey.locShowCompiledContext))
-            }
-            .interfaceFont(size: 11, weight: .medium)
-            .foregroundColor(Color.mimo.textSecondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.mimo.subtleFill)
-            .clipShape(Capsule())
-        }
-        .buttonStyle(HandCursorButtonStyle())
-        .help(summary)
-    }
-
-    @ViewBuilder
-    private func toolCallPartView(_ call: ToolCallInspectorStep) -> some View {
-        if PlanQuestionLogic.isQuestionTool(call.name), call.result == nil {
-            let questions = PlanQuestionLogic.parseQuestions(from: call.args)
-            if !questions.isEmpty {
-                PlanQuestionCardView(questions: questions) { answers in
-                    NotificationCenter.default.post(
-                        name: .submitPlanQuestionAnswers,
-                        object: nil,
-                        userInfo: ["answers": answers]
-                    )
-                }
-            } else {
-                toolCallSpoiler(call)
-            }
-        } else {
-            toolCallSpoiler(call)
-        }
-    }
-
-    private func toolCallSpoiler(_ call: ToolCallInspectorStep) -> some View {
-        SplitToolInspectorView(
-            steps: [call],
-            messageID: message.id,
-            isMessageStreaming: message.isStreaming
-        )
-    }
-
-    private func isPendingQuestion(_ call: ToolCallInspectorStep) -> Bool {
-        PlanQuestionLogic.isQuestionTool(call.name) && call.result == nil
-    }
-
+    @MainActor
     private var contentSegments: [MessageContentSegment] {
+        guard let key = renderedKey else { return computedContentSegments }
+        return RenderedMessageStore.shared.row(
+            sessionID: key.sessionID,
+            pairIndex: key.pairIndex,
+            messageID: message.id,
+            contentHash: RenderedPairBuilder.contentHash(message: message)
+        ) {
+            RenderedPairBuilder.buildRow(message: message, projectRoot: projectRoot)
+        }.contentSegments
+    }
+
+    /// Fallback без кэша (строка вне чата): прямой разбор, как раньше.
+    private var computedContentSegments: [MessageContentSegment] {
         MessageContentSegment.build(
             from: MessageRowPartsLogic.displayParts(
                 parts: MessageDisplayLogic.withoutImageParts(
@@ -547,6 +473,12 @@ struct MessageRow: View {
             approvals: message.pendingApprovals,
             toolResultMeta: message.toolResultMeta
         )
+    }
+
+    /// Ключ кэша пары, когда известны сессия и номер пары.
+    private var renderedKey: RenderedMessageKey? {
+        guard let sessionID, let pairIndex else { return nil }
+        return RenderedMessageKey(sessionID: sessionID, pairIndex: pairIndex)
     }
 
     /// Route metadata chips (provider/model/effort/remote chat) from a web
@@ -564,10 +496,26 @@ struct MessageRow: View {
     ///
     /// Вход: `text` — очищенная проза.
     /// Выход: пузырь с прозой, кодом и инлайн-картинками.
-    /// Зависимости: `MessageRowMarkdownView`.
-    private func markdownBubble(_ text: String) -> some View {
-        MessageRowMarkdownView(
-            text: text,
+    /// Зависимости: `MessageRowMarkdownView`, `RenderedMessageStore`.
+    @MainActor
+    func markdownBubble(_ text: String) -> some View {
+        // Сегменты из кэша отрендеренных строк (без повторного парсинга);
+        // при отсутствии кэша — прямой разбор.
+        let segments: [MarkdownMediaSegment]
+        if let key = renderedKey {
+            segments = RenderedMessageStore.shared.row(
+                sessionID: key.sessionID,
+                pairIndex: key.pairIndex,
+                messageID: message.id,
+                contentHash: RenderedPairBuilder.contentHash(message: message)
+            ) {
+                RenderedPairBuilder.buildRow(message: message, projectRoot: projectRoot)
+            }.segmentsByText[text] ?? MessageRowMarkdownLogic.segments(from: text)
+        } else {
+            segments = MessageRowMarkdownLogic.segments(from: text)
+        }
+        return MessageRowMarkdownView(
+            segments: segments,
             isUser: message.role == .user,
             projectRoot: projectRoot.isEmpty ? nil : projectRoot,
             isLightInterface: colorScheme == .light

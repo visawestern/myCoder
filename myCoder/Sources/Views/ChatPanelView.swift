@@ -141,6 +141,12 @@ struct ChatPanelView: View {
     @AppStorage("mycoder.webBrowserPanelExpanded") var webBrowserPanelExpanded = false
     let sseClient = SSEClient()
     let db = DatabaseManager.shared
+
+    /// Номер пары (вопрос + ответ) для каждой строки фида — ключ кэша
+    /// отрендеренных сообщений (см. `ChatPairIndexLogic`).
+    private var displayedPairIndices: [String: Int] {
+        ChatPairIndexLogic.pairIndices(for: displayMessages)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -218,6 +224,8 @@ struct ChatPanelView: View {
                                     MessageRow(
                                         message: message,
                                         projectRoot: appState.toolWorkingDirectory,
+                                        sessionID: messageStore.currentSessionID,
+                                        pairIndex: displayedPairIndices[message.id],
                                         isHighlighted: message.id == highlightedMessageID
                                     )
                                         .id(message.id)

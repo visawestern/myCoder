@@ -25,8 +25,8 @@ enum MessageRowMarkdownLogic {
     }
 
     /// Разбиение текста ответа на сегменты (проза/код/картинки) — ровно
-    /// то, что будет рендерить вью. Держим здесь, чтобы вью и тесты всегда
-    /// смотрели на одно и то же разбиение, а не на отдельные копии.
+    /// то, что рендерит вью. Используется как fallback, когда готовые
+    /// сегменты из кэша недоступны (нет сессии/номера пары).
     ///
     /// Вход: `text` — markdown-текст прозы сообщения.
     /// Выход: упорядоченный массив `MarkdownMediaSegment`.
@@ -37,19 +37,18 @@ enum MessageRowMarkdownLogic {
 }
 
 /// Один markdown-пузырь сообщения: проза (selectable), фенс-код
-/// (спойлер) и инлайн-картинки. Это вынесенная из `MessageRowView`
-/// часть рендера (см. `markdownBubble`), переиспользуемая как
-/// самостоятельный компонент — позже она будет сидиться из
-/// `RenderedMessageStore` без повторной раскладки.
+/// (спойлер) и инлайн-картинки. Принимает УЖЕ разобранные сегменты —
+/// их готовит `MessageRowView` из `RenderedMessageStore`, поэтому парсинг
+/// не повторяется на каждый body-eval.
 ///
-/// Вход: `text` — проза; `isUser` — роль для фона;
+/// Вход: `segments` — сегменты текста; `isUser` — роль для фона;
 /// `projectRoot` — корень проекта для путей; `isLightInterface` —
 /// явный профиль темы (nil = системный).
 /// Выход: пузырь с фоном и скруглением, как в чате.
 /// Зависимости: `MessageRowMarkdownLogic`, `SelectableMarkdownTextView`,
 /// `CodeBlockSpoilerView`, `MarkdownImageMessageView`.
 struct MessageRowMarkdownView: View {
-    let text: String
+    let segments: [MarkdownMediaSegment]
     var isUser: Bool = false
     var projectRoot: String? = nil
     var isLightInterface: Bool? = nil
@@ -64,7 +63,6 @@ struct MessageRowMarkdownView: View {
     }
 
     var body: some View {
-        let segments = MessageRowMarkdownLogic.segments(from: text)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
