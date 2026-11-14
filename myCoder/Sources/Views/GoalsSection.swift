@@ -16,6 +16,8 @@ import Foundation
 /// always reflects the same data the `/goal` command and auto-verification use.
 struct GoalsSection: View {
     @EnvironmentObject var appState: AppState
+    /// Свёрнутость секции и клик по её заголовку.
+    let spoiler: RightPanelSpoilerBinding
     @State private var goals: [UserGoal] = []
     @State private var isCreating = false
     @State private var newGoalTitle = ""
@@ -38,21 +40,23 @@ struct GoalsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            if isCreating {
-                creationRow
-            }
+            RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.goal)) {
+                if isCreating {
+                    creationRow
+                }
 
-            if goals.isEmpty {
-                emptyState
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(goals) { goal in
-                        GoalRow(
-                            goal: goal,
-                            language: language,
-                            onAction: { action in apply(action, to: goal) },
-                            onEdit: { newTitle in applyEdit(newTitle, to: goal) }
-                        )
+                if goals.isEmpty {
+                    emptyState
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(goals) { goal in
+                            GoalRow(
+                                goal: goal,
+                                language: language,
+                                onAction: { action in apply(action, to: goal) },
+                                onEdit: { newTitle in applyEdit(newTitle, to: goal) }
+                            )
+                        }
                     }
                 }
             }
@@ -72,24 +76,15 @@ struct GoalsSection: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "target")
-                .interfaceFont(size: 13, weight: .semibold)
-                .foregroundColor(Color.mimo.brand)
-            Text(L.t(AppLocalizationKey.locGoalTitle))
-                .interfaceFont(size: 12, weight: .semibold)
-                .foregroundColor(Color.mimo.textSecondary)
-                .textCase(.uppercase)
-            if !goals.isEmpty {
-                Text("\(goals.count)")
-                    .interfaceFont(size: 10, weight: .semibold)
-                    .foregroundColor(Color.mimo.textSecondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Color.mimo.backgroundAlt)
-                    .clipShape(Capsule())
-            }
-            Spacer()
+        RightPanelSpoilerHeader(
+            section: .goal,
+            title: L.t(AppLocalizationKey.locGoalTitle),
+            icon: "target",
+            tint: Color.mimo.brand,
+            isCollapsed: spoiler.isCollapsed(.goal),
+            count: goals.count,
+            onToggle: { spoiler.toggle(.goal) }
+        ) {
             Button(action: { withAnimation(.easeOut(duration: 0.15)) { reload() } }) {
                 Image(systemName: "arrow.clockwise")
                     .interfaceFont(size: 11)

@@ -182,7 +182,9 @@ enum AppLocalizationKey: String, CaseIterable {
     case locTerminal, locCopyChat, locPickElement, locNotConfigured
     case locBrowser, locBrowserShow, locBrowserHide
     case locChromecast, locChromecastHint
+    case locPanelCollapseSection, locPanelExpandSection
     case locConnectionFailed, locRequiresAPIKey, locEnableToolCalling, locEnableACP
+    case locAPIKeyPool, locAPIKeyAdd, locAPIKeyRemove, locAPIKeyPlaceholder
     case locAlertRemoveSkill, locAlertRemoveMCPServer, locUpdate, locUpdateAvailable
     case locInstall, locUninstall, locRequires, locDependenciesSatisfied
     case locDependenciesMissing, locNote, locAlertDeleteOldChats, locAlertDeleteArchivedChats
@@ -245,4 +247,5 @@ enum AppLocalizationKey: String, CaseIterable {
     case locFreeModelSwitched, locTaskComplete, locResponseStopped, locLocalAgentConnectionLost
     case locConnectedLocalAgent, locSessionBusyMessage, locFind, locActive
     case locClear, locHide, locShow
+    case locDestructiveCommandTitle, locDestructiveCommandWarning, locDestructiveRunAnyway
 }

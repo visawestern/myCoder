@@ -9,6 +9,8 @@ import AppKit
 /// показывает не больше 10 последних команд (директива 2026-11-13).
 struct TerminalSection: View {
     @EnvironmentObject var appState: AppState
+    /// Свёрнутость секции и клик по её заголовку.
+    let spoiler: RightPanelSpoilerBinding
     @State private var tasks: [BackgroundCommandTask] = []
     @State private var expandedID: String?
     @State private var copiedCommandID: String?
@@ -16,14 +18,26 @@ struct TerminalSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header
-
-            if tasks.isEmpty {
-                emptyState
-            } else {
-                ForEach(tasks) { task in
-                    row(task)
+            RightPanelSpoilerHeader(
+                section: .terminal,
+                title: L.t(AppLocalizationKey.locTerminalTitle),
+                icon: "terminal",
+                tint: Color.mimo.violet,
+                isCollapsed: spoiler.isCollapsed(.terminal),
+                count: tasks.count,
+                onToggle: { spoiler.toggle(.terminal) }
+            ) {
+                Button(action: { appState.showTerminal = true }) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .interfaceFont(size: 10)
+                        .foregroundColor(Color.mimo.textMuted)
                 }
+                .buttonStyle(HandCursorButtonStyle())
+                .help(L.t(AppLocalizationKey.locTerminalOpen))
+            }
+
+            RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.terminal)) {
+                terminalBody
             }
         }
         .padding(16)
@@ -40,29 +54,19 @@ struct TerminalSection: View {
         }
     }
 
-    /// Panel header: title, visible-command count and the full-terminal button.
-    /// Input: none (reads `tasks`). Output: the header view. No side effects.
-    private var header: some View {
-        HStack {
-            Image(systemName: "terminal")
-                .interfaceFont(size: 12, weight: .semibold)
-                .foregroundColor(Color.mimo.violet)
-            Text(L.t(AppLocalizationKey.locTerminalTitle))
-                .interfaceFont(size: 14, weight: .semibold)
-                .foregroundColor(Color.mimo.textPrimary)
-            if !tasks.isEmpty {
-                Text("\(tasks.count)")
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
+    /// Содержимое секции: строки команд либо пустое состояние.
+    ///
+    /// Входы: `tasks` и `expandedID`.
+    /// Выходы: список строк, до десяти команд.
+    /// Зависимости: `row(_:)` и его кнопки.
+    @ViewBuilder
+    private var terminalBody: some View {
+        if tasks.isEmpty {
+            emptyState
+        } else {
+            ForEach(tasks) { task in
+                row(task)
             }
-            Spacer()
-            Button(action: { appState.showTerminal = true }) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .interfaceFont(size: 10)
-                    .foregroundColor(Color.mimo.textMuted)
-            }
-            .buttonStyle(HandCursorButtonStyle())
-            .help(L.t(AppLocalizationKey.locTerminalOpen))
         }
     }
 

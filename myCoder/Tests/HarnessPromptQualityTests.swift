@@ -118,6 +118,77 @@ struct HarnessPromptQualityTests {
         }
     }
 
+    // MARK: - Safety guardrail (restores/rollbacks/DB/GitHub/irreversible)
+
+    @Test func nativeSystemCarriesFullSafetyGuardrail() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("always ask the user first"), "native должен требовать спросить перед деструктивными действиями")
+        #expect(lower.contains("plain text"), "спрашивать текстом, а не только тулом")
+        #expect(lower.contains("database schema change"), "схема БД включена")
+        #expect(lower.contains("github action"), "GitHub включён")
+        #expect(lower.contains("local backup"), "локальный бэкап перед необратимым удалением")
+        #expect(lower.contains("in tmp"), "копия схемы БД — в tmp")
+    }
+
+    @Test func safetyGuardrailExtendsGitBlockWithoutDuplicatingIt() {
+        // Блок расширяет «Git safety», но не повторяет его список команд.
+        let rail = HarnessPromptQuality.safetyGuardrail.lowercased()
+        #expect(!rail.contains("cherry-pick"))
+        #expect(!rail.contains("stash-drop"))
+        #expect(rail.contains("extends"))
+    }
+
+    @Test func webRoutesCarryCompactSafetyGuardrail() {
+        for route in [
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            let lower = prompt.lowercased()
+            #expect(lower.contains("ask the user first"), "web-маршрут \(route) должен нести guardrail")
+            #expect(lower.contains("back up locally"), "web-маршрут \(route) должен требовать бэкап")
+            #expect(lower.contains("tmp"), "web-маршрут \(route) должен упоминать tmp-копию схемы БД")
+        }
+    }
+
+    // Инцидент 2026-11-14: удаление без бэкапа и `migrate --force` по живой
+    // базе. Правило должно доходить до всех маршрутов в явном виде.
+    @Test func safetyGuardrailRequiresOneFileAtATimeWithTmpBackup() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("one at a time"), "удаление — по одному файлу")
+        #expect(lower.contains("local backup in tmp"), "каждый файл — с бэкапом в tmp")
+        #expect(lower.contains("explicitly stated in the prompt"), "исключение — явное согласие пользователя в промпте")
+        #expect(lower.contains("empty folders"), "пустые папки — исключение")
+        #expect(lower.contains("never wipe"), "базу нельзя чистить без бэкапа и подтверждения")
+        #expect(lower.contains("rsync --delete"), "rsync --delete назван явно")
+        #expect(lower.contains("migrate --force"), "migrate --force назван явно")
+        #expect(lower.contains("red confirmation card"), "деструктивные команды — красная карточка даже при полном доступе")
+    }
+
+    @Test func webRoutesCarryCompactDeletionRule() {
+        for route in [
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            let lower = prompt.lowercased()
+            #expect(lower.contains("one at a time"), "web-маршрут \(route): удаление по одному файлу")
+            #expect(lower.contains("explicitly"), "web-маршрут \(route): исключение по явному согласию")
+            #expect(lower.contains("rsync --delete"), "web-маршрут \(route): rsync --delete назван")
+            #expect(lower.contains("never wipe a database"), "web-маршрут \(route): запрет чистить базу без бэкапа")
+        }
+    }
+
     @Test func uncertaintyRuleCoversAutonomousChangesAndNormGap() {
         let guidance = HarnessPromptQuality.humanProblemSolvingGuidance.lowercased()
         #expect(guidance.contains("greater than 0.1"))
@@ -333,5 +404,49 @@ struct HarnessPromptQualityTests {
             isProject: false, agentMode: .build)
         #expect(prompt.utf8.count <= 42_000,
                 "полный системный промпт превысил бюджет: \(prompt.utf8.count)")
+    }
+
+    // MARK: - Media creation guardrail (2D/3D objects and games)
+
+    @Test("Нативный промпт несёт блок создания 2D/3D-объектов")
+    func nativeRoutesCarryMediaReferenceGuardrail() {
+        let native = TurnDelivery.systemInstruction(
+            route: .mimoServe, userRules: "", projectRoot: "/project",
+            isProject: true, agentMode: .build)
+        let lower = native.lowercased()
+        #expect(lower.contains("\"make an aquarium\""), "блок должен упоминать пример аквариума")
+        #expect(lower.contains("reference images"), "должны требоваться референсы-картинки")
+        #expect(lower.contains("skip ready-made 3d objects"), "нужна явная опция отказа от готовых 3D-объектов")
+        #expect(lower.contains("choose which reference"), "юзер выбирает референс перед созданием")
+        #expect(lower.contains("confirm"), "ничего не делается до подтверждения юзера")
+        // Бесплатность готовых 3D-объектов — обязательная проверка.
+        #expect(lower.contains("must be free"), "готовые 3D-объекты обязаны быть бесплатными")
+        #expect(lower.contains("license"), "лицензию/цену нужно проверять")
+        // Опция платных моделей по явному запросу.
+        #expect(lower.contains("show paid 3d models"), "должна быть опция «покажи платные 3D модели»")
+        // Ссылка на правило Problem solving — без дублирования инструкций.
+        #expect(lower.contains("problem solving"), "блок должен ссылаться на существующее правило поиска готового")
+        // Правило встречается ровно один раз (никаких дублей).
+        let count = native.components(separatedBy: "skip ready-made 3D objects").count - 1
+        #expect(count == 1, "правило задублировано: \(count) вхождений")
+    }
+
+    @Test("Web/OpenAI-маршруты несут компактную версию правила медиа")
+    func webRoutesCarryCompactMediaGuardrail() {
+        for route in [
+            SendRoute.openAICompatible(baseURL: "http://local", apiKey: nil, model: "model"),
+            SendRoute.web(configID: "cfg")
+        ] {
+            let prompt = TurnDelivery.systemInstruction(
+                route: route, userRules: "", projectRoot: "/project",
+                isProject: true, agentMode: .build)
+            let lower = prompt.lowercased()
+            #expect(lower.contains("\"make an aquarium\""), "web-маршрут \(route): пример аквариума")
+            #expect(lower.contains("reference images"), "web-маршрут \(route): референсы-картинки")
+            #expect(lower.contains("skip ready-made 3d objects"), "web-маршрут \(route): опция отказа от готовых 3D-объектов")
+            #expect(lower.contains("let the user choose"), "web-маршрут \(route): юзер выбирает референс")
+            #expect(lower.contains("must be free"), "web-маршрут \(route): готовые 3D-объекты бесплатны")
+            #expect(lower.contains("show paid 3d models"), "web-маршрут \(route): опция платных моделей")
+        }
     }
 }

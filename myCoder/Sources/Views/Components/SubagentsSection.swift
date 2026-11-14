@@ -5,54 +5,66 @@ import SwiftUI
 /// Split from RightPanelView.swift to keep every file under 600 lines.
 struct SubagentsSection: View {
     @EnvironmentObject var appState: AppState
+    /// Свёрнутость секции и клик по её заголовку.
+    let spoiler: RightPanelSpoilerBinding
 
     private var language: AppLanguage { appState.appLanguage }
     private var total: Int { appState.subagentSessions.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: RightPanelLayout.subagentsIcon)
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.violet)
-                Text(AppLocalization.string(.subagentsTitle, language: language))
-                    .interfaceFont(size: 14, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                Text("\(total)")
-                    .interfaceFont(size: 11)
-                    .foregroundColor(Color.mimo.textMuted)
-                Spacer(minLength: 0)
-            }
+            RightPanelSpoilerHeader(
+                section: .subagents,
+                title: AppLocalization.string(.subagentsTitle, language: language),
+                icon: RightPanelLayout.subagentsIcon,
+                tint: Color.mimo.violet,
+                isCollapsed: spoiler.isCollapsed(.subagents),
+                count: total,
+                onToggle: { spoiler.toggle(.subagents) }
+            )
 
-            // A child chat keeps the section alive: list its siblings and
-            // offer one click back to the parent instead of an empty panel.
-            if let parent = appState.subagentParentSession {
-                parentButton(parent)
-            }
-
-            if total > 0 {
-                // Fixed viewport: at most five rows are visible, the rest
-                // scroll inside this height (user directive 2026-11-13).
-                ScrollView(.vertical,
-                           showsIndicators: SubagentListLogic.shouldScroll(total: total)) {
-                    LazyVStack(spacing: 2) {
-                        ForEach(appState.subagentSessions) { session in
-                            SubagentRow(
-                                session: session,
-                                isSelected: session.id == appState.selectedSession?.id
-                            ) {
-                                appState.selectSession(session)
-                            }
-                            .frame(height: SubagentListLogic.rowHeight)
-                        }
-                    }
-                }
-                .frame(height: SubagentListLogic.listHeight(total: total))
-                .clipped()
+            RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.subagents)) {
+                subagentBody
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Содержимое секции: хлебная крошка родителя, список субагентов или
+    /// пустое состояние.
+    ///
+    /// Входы: `appState.subagentSessions` и `subagentParentSession`.
+    /// Выходы: список строк фиксированной высоты (до пяти видимых).
+    /// Зависимости: `SubagentListLogic` (высоты), `SubagentRow`.
+    @ViewBuilder
+    private var subagentBody: some View {
+        // A child chat keeps the section alive: list its siblings and
+        // offer one click back to the parent instead of an empty panel.
+        if let parent = appState.subagentParentSession {
+            parentButton(parent)
+        }
+
+        if total > 0 {
+            // Fixed viewport: at most five rows are visible, the rest
+            // scroll inside this height (user directive 2026-11-13).
+            ScrollView(.vertical,
+                       showsIndicators: SubagentListLogic.shouldScroll(total: total)) {
+                LazyVStack(spacing: 2) {
+                    ForEach(appState.subagentSessions) { session in
+                        SubagentRow(
+                            session: session,
+                            isSelected: session.id == appState.selectedSession?.id
+                        ) {
+                            appState.selectSession(session)
+                        }
+                        .frame(height: SubagentListLogic.rowHeight)
+                    }
+                }
+            }
+            .frame(height: SubagentListLogic.listHeight(total: total))
+            .clipped()
+        }
     }
 
     /// Breadcrumb shown while the user reads a child chat.

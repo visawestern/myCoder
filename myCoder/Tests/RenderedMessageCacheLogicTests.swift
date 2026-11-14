@@ -150,4 +150,12 @@ struct RenderedMessageCacheLogicTests {
         #expect(next.totalPairs == 1)
         #expect(next.globalAccessOrder == ["A"])
     }
+
+    // MARK: - Стриминг
+
+    @Test("Стриминговое сообщение в кэш не попадает")
+    func streamingIsNotCached() {
+        #expect(!RenderedMessageCacheLogic.shouldCache(isStreaming: true))
+        #expect(RenderedMessageCacheLogic.shouldCache(isStreaming: false))
+    }
 }

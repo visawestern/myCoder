@@ -61,17 +61,29 @@ struct WebToolApprovalCardView: View {
     let tool: String
     let message: String
     var notificationName: Notification.Name = .webToolApprovalResolved
+    /// Destructive commands render the RED card even at Full access.
+    var isDestructive: Bool = false
+
+    private var presentation: ApprovalCardPresentation {
+        ApprovalCardPresentation(isDestructive: isDestructive)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.shield")
+                Image(systemName: presentation.iconName)
                     .interfaceFont(size: 14)
-                    .foregroundColor(Color.mimo.warning)
-                Text(L.t("myCoder wants to run a restricted tool"))
+                    .foregroundColor(presentation.accentColor)
+                Text(L.t(presentation.titleKey))
                     .interfaceFont(size: 13, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
+                    .foregroundColor(isDestructive ? presentation.accentColor : Color.mimo.textPrimary)
                 Spacer()
+            }
+            if let warningKey = presentation.warningKey {
+                Text(L.t(warningKey))
+                    .interfaceFont(size: 12, weight: .semibold)
+                    .foregroundColor(presentation.accentColor)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text(message)
                 .interfaceFont(size: 12)
@@ -83,15 +95,15 @@ struct WebToolApprovalCardView: View {
                     resolve(approved: true)
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "checkmark")
+                        Image(systemName: isDestructive ? "exclamationmark.triangle.fill" : "checkmark")
                             .interfaceFont(size: 11, weight: .bold)
-                        Text(L.t("Allow"))
+                        Text(L.t(presentation.allowTitleKey))
                             .interfaceFont(size: 12, weight: .semibold)
                     }
                     .foregroundColor(Color.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                    .background(Color.mimo.success)
+                    .background(presentation.allowBackgroundColor)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(HandCursorButtonStyle())
@@ -121,11 +133,11 @@ struct WebToolApprovalCardView: View {
             }
         }
         .padding(12)
-        .background(Color.mimo.surface.opacity(0.9))
+        .background(presentation.backgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.mimo.warning.opacity(0.6), lineWidth: 1)
+                .stroke(presentation.borderColor, lineWidth: presentation.borderWidth)
         )
     }
 

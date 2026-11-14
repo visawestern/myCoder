@@ -1,33 +1,57 @@
 import SwiftUI
 
+/// Правая панель: набор сворачиваемых секций (гит, хромкаст, субагенты,
+/// терминал, план, цель).
+///
+/// Каждая секция — спойлер: заголовок с шевроном, клик по которому скрывает
+/// содержимое. Состояние свёрнутости принадлежит открытому чату, поэтому
+/// переключение чатов возвращает ту раскладку, которую пользователь оставил в
+/// каждом из них.
+///
+/// Входы: выделенный чат (`AppState.selectedSession`).
+/// Выходы: вертикальный список секций.
+/// Зависимости: `RightPanelSpoilerStore` (хранение), секции панели.
 struct RightPanelView: View {
     @EnvironmentObject var appState: AppState
-    
+    @StateObject private var spoilers = RightPanelSpoilerStore()
+
+    /// Чат, к которому привязано состояние спойлеров; `nil` — панель открыта
+    /// без выбранного чата.
+    private var chatID: String? { appState.selectedSession?.id }
+
+    /// Текущая свёрнутость для секций панели.
+    ///
+    /// Набор хранится в `UserDefaults`, но `RightPanelSpoilerStore` — это
+    /// `@StateObject`, и каждая запись публикует `revision`, поэтому SwiftUI
+    /// перерисовывает панель сразу после клика.
+    private var binding: RightPanelSpoilerBinding {
+        RightPanelSpoilerBinding(
+            collapsed: spoilers.collapsed(in: chatID),
+            onToggle: { section in
+                // Анимация короткая и одинаковая для всех секций, чтобы
+                // панель не «прыгала» при нескольких кликах подряд.
+                withAnimation(.easeOut(duration: 0.15)) {
+                    spoilers.toggle(section, in: chatID)
+                }
+            }
+        )
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            GitToolsSection()
-            
-            Divider()
-            
-            ChromecastSection()
-            
-            Divider()
-            
-            SubagentsSection()
-            
-            Divider()
-            
-            TerminalSection()
-            
-            Divider()
-            
-            ProgressSection()
-            
-            Divider()
-            
-            GoalsSection()
-            
-            Spacer()
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                GitToolsSection(spoiler: binding)
+                Divider()
+                ChromecastSection(spoiler: binding)
+                Divider()
+                SubagentsSection(spoiler: binding)
+                Divider()
+                TerminalSection(spoiler: binding)
+                Divider()
+                ProgressSection(spoiler: binding)
+                Divider()
+                GoalsSection(spoiler: binding)
+            }
         }
         .background(Color.mimo.surface)
     }
@@ -35,6 +59,8 @@ struct RightPanelView: View {
 
 struct GitToolsSection: View {
     @EnvironmentObject var appState: AppState
+    /// Свёрнутость секции и клик по её заголовку.
+    let spoiler: RightPanelSpoilerBinding
     @State private var showCommitDialog = false
     @State private var showInitDialog = false
     @State private var showPublishDialog = false
@@ -60,13 +86,14 @@ struct GitToolsSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(AppLocalization.string(.gitToolsTitle, language: language))
-                    .interfaceFont(size: 14, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                
-                Spacer()
-                
+            RightPanelSpoilerHeader(
+                section: .git,
+                title: AppLocalization.string(.gitToolsTitle, language: language),
+                icon: RightPanelLayout.changesIcon,
+                tint: Color.mimo.textSecondary,
+                isCollapsed: spoiler.isCollapsed(.git),
+                onToggle: { spoiler.toggle(.git) }
+            ) {
                 Button(action: refreshGit) {
                     Image(systemName: appState.isGitBusy ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                         .interfaceFont(size: 13)
@@ -77,180 +104,9 @@ struct GitToolsSection: View {
                 .buttonStyle(HandCursorButtonStyle())
                 .disabled(appState.isGitBusy)
             }
-            
-            if let status = appState.gitStatusMessage, !status.isEmpty {
-                Text(status)
-                    .interfaceFont(size: 11)
-                    .foregroundColor(status.lowercased().contains("error") || status.contains("fatal") ? Color.mimo.error : Color.mimo.textSecondary)
-                    .lineLimit(3)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.mimo.backgroundAlt)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            
-            HStack(spacing: 8) {
-                Image(systemName: RightPanelLayout.changesIcon)
-                    .interfaceFont(size: 13)
-                    .foregroundColor(Color.mimo.textMuted)
-                
-                Text(AppLocalization.string(.gitChanges, language: language))
-                    .interfaceFont(size: 13)
-                    .foregroundColor(Color.mimo.textPrimary)
-                
-                Spacer()
-                
-                if hasChanges {
-                    HStack(spacing: 8) {
-                        Text("+\(appState.sessionGitTotals.additions)")
-                            .interfaceFont(size: 12, weight: .medium)
-                            .foregroundColor(Color.mimo.success)
-                        Text("-\(appState.sessionGitTotals.deletions)")
-                            .interfaceFont(size: 12, weight: .medium)
-                            .foregroundColor(Color.mimo.error)
-                    }
-                } else {
-                    Text(AppLocalization.string(.gitNoChanges, language: language))
-                        .interfaceFont(size: 12)
-                        .foregroundColor(Color.mimo.textMuted)
-                }
-            }
-            
-            if !appState.vcsChanges.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(appState.vcsChanges, id: \.path) { file in
-                            HStack(spacing: 6) {
-                                Text((file.path as NSString).lastPathComponent)
-                                    .interfaceFont(size: 11, design: .monospaced)
-                                    .foregroundColor(Color.mimo.textPrimary)
-                                    .lineLimit(1)
-                                Spacer()
-                                if file.additions > 0 {
-                                    Text("+\(file.additions)")
-                                        .interfaceFont(size: 10, weight: .medium)
-                                        .foregroundColor(Color.mimo.success)
-                                }
-                                if file.deletions > 0 {
-                                    Text("-\(file.deletions)")
-                                        .interfaceFont(size: 10, weight: .medium)
-                                        .foregroundColor(Color.mimo.error)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxHeight: 100)
-            }
-            
-            HStack(spacing: 8) {
-                Image(systemName: RightPanelLayout.branchIcon)
-                    .interfaceFont(size: 12)
-                    .foregroundColor(Color.mimo.textMuted)
-                
-                Text(AppLocalization.string(.gitBranch, language: language))
-                    .interfaceFont(size: 13)
-                    .foregroundColor(Color.mimo.textPrimary)
-                
-                Spacer()
-                
-                Menu {
-                    ForEach(appState.gitBranches, id: \.self) { branch in
-                        Button(action: { checkout(branch) }) {
-                            HStack {
-                                Text(branch)
-                                if branch == appState.gitBranch {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Text(appState.gitBranch)
-                        .interfaceFont(size: 12, design: .monospaced)
-                        .foregroundColor(Color.mimo.textPrimary)
-                }
-                .menuStyle(.borderlessButton)
-            }
-            
-            if isGitInitialized {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: RightPanelLayout.commitIcon)
-                            .interfaceFont(size: 12)
-                            .foregroundColor(Color.mimo.textMuted)
-                        
-                        Text(AppLocalization.string(.gitCommit, language: language))
-                            .interfaceFont(size: 13)
-                            .foregroundColor(Color.mimo.textPrimary)
-                    }
-                    
-                    HStack(spacing: 8) {
-                        PremiumPrimaryButton(
-                            title: AppLocalization.string(.gitCommit, language: language),
-                            systemImage: "checkmark.circle.fill",
-                            isBusy: appState.isGitBusy,
-                            isEnabled: hasChanges
-                        ) {
-                            showCommitDialog = true
-                        }
-                        .frame(maxWidth: .infinity)
-                        
-                        PremiumPrimaryButton(
-                            title: AppLocalization.string(.gitReviewPush, language: language),
-                            systemImage: "arrow.up.circle.fill",
-                            isBusy: appState.isGitBusy,
-                            isEnabled: appState.gitRepositoryPath != nil
-                        ) {
-                            showAutoReviewDialog = true
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                
-                if !hasRemote {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "globe")
-                                .interfaceFont(size: 12)
-                                .foregroundColor(Color.mimo.textMuted)
-                            
-                            Text(AppLocalization.string(.gitPublish, language: language))
-                                .interfaceFont(size: 13)
-                                .foregroundColor(Color.mimo.textPrimary)
-                        }
-                        
-                        PremiumPrimaryButton(
-                            title: AppLocalization.string(.gitPublishToGithub, language: language),
-                            systemImage: "arrow.up.forward.app.fill",
-                            isBusy: appState.isGitBusy
-                        ) {
-                            showPublishDialog = true
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder.badge.plus")
-                            .interfaceFont(size: 12)
-                            .foregroundColor(Color.mimo.textMuted)
-                        
-                        Text(AppLocalization.string(.gitInitialize, language: language))
-                            .interfaceFont(size: 13)
-                            .foregroundColor(Color.mimo.textPrimary)
-                    }
-                    
-                    PremiumPrimaryButton(
-                        title: AppLocalization.string(.gitInitTitle, language: language),
-                        systemImage: "plus.circle.fill",
-                        isBusy: appState.isGitBusy
-                    ) {
-                        showInitDialog = true
-                    }
-                    .frame(maxWidth: .infinity)
-                }
+
+            RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.git)) {
+                gitBody
             }
         }
         .padding(16)
@@ -292,6 +148,190 @@ struct GitToolsSection: View {
                 isPresented: $showAutoReviewDialog
             ) { comment in
                 Task { await reviewAndPush(comment: comment) }
+            }
+        }
+    }
+
+    /// Содержимое git-секции: статус, список изменений, ветка, действия.
+    ///
+    /// Вынесено отдельным представлением, чтобы заголовок-спойлер и тело
+    /// оставались независимыми и файл не превышал лимит строк.
+    @ViewBuilder
+    private var gitBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let status = appState.gitStatusMessage, !status.isEmpty {
+                Text(status)
+                    .interfaceFont(size: 11)
+                    .foregroundColor(status.lowercased().contains("error") || status.contains("fatal") ? Color.mimo.error : Color.mimo.textSecondary)
+                    .lineLimit(3)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.mimo.backgroundAlt)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: RightPanelLayout.changesIcon)
+                    .interfaceFont(size: 13)
+                    .foregroundColor(Color.mimo.textMuted)
+
+                Text(AppLocalization.string(.gitChanges, language: language))
+                    .interfaceFont(size: 13)
+                    .foregroundColor(Color.mimo.textPrimary)
+
+                Spacer()
+
+                if hasChanges {
+                    HStack(spacing: 8) {
+                        Text("+\(appState.sessionGitTotals.additions)")
+                            .interfaceFont(size: 12, weight: .medium)
+                            .foregroundColor(Color.mimo.success)
+                        Text("-\(appState.sessionGitTotals.deletions)")
+                            .interfaceFont(size: 12, weight: .medium)
+                            .foregroundColor(Color.mimo.error)
+                    }
+                } else {
+                    Text(AppLocalization.string(.gitNoChanges, language: language))
+                        .interfaceFont(size: 12)
+                        .foregroundColor(Color.mimo.textMuted)
+                }
+            }
+
+            if !appState.vcsChanges.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(appState.vcsChanges, id: \.path) { file in
+                            HStack(spacing: 6) {
+                                Text((file.path as NSString).lastPathComponent)
+                                    .interfaceFont(size: 11, design: .monospaced)
+                                    .foregroundColor(Color.mimo.textPrimary)
+                                    .lineLimit(1)
+                                Spacer()
+                                if file.additions > 0 {
+                                    Text("+\(file.additions)")
+                                        .interfaceFont(size: 10, weight: .medium)
+                                        .foregroundColor(Color.mimo.success)
+                                }
+                                if file.deletions > 0 {
+                                    Text("-\(file.deletions)")
+                                        .interfaceFont(size: 10, weight: .medium)
+                                        .foregroundColor(Color.mimo.error)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 100)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: RightPanelLayout.branchIcon)
+                    .interfaceFont(size: 12)
+                    .foregroundColor(Color.mimo.textMuted)
+
+                Text(AppLocalization.string(.gitBranch, language: language))
+                    .interfaceFont(size: 13)
+                    .foregroundColor(Color.mimo.textPrimary)
+
+                Spacer()
+
+                Menu {
+                    ForEach(appState.gitBranches, id: \.self) { branch in
+                        Button(action: { checkout(branch) }) {
+                            HStack {
+                                Text(branch)
+                                if branch == appState.gitBranch {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(appState.gitBranch)
+                        .interfaceFont(size: 12, design: .monospaced)
+                        .foregroundColor(Color.mimo.textPrimary)
+                }
+                .menuStyle(.borderlessButton)
+            }
+
+            if isGitInitialized {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: RightPanelLayout.commitIcon)
+                            .interfaceFont(size: 12)
+                            .foregroundColor(Color.mimo.textMuted)
+
+                        Text(AppLocalization.string(.gitCommit, language: language))
+                            .interfaceFont(size: 13)
+                            .foregroundColor(Color.mimo.textPrimary)
+                    }
+
+                    HStack(spacing: 8) {
+                        PremiumPrimaryButton(
+                            title: AppLocalization.string(.gitCommit, language: language),
+                            systemImage: "checkmark.circle.fill",
+                            isBusy: appState.isGitBusy,
+                            isEnabled: hasChanges
+                        ) {
+                            showCommitDialog = true
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        PremiumPrimaryButton(
+                            title: AppLocalization.string(.gitReviewPush, language: language),
+                            systemImage: "arrow.up.circle.fill",
+                            isBusy: appState.isGitBusy,
+                            isEnabled: appState.gitRepositoryPath != nil
+                        ) {
+                            showAutoReviewDialog = true
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+
+                if !hasRemote {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "globe")
+                                .interfaceFont(size: 12)
+                                .foregroundColor(Color.mimo.textMuted)
+
+                            Text(AppLocalization.string(.gitPublish, language: language))
+                                .interfaceFont(size: 13)
+                                .foregroundColor(Color.mimo.textPrimary)
+                        }
+
+                        PremiumPrimaryButton(
+                            title: AppLocalization.string(.gitPublishToGithub, language: language),
+                            systemImage: "arrow.up.forward.app.fill",
+                            isBusy: appState.isGitBusy
+                        ) {
+                            showPublishDialog = true
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.badge.plus")
+                            .interfaceFont(size: 12)
+                            .foregroundColor(Color.mimo.textMuted)
+
+                        Text(AppLocalization.string(.gitInitialize, language: language))
+                            .interfaceFont(size: 13)
+                            .foregroundColor(Color.mimo.textPrimary)
+                    }
+
+                    PremiumPrimaryButton(
+                        title: AppLocalization.string(.gitInitTitle, language: language),
+                        systemImage: "plus.circle.fill",
+                        isBusy: appState.isGitBusy
+                    ) {
+                        showInitDialog = true
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -374,7 +414,9 @@ struct GitToolsSection: View {
 
 struct ProgressSection: View {
     @EnvironmentObject var appState: AppState
-    
+    /// Свёрнутость секции и клик по её заголовку.
+    let spoiler: RightPanelSpoilerBinding
+
     private var language: AppLanguage { appState.appLanguage }
     
     private var steps: [TaskStep] { appState.currentSteps }
@@ -384,23 +426,28 @@ struct ProgressSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(AppLocalization.string(.planTitle, language: language))
-                    .interfaceFont(size: 14, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                
+            RightPanelSpoilerHeader(
+                section: .plan,
+                title: AppLocalization.string(.planTitle, language: language),
+                icon: RightPanelLayout.stepInProgressIcon,
+                tint: Color.mimo.brand,
+                isCollapsed: spoiler.isCollapsed(.plan),
+                count: hasRealSteps ? steps.count : nil,
+                onToggle: { spoiler.toggle(.plan) }
+            ) {
                 if hasRealSteps {
                     Text(progress.formatted)
                         .interfaceFont(size: 12)
                         .foregroundColor(Color.mimo.textMuted)
                 }
-                Spacer(minLength: 0)
             }
-            
-            if hasRealSteps {
-                planList
-            } else {
-                placeholderRow
+
+            RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.plan)) {
+                if hasRealSteps {
+                    planList
+                } else {
+                    placeholderRow
+                }
             }
         }
         .padding(16)

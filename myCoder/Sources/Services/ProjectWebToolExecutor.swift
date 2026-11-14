@@ -38,6 +38,10 @@ struct ProjectWebToolExecutor: WebToolExecutor {
     /// server's diagnostics to the tool result. Production turns enable it;
     /// unit tests stay hermetic (no server processes).
     var automaticDiagnostics = false
+    /// Инъекция fetch-функции для `web_search` (мок ТОЛЬКО в тестах):
+    /// принимает URL запроса, возвращает HTML-выдачу. `nil` — реальный
+    /// сетевой запрос через `URLSession`.
+    var webSearchFetch: ((URL) async throws -> String)? = nil
 
     init(projectRoot: String,
          fileManager: FileManager = .default,
@@ -362,6 +366,11 @@ struct ProjectWebToolExecutor: WebToolExecutor {
             return await fetchWebPage(urlString: url, limit: limit)
         case .browserFetch:
             return await fetchBrowserPage(arguments: call.arguments)
+        case .webSearch:
+            let query = (call.arguments["query"] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return "error: missing query" }
+            return await webSearch(query: query)
         case .skill:
             if let name = call.arguments["name"], !name.isEmpty {
                 return skillRead(name: name)

@@ -92,7 +92,8 @@ struct ModelSettingsProviderColumns: View {
     @State var customRequestLimitDraft: String = ""
     @State var customTokenQuotaDraft: String = ""
     @State var customPerKeyLimitDraft: String = ""
-    @State var apiKeysPoolText: String = ""
+    /// Строки полей резервных API-ключей (первая — основной ключ).
+    @State var apiKeysPoolRows: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

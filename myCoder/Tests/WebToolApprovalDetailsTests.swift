@@ -51,6 +51,33 @@ struct WebToolApprovalDetailsTests {
         #expect(details.formattedMessage.contains("command = swift test"))
     }
 
+    @Test("destructive run_command is flagged and its risk is explained in the card")
+    func destructiveRunCommandIsFlagged() {
+        let details = WebToolApprovalDetails(
+            call: WebToolCall(
+                name: "run_command",
+                arguments: ["command": "rsync -a --delete api/ prod:/srv/api/"]
+            ),
+            projectRoot: "/tmp/project"
+        )
+
+        #expect(details.isDestructive)
+        #expect(details.destructiveReason?.lowercased().contains("rsync") == true)
+        #expect(details.formattedMessage.contains("Risk: DESTRUCTIVE"))
+    }
+
+    @Test("ordinary run_command is not flagged as destructive")
+    func ordinaryRunCommandIsNotFlagged() {
+        let details = WebToolApprovalDetails(
+            call: WebToolCall(name: "run_command", arguments: ["command": "swift test"]),
+            projectRoot: "/tmp/project"
+        )
+
+        #expect(!details.isDestructive)
+        #expect(details.destructiveReason == nil)
+        #expect(!details.formattedMessage.contains("Risk: DESTRUCTIVE"))
+    }
+
     @Test("edit_file request reports old/new sizes and keeps every parameter")
     func editFileDetails() {
         let details = WebToolApprovalDetails(

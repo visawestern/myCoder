@@ -173,14 +173,47 @@ extension ChatPanelView {
         // complete, но цель встала на паузу «лимит исчерпан»).
         if outcome.verdict.complete {
             _ = try? GoalStore.setState(id: goal.id, state: .done, homeDirectory: home)
-            await MainActor.run {
-                if let sessionID {
-                    messageStore.append(
-                        Message(id: UUID().uuidString, role: .system,
-                                content: "🎯 Цель выполнена: \(goal.title)",
-                                isStreaming: false),
-                        to: sessionID)
+            // UI обязан увидеть новое состояние сразу: иначе кнопки
+            // паузы/стопа остаются «зависшими» у завершённой цели.
+            GoalService.notifyChanged()
+
+            if GoalFinalizationLogic.shouldStartFinal(goal: goal) {
+                // Последнее действие выполненной цели — автоматически
+                // создать и запустить итоговую проверку плана
+                // (директива 2026-11-14).
+                let finalGoal = GoalFinalizationLogic.finalGoal(
+                    for: goal,
+                    context: appState.goalContext(for: sessionID)
+                )
+                _ = try? GoalStore.upsert(finalGoal, homeDirectory: home)
+                _ = GoalLauncher.launch(
+                    goalID: finalGoal.id,
+                    homeDirectory: home,
+                    language: appState.appLanguage,
+                    fallbackChatID: sessionID
+                )
+                await MainActor.run {
+                    if let sessionID {
+                        messageStore.append(
+                            Message(id: UUID().uuidString, role: .system,
+                                    content: "🎯 Цель выполнена: \(goal.title). Запущена итоговая проверка плана.",
+                                    isStreaming: false),
+                            to: sessionID)
+                    }
                 }
+            } else {
+                // Итоговая цель выполнена → полная остановка целей:
+                // статусы уже обновлены, добавляем «звоночек».
+                await MainActor.run {
+                    if let sessionID {
+                        messageStore.append(
+                            Message(id: UUID().uuidString, role: .system,
+                                    content: "🎉 План полностью проверен и отмечен прогрессом >95/100. Цель остановлена.",
+                                    isStreaming: false),
+                            to: sessionID)
+                    }
+                }
+                CompletionSoundPlayer.shared.playIfNeeded()
             }
             return
         }

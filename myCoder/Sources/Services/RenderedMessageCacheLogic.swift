@@ -27,6 +27,16 @@ enum RenderedMessageCacheLogic {
     static let perChatLimit = 100
     static let globalLimit = 500
 
+    /// Может ли строка сообщения попасть в кэш отрендеренных пар.
+    ///
+    /// Вход: `isStreaming` — идёт ли ответ прямо сейчас.
+    /// Выход: false для стриминга (промежуточный текст не закрепляется),
+    /// true, когда ответ завершён.
+    /// Зависимости: нет (чистая функция).
+    static func shouldCache(isStreaming: Bool) -> Bool {
+        !isStreaming
+    }
+
     /// Отметить обращение к чату: он становится самым «свежим».
     ///
     /// Вход: `sessionID`; `state`.

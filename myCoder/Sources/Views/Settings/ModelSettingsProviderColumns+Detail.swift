@@ -116,15 +116,23 @@ extension ModelSettingsProviderColumns {
                 commitCustomProviderDraft(custom.id)
             }
 
-            let key = custom.getSecureAPIKey() ?? ""
+            // Основной ключ всегда отражает первую строку списка пула:
+            // единый источник истины — список, поле сверху лишь его отображение.
+            let primaryFromList = apiKeysPoolRows.first ?? ""
             InlineEditableField(
                 title: L.t(AppLocalizationKey.locApiKey),
-                value: key.isEmpty ? "" : "••••••••••••",
+                value: primaryFromList.isEmpty ? "" : "••••••••••••",
                 placeholder: custom.type == .openModel ? "om-..." : "sk-...",
                 isSecure: true,
-                editValue: key
+                editValue: primaryFromList
             ) { value in
+                // Запись изменения в первую строку списка.
                 customAPIKeyDraft = value
+                if apiKeysPoolRows.isEmpty {
+                    apiKeysPoolRows = [value]
+                } else {
+                    apiKeysPoolRows[0] = value
+                }
                 commitCustomProviderDraft(custom.id)
             }
 
@@ -195,16 +203,12 @@ extension ModelSettingsProviderColumns {
                 commitCustomProviderDraft(custom.id)
             }
 
-            Text(L.t("API key pool (one per line; the primary key above is used first)"))
+            Text(L.t(AppLocalizationKey.locAPIKeyPool))
                 .interfaceFont(size: 11, weight: .medium)
                 .foregroundColor(Color.mimo.textSecondary)
-            TextEditor(text: $apiKeysPoolText)
-                .frame(height: 64)
-                .zcodeTextFieldStyle()
-                .interfaceFont(size: 11, design: .monospaced)
-                .onChange(of: apiKeysPoolText) { _ in
-                    commitCustomProviderDraft(custom.id)
-                }
+            APIKeyListEditorView(keys: $apiKeysPoolRows) {
+                commitCustomProviderDraft(custom.id)
+            }
 
             QuotaStatusView(providerID: custom.id)
         }
@@ -289,7 +293,10 @@ extension ModelSettingsProviderColumns {
             customRequestLimitDraft = custom.requestLimitPerMinute > 0 ? String(custom.requestLimitPerMinute) : ""
             customTokenQuotaDraft = custom.tokenQuotaPerMinute > 0 ? String(custom.tokenQuotaPerMinute) : ""
             customPerKeyLimitDraft = custom.apiKeyLimitPerMinute > 0 ? String(custom.apiKeyLimitPerMinute) : ""
-            apiKeysPoolText = ProviderAPIKeyPoolStore.load(providerID: custom.id).joined(separator: "\n")
+            apiKeysPoolRows = ProviderAPIKeyListLogic.fullList(
+                primary: custom.getSecureAPIKey() ?? "",
+                pool: ProviderAPIKeyPoolStore.load(providerID: custom.id)
+            )
         }
         if let local = localProvider(for: option.id) {
             localHostDraft = local.host

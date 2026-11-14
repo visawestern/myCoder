@@ -460,19 +460,10 @@ struct WebChatDriver {
                         // approvalWaitSeconds). Deny/timeout → an honest
                         // tool_result goes back to the model so it can adapt;
                         // the turn is no longer aborted with a dead status line.
-                        let request = WebToolApprovalRequest(
-                            id: UUID().uuidString,
-                            tool: call.name,
-                            message: WebToolAccessGate.outOfProjectPath(
-                                for: call,
-                                projectRoot: projectRoot
-                            ).map {
-                                OutOfProjectAccessLogic.approvalMessage(
-                                    tool: call.name,
-                                    path: $0,
-                                    projectRoot: projectRoot
-                                )
-                            } ?? "\(call.name) requires approval (AccessLevel: \(accessLevel.rawValue))"
+                        let request = WebChatApprovalRequestLogic.make(
+                            call: call,
+                            projectRoot: projectRoot,
+                            accessLevel: accessLevel
                         )
                         approvalBox?.post(request)
                         emit(.approvalRequest(request))

@@ -205,6 +205,9 @@ struct WebToolApprovalRequest: Equatable {
     let id: String
     let tool: String
     let message: String
+    /// True when the call is a destructive shell command; the chat renders
+    /// the RED confirmation card.
+    var isDestructive: Bool = false
 }
 
 /// Thread-safe one-slot approval mailbox + bounded wait for the driver.

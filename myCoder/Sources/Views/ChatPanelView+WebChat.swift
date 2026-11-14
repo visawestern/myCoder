@@ -329,6 +329,7 @@ extension ChatPanelView {
                         m.pendingApprovalID = request.id
                         m.pendingApprovalTool = request.tool
                         m.pendingApprovalMessage = request.message
+                        m.pendingApprovalIsDestructive = request.isDestructive
                         m.isStreaming = true
                     }
                 default:

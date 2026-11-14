@@ -187,7 +187,8 @@ extension ChatPanelView {
                 approval = PendingToolApproval(
                     callID: callID,
                     tool: call.name,
-                    message: details.formattedMessage
+                    message: details.formattedMessage,
+                    isDestructive: details.isDestructive
                 )
             }
             return PreparedLocalToolCall(
@@ -274,6 +275,31 @@ extension ChatPanelView {
             "⏸ queued local tool approvals: " + approvals.map { "\($0.tool) id=\($0.id)" }.joined(separator: ", ")
         )
         playLocalApprovalSound()
+    }
+
+    /// Исполняет один вызов локального текстового цикла (MiMo Serve).
+    /// Деструктивная shell-команда сначала показывает КРАСНУЮ карточку и
+    /// ждёт вердикт; остальные вызовы идут через обычный гейт исполнителя.
+    ///
+    /// Вход: вызов, исполнитель, id assistant-сообщения.
+    /// Выход: результат инструмента.
+    /// Зависимости: `DestructiveCommandApprovalLogic`,
+    /// `enqueueLocalToolApprovals`, `awaitLocalToolApproval`.
+    @MainActor
+    func executeWithDestructiveApproval(
+        _ call: WebToolCall,
+        executor: ProjectWebToolExecutor,
+        assistantID: String
+    ) async -> String {
+        guard let approval = DestructiveCommandApprovalLogic.approval(
+            call: call, projectRoot: executor.projectRoot
+        ) else {
+            return await executor.execute(call)
+        }
+        enqueueLocalToolApprovals([approval], assistantID: assistantID)
+        let approved = await awaitLocalToolApproval(approval, assistantID: assistantID)
+        guard approved else { return DestructiveCommandApprovalLogic.denialMessage }
+        return await executor.execute(call, userApproved: true)
     }
 
     /// Ждёт вердикт пользователя по одному approval.

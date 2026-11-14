@@ -69,23 +69,32 @@ final class RenderedMessageStore {
         build: () -> RenderedRowData
     ) -> RenderedRowData {
         let key = RenderedMessageKey(sessionID: sessionID, pairIndex: pairIndex)
-        let (nextState, evicted) = RenderedMessageCacheLogic.insert(
-            sessionID: sessionID,
-            pairIndex: pairIndex,
-            state: state
-        )
-        state = nextState
 
-        // Вытесненные пары освобождаем из памяти.
-        for victim in evicted {
-            records.removeValue(forKey: victim)
-            stats.evictions += 1
-        }
-
+        // Вставляем пару только когда её ещё нет: для существующей пары
+        // insert не имеет смысла (пара уже учтена в лимитах).
         if records[key] == nil {
+            let (nextState, evicted) = RenderedMessageCacheLogic.insert(
+                sessionID: sessionID,
+                pairIndex: pairIndex,
+                state: state
+            )
+            state = nextState
+            // Вытесненные пары освобождаем из памяти.
+            for victim in evicted {
+                records.removeValue(forKey: victim)
+                stats.evictions += 1
+            }
             records[key] = RenderedPairRecord()
             stats.inserts += 1
         }
+
+        // Любое обращение к чату делает его «свежим» (LRU): и попадание,
+        // и промах, чтобы горячий чат не вытеснялся при глобальном
+        // переполнении.
+        state = RenderedMessageCacheLogic.recordAccess(
+            sessionID: sessionID,
+            state: state
+        )
 
         guard var record = records[key] else { return build() }
         if let existing = record.rows[messageID], existing.contentHash == contentHash {

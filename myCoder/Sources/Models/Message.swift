@@ -100,6 +100,10 @@ struct PendingToolApproval: Identifiable, Equatable {
     /// approval is an out-of-project access request instead of a plain
     /// tool-approval prompt.
     let accessGrant: String?
+    /// True when the call is a destructive shell command (`rm -rf`,
+    /// `rsync --delete`, `migrate --force`, `DROP TABLE`, …). The inline card
+    /// turns RED even at Full access.
+    let isDestructive: Bool
 
     init(
         id: String = UUID().uuidString,
@@ -107,7 +111,8 @@ struct PendingToolApproval: Identifiable, Equatable {
         tool: String,
         message: String,
         createdAt: Date = Date(),
-        accessGrant: String? = nil
+        accessGrant: String? = nil,
+        isDestructive: Bool = false
     ) {
         self.id = id
         self.callID = callID
@@ -115,6 +120,7 @@ struct PendingToolApproval: Identifiable, Equatable {
         self.message = message
         self.createdAt = createdAt
         self.accessGrant = accessGrant
+        self.isDestructive = isDestructive
     }
 }
 
@@ -152,6 +158,9 @@ struct Message: Identifiable {
     var pendingApprovalID: String?
     var pendingApprovalTool: String?
     var pendingApprovalMessage: String?
+    /// True when the pending web-driver approval is a destructive command;
+    /// the inline card turns RED even at Full access.
+    var pendingApprovalIsDestructive: Bool
     /// Queued inline approvals for direct local-model tool loops. Multiple
     /// calls can wait at once, across multiple chats.
     var pendingApprovals: [PendingToolApproval]
@@ -189,7 +198,7 @@ struct Message: Identifiable {
         return end.timeIntervalSince(startedAt)
     }
 
-    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil, rawResponses: [String]? = nil, contextSummary: String? = nil, toolResultMeta: [String: ToolResultMeta] = [:]) {
+    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovalIsDestructive: Bool = false, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil, rawResponses: [String]? = nil, contextSummary: String? = nil, toolResultMeta: [String: ToolResultMeta] = [:]) {
         self.id = id
         self.serverID = serverID
         self.role = role
@@ -214,6 +223,7 @@ struct Message: Identifiable {
         self.pendingApprovalID = pendingApprovalID
         self.pendingApprovalTool = pendingApprovalTool
         self.pendingApprovalMessage = pendingApprovalMessage
+        self.pendingApprovalIsDestructive = pendingApprovalIsDestructive
         self.pendingApprovals = pendingApprovals
         self.sendInfo = sendInfo
         self.rawResponses = rawResponses

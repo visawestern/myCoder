@@ -450,7 +450,7 @@ extension ChatPanelView {
                 let loopResult = await AgentToolLoopLogic.run(
                     initialText: firstResponse.textContent,
                     execute: { call in
-                        let result = await loopExecutor.execute(call)
+                        let result = await executeWithDestructiveApproval(call, executor: loopExecutor, assistantID: assistantID)
                         // U5: тот же синхрон панели, что и в direct-цикле —
                         // серверный путь здесь не участвует.
                         if TodoPanelSyncLogic.updatesChecklist(toolName: call.name) {

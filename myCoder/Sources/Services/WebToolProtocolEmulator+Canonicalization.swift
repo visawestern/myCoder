@@ -75,6 +75,11 @@ extension WebToolProtocolEmulator {
         case "browser_fetch", "browserfetch", "browse", "browser", "open_url",
              "browser_open", "web_browse", "dom_fetch", "visit", "open_web_page":
             return WebEmulatedTool.browserFetch.rawValue
+        // Обычный интернет-поиск (WebSearchLogic, DuckDuckGo HTML). Общие
+        // имена, не привязанные к конкретной модели.
+        case "web_search", "websearch", "search_web", "internet_search",
+             "search_internet", "search_the_web", "web_query", "query_web":
+            return WebEmulatedTool.webSearch.rawValue
         // Installed skills (Claude Code Skill parity)
         case "skill", "use_skill", "load_skill", "skills":
             return WebEmulatedTool.skill.rawValue
@@ -161,6 +166,8 @@ extension WebToolProtocolEmulator {
                      "click": ["click", "click_selector", "target", "button", "link_selector", "href"],
                      "screenshot": ["screenshot", "shot", "capture", "snapshot", "image"],
                      "limit": ["limit", "max_chars", "maxchars", "max_length", "chars", "max"]]
+        case .webSearch:
+            table = ["query": ["query", "q", "search_query", "query_string", "terms", "keywords", "text"]]
         case .skill:
             table = ["name": ["name", "skill", "skill_name", "skill_id", "id"]]
         case .todoRead, .taskList, .task:

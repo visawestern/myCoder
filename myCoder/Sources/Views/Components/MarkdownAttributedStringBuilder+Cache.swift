@@ -398,6 +398,11 @@ extension MarkdownAttributedStringBuilder {
                 if let resolved = ChatFileOpenLogic.resolveFilePath(value, projectRoot: projectRoot) {
                     attributedCode.addAttribute(.chatFilePath, value: resolved, range: NSRange(location: 0, length: attributedCode.length))
                     attributedCode.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: attributedCode.length))
+                    // Ссылка своей схемы: без `.link` NSTextView не показывает
+                    // курсор-палец и не считает токен кликабельным.
+                    if let link = ChatFileLinkLogic.url(forPath: resolved) {
+                        attributedCode.addAttribute(.link, value: link, range: NSRange(location: 0, length: attributedCode.length))
+                    }
                 }
                 result.append(attributedCode)
             case .link(let title, let url):
@@ -420,6 +425,9 @@ extension MarkdownAttributedStringBuilder {
                     // Если файла нет — остаётся стиль ссылки без клика.
                     if let resolved = MarkdownLinkLogic.resolveFile(url, projectRoot: projectRoot) {
                         attributes[.chatFilePath] = resolved
+                        if let link = ChatFileLinkLogic.url(forPath: resolved) {
+                            attributes[.link] = link
+                        }
                     }
                     result.append(NSAttributedString(string: title, attributes: attributes))
                 case .unsupported:
@@ -480,6 +488,11 @@ extension MarkdownAttributedStringBuilder {
                 attributes[.chatFilePath] = resolved
                 attributes[.foregroundColor] = brand
                 attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                // Ссылка своей схемы: без `.link` NSTextView не показывает
+                // курсор-палец и не считает токен кликабельным.
+                if let link = ChatFileLinkLogic.url(forPath: resolved) {
+                    attributes[.link] = link
+                }
             }
             result.append(NSAttributedString(string: token, attributes: attributes))
             last = match.range.location + match.range.length

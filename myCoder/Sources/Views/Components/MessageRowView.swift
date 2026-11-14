@@ -244,7 +244,8 @@ struct MessageRow: View {
             WebToolApprovalCardView(
                 approvalID: approvalID,
                 tool: tool,
-                message: message.pendingApprovalMessage ?? ""
+                message: message.pendingApprovalMessage ?? "",
+                isDestructive: message.pendingApprovalIsDestructive
             )
         }
 
@@ -347,7 +348,8 @@ struct MessageRow: View {
             approvalID: approval.id,
             tool: approval.tool,
             message: approval.message,
-            notificationName: .localToolApprovalResolved
+            notificationName: .localToolApprovalResolved,
+            isDestructive: approval.isDestructive
         )
     }
 
@@ -476,8 +478,13 @@ struct MessageRow: View {
     }
 
     /// Ключ кэша пары, когда известны сессия и номер пары.
+    ///
+    /// Стриминг не кэшируется (`RenderedMessageCacheLogic.shouldCache`):
+    /// запись фиксируется только когда ответ завершён, иначе промежуточный
+    /// текст закреплялся бы в памяти.
     private var renderedKey: RenderedMessageKey? {
-        guard let sessionID, let pairIndex else { return nil }
+        guard RenderedMessageCacheLogic.shouldCache(isStreaming: message.isStreaming),
+              let sessionID, let pairIndex else { return nil }
         return RenderedMessageKey(sessionID: sessionID, pairIndex: pairIndex)
     }
 

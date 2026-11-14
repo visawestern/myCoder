@@ -67,6 +67,48 @@ enum HarnessPromptQuality {
     /// native runtime should carry so the agent is predictable about
     /// rendering, parallelism, file references, and not clobbering
     /// unfamiliar user work. Kept stable so tests can assert it.
+    /// Safety guardrail for destructive operations (user directive 2026-11-14).
+    /// Restores/rollbacks/undo, database schema changes and GitHub mutations
+    /// must FIRST be asked in plain text; irreversible deletions require a
+    /// local backup (DB schema copy goes to tmp). The git-specific details
+    /// already live in the "Git safety" block inside `collaborationCore`;
+    /// this block EXTENDS them to database/GitHub without repeating the git
+    /// command list.
+    static let safetyGuardrail = """
+    # Safety: restore, rollback, database, GitHub, irreversible deletion
+    - Before ANY restoration, rollback, undo, database schema change, or GitHub action that deletes or modifies anything — ALWAYS ask the user first, in plain text (a tool call is not a substitute for asking).
+    - Before ANY irreversible deletion — of files, database records, or GitHub repositories/branches — ALWAYS create a LOCAL backup (for a database schema change, store the local copy in tmp) and ask the user.
+    - Delete files ONE AT A TIME, each with a local backup in tmp — unless the user EXPLICITLY stated in the prompt that a full, irreversible deletion is allowed (then proceed only after confirming once more). Deleting empty folders is exempt from the backup requirement.
+    - NEVER wipe, reset, re-seed or drop a database (drop/truncate/flush, `migrate --force`, `migrate:fresh`, `db:wipe`, `prisma migrate reset`, `supabase db reset`) without a local backup AND explicit user confirmation.
+    - Destructive commands ALWAYS need the red confirmation card, even at Full access: `rm -rf`, `rsync --delete`, `git push --force`, `git reset --hard`, `git clean -fdx`, `terraform destroy`, `kubectl delete`, `docker system prune`, DROP/TRUNCATE/FLUSHALL, migration resets.
+    - This extends the "Git safety" block above; its destructive commands are covered by both rules.
+    """
+
+    /// One-line safety guardrail for emulated web/OpenAI-compatible routes,
+    /// where the full block would push the paste over vendor budgets.
+    static let compactSafetyGuardrail = "Before ANY restore/rollback/undo, DB schema change, GitHub mutation or destructive command (`rm -rf`, `rsync --delete`, `git push --force`, `git reset --hard`, `migrate --force`/reset, DROP/TRUNCATE/FLUSHALL, `terraform destroy`) — ASK the user first in plain text; back up locally first (DB schema copy to tmp); delete files one at a time with a tmp backup unless the user explicitly allowed irreversible deletion; never wipe a database without a backup."
+
+    /// Media creation rule for 2D/3D objects and games (user directive
+    /// 2026-11-14, refined with free-only ready-made assets and the paid-model
+    /// option). Refines `humanProblemSolvingGuidance` for media: references
+    /// come first, ready-made assets need explicit consent, open-ready assets
+    /// must be verified free, and paid models are shown only via the dedicated
+    /// option — so no instruction text is duplicated.
+    static let mediaReferenceGuardrail = """
+    # Media creation: 2D/3D objects and games
+    - When asked to make a 2D/3D object or game (e.g. "make an aquarium"), FIRST find reference images online and present 2–4 options; let the user choose which reference to follow before creating.
+    - This refines the "Problem solving" search-first rule: ready-made assets need explicit consent — always offer "skip ready-made 3D objects"; if chosen, build from the chosen reference image instead.
+    - Ready-made 3D objects MUST be free (verify license/price first); paid models only via "show paid 3D models", with prices stated.
+    - Do not proceed until the user confirms the reference, asset source, or style.
+    """
+
+    /// One-paragraph media rule for emulated web/OpenAI-compatible routes,
+    /// where the full `mediaReferenceGuardrail` block would push the paste
+    /// over vendor budgets. Keeps every requirement of the full rule: free
+    /// ready-made assets verified by price/license and paid models only via
+    /// the explicit option.
+    static let compactMediaReferenceGuardrail = "When creating a 2D/3D object or game (e.g. \"make an aquarium\"): first find reference images online and let the user choose one before creating. You may offer ready-made assets, but always ask whether the user wants to skip ready-made 3D objects — if yes, build from the chosen reference image instead. Ready-made 3D objects must be free — always verify the price/license first; show paid models only via the \"show paid 3D models\" option, with prices stated. Never pick references, styles, or assets silently."
+
     static let collaborationCore = """
     You are an AI agent running in myCoder, a coding agent harness. Help the user accomplish their goals using the tools you have available.
 
@@ -91,6 +133,8 @@ enum HarnessPromptQuality {
     - BEFORE running any such command, FIRST verify that all current changes are committed and pushed and the branch is clean (git status shows nothing to commit, and the local branch is in sync with its remote). If that pre-check passes, the command is safe.
     - If the working tree is NOT clean/committed/pushed, DO NOT run the destructive command. Instead, either (a) commit/push the current changes first, or (b) make a backup of every file or state the command could alter, so that corrupted or lost files never have to be recreated from scratch.
     - When you cannot verify the branch is clean and no backup exists, stop and ask the user before mutating git state.
+
+    \(safetyGuardrail)
     """
 
     /// Response conduct merged from Claude Fable 5.2's working style: state

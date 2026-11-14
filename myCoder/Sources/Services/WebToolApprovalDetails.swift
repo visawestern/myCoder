@@ -20,6 +20,12 @@ struct WebToolApprovalDetails: Equatable {
     let parameters: [WebToolApprovalParameter]
     let impact: String
     let rationale: String?
+    /// True when the call is a destructive shell command (`rm -rf`,
+    /// `rsync --delete`, `migrate --force`, `DROP TABLE`, …). Such a call
+    /// gets the RED confirmation card even at Full access.
+    let isDestructive: Bool
+    /// Why the call is destructive; shown in the card.
+    let destructiveReason: String?
 
     init(call: WebToolCall, projectRoot: String, modelContext: String = "") {
         let canonical = WebToolProtocolEmulator.canonicalized(call)
@@ -37,6 +43,9 @@ struct WebToolApprovalDetails: Equatable {
         }
         self.impact = Self.impact(for: resolvedTool, arguments: arguments, projectRoot: projectRoot)
         self.rationale = Self.rationale(from: modelContext)
+        let destructiveReason = WebToolAccessGate.destructiveReason(for: canonical)
+        self.destructiveReason = destructiveReason
+        self.isDestructive = destructiveReason != nil
     }
 
     /// Full text used by the inline approval card and the approval mailbox.
@@ -47,6 +56,9 @@ struct WebToolApprovalDetails: Equatable {
             "Location: \(location)",
             "Project: \(projectRoot)",
         ]
+        if let destructiveReason {
+            lines.append("Risk: DESTRUCTIVE — \(destructiveReason)")
+        }
         if let rationale, !rationale.isEmpty {
             lines.append("Model context: \(rationale)")
         }

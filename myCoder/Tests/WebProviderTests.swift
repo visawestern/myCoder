@@ -563,11 +563,13 @@ struct WebSessionLogicTests {
         #expect(WebToolAccessGate.permission(for: call, accessLevel: .fullAccess) == .allow)
     }
 
-    @Test func mutatingCommandStillRequiresApprovalBelowFull() {
+    @Test func mutatingCommandRequiresApprovalAtEveryLevel() {
+        // Директива 2026-11-14: `rm -rf build` деструктивна — красная
+        // карточка обязательна даже при полном доступе.
         let rm = WebToolCall(name: "run_command", arguments: ["command": "rm -rf build"])
         #expect(WebToolAccessGate.permission(for: rm, accessLevel: .askBeforeChanges) == .requireApproval)
         #expect(WebToolAccessGate.permission(for: rm, accessLevel: .editAutomatically) == .requireApproval)
-        #expect(WebToolAccessGate.permission(for: rm, accessLevel: .fullAccess) == .allow)
+        #expect(WebToolAccessGate.permission(for: rm, accessLevel: .fullAccess) == .requireApproval)
     }
 
     @Test func readOnlyGitSubcommandsAllowedMutatingGitGated() {

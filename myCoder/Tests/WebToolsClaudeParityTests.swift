@@ -19,7 +19,7 @@ struct WebToolsClaudeParityTests {
     @Test func newToolsHaveSchemasAndDescriptions() {
         for tool in [WebEmulatedTool.webFetch, WebEmulatedTool.skill,
                      WebEmulatedTool.taskCreate, WebEmulatedTool.taskList,
-                     WebEmulatedTool.taskUpdate] as [WebEmulatedTool] {
+                     WebEmulatedTool.taskUpdate, WebEmulatedTool.webSearch] as [WebEmulatedTool] {
             #expect(!tool.argumentSchema.isEmpty, "\(tool.rawValue) needs a schema")
             #expect(!tool.description.isEmpty, "\(tool.rawValue) needs a description")
             #expect(!tool.isCore, "\(tool.rawValue) must stay out of the minimal core profile")
@@ -29,6 +29,7 @@ struct WebToolsClaudeParityTests {
         #expect(WebEmulatedTool.taskCreate.rawValue == "task_create")
         #expect(WebEmulatedTool.taskList.rawValue == "task_list")
         #expect(WebEmulatedTool.taskUpdate.rawValue == "task_update")
+        #expect(WebEmulatedTool.webSearch.rawValue == "web_search")
     }
 
     // MARK: - Aliases: every model spelling resolves to the right tool
@@ -40,6 +41,7 @@ struct WebToolsClaudeParityTests {
             ("Glob", "glob"), ("Grep", "grep"),
             ("Task", "task"), ("TodoWrite", "todo_write"),
             ("TodoRead", "todo_read"), ("WebFetch", "web_fetch"),
+            ("WebSearch", "web_search"),
             ("Skill", "skill"), ("TaskCreate", "task_create"),
             ("TaskList", "task_list"), ("TaskUpdate", "task_update"),
         ]
@@ -62,6 +64,9 @@ struct WebToolsClaudeParityTests {
             ("use_skill", "skill"), ("load_skill", "skill"),
             ("subagent", "task"), ("spawn", "task"),
             ("todos", "todo_read"),
+            ("web_search", "web_search"), ("websearch", "web_search"),
+            ("search_web", "web_search"), ("internet_search", "web_search"),
+            ("search_internet", "web_search"), ("search_the_web", "web_search"),
         ]
         for (alias, canonical) in cases {
             #expect(WebToolProtocolEmulator.canonicalToolName(alias) == canonical,
@@ -123,6 +128,7 @@ struct WebToolsClaudeParityTests {
 
     @Test func readOnlyNewToolsNeedNoApproval() {
         #expect(!WebToolProtocolEmulator.requiresApproval(WebToolCall(name: "web_fetch", arguments: [:])))
+        #expect(!WebToolProtocolEmulator.requiresApproval(WebToolCall(name: "web_search", arguments: [:])))
         #expect(!WebToolProtocolEmulator.requiresApproval(WebToolCall(name: "skill", arguments: [:])))
         #expect(!WebToolProtocolEmulator.requiresApproval(WebToolCall(name: "task_list", arguments: [:])))
     }

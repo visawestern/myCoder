@@ -88,6 +88,9 @@ extension Color {
         static let success = Color(red: 0.20, green: 0.82, blue: 0.72)
         static let warning = Color(red: 0.95, green: 0.55, blue: 0.25)
         static let error = Color(red: 0.95, green: 0.35, blue: 0.55)
+        /// Red used by the destructive-command approval card. Distinct from
+        /// `error` (pink) so the card reads as a hard stop, not a status.
+        static let danger = Color(red: 0.86, green: 0.12, blue: 0.12)
         
         // Input
         static var input: Color {

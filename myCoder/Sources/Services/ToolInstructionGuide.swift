@@ -55,6 +55,8 @@ enum ToolInstructionGuide {
             return "url must use http/https. limit optionally bounds returned characters. This retrieves text over HTTP; use browser_fetch for DOM interaction or a browser screenshot."
         case .browserFetch:
             return "url must use http/https and navigates on every call. click runs before reading: click is a CSS selector for a page element. selector chooses an element's text; script is a JavaScript expression evaluated in the page; selector and script are mutually exclusive. With neither, return page text. limit bounds returned text for page/selector reads, not the serialized script result or image. screenshot=true requests a PNG returned as ATTACHED_IMAGE:image/png:<base64>; if that marker is absent, do not claim a screenshot was obtained. Browser/session availability is required. Example:\n```tool\n{\"name\": \"browser_fetch\", \"args\": {\"url\": \"https://example.com\", \"click\": \"button.details\", \"selector\": \"main\", \"screenshot\": \"true\", \"limit\": \"4000\"}}\n```"
+        case .webSearch:
+            return "query is the internet search text. Returns result titles, URLs and snippets. Use for current information instead of guessing; do not invent sources that are not in the result list."
         case .skill:
             return "Omit name to list installed skill IDs; provide a returned name to read that skill's instructions. This reads installed instructions and does not install or execute a skill automatically."
         case .taskCreate:

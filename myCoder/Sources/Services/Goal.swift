@@ -33,6 +33,27 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
         var note: String?
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, title, plan, state, createdAt, updatedAt, lastError
+        case isFinal, projectPath, chatID
+    }
+
+    /// Декодирование с обратной совместимостью: старые сохранённые цели
+    /// (без ключа `isFinal`) читаются как обычные (`isFinal == false`).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        plan = try c.decode([PlanItem].self, forKey: .plan)
+        state = try c.decode(State.self, forKey: .state)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
+        isFinal = try c.decodeIfPresent(Bool.self, forKey: .isFinal) ?? false
+        projectPath = try c.decodeIfPresent(String.self, forKey: .projectPath)
+        chatID = try c.decodeIfPresent(String.self, forKey: .chatID)
+    }
+
     let id: UUID
     var title: String
     var plan: [PlanItem]
@@ -40,6 +61,10 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var lastError: String?
+    /// Итоговая цель проверки плана (создаётся автоматически после
+    /// завершения обычной цели; по её завершению цель останавливается
+    /// полностью). Отличает «проверочную» цель от обычной.
+    var isFinal: Bool
     /// Project the goal belongs to. Nil for a chat-only goal (standalone
     /// chat) and for legacy goals created before binding existed.
     var projectPath: String?
@@ -54,6 +79,7 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
          lastError: String? = nil,
+         isFinal: Bool = false,
          projectPath: String? = nil,
          chatID: String? = nil) {
         self.id = id
@@ -63,6 +89,7 @@ struct UserGoal: Codable, Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastError = lastError
+        self.isFinal = isFinal
         self.projectPath = projectPath
         self.chatID = chatID
     }

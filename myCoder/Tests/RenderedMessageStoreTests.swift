@@ -160,6 +160,32 @@ struct RenderedMessageStoreTests {
         #expect(RenderedMessageStore.shared.stats.misses == 2)
     }
 
+    @Test("Обращение через row делает чат свежим (LRU)")
+    func rowAccessMakesChatFresh() {
+        // Пять чатов по 90 пар = 450, затем 60 пар шестого чата.
+        for chat in ["A", "B", "C", "D", "E"] {
+            for i in 0..<90 {
+                _ = row(chat, i, "m\(i)", i)
+            }
+        }
+        // Обращаемся к A через row — A становится свежим.
+        _ = row("A", 0, "m0", 0)
+        for i in 0..<60 {
+            _ = row("F", i, "m\(i)", i)
+        }
+        // 450 + 60 = 510 > 500: вытесняется самый старый чат B, а не A.
+        #expect(RenderedMessageStore.shared.record(
+            for: RenderedMessageKey(sessionID: "A", pairIndex: 0)
+        ) != nil)
+        #expect(RenderedMessageStore.shared.record(
+            for: RenderedMessageKey(sessionID: "B", pairIndex: 0)
+        ) == nil)
+        #expect(RenderedMessageStore.shared.record(
+            for: RenderedMessageKey(sessionID: "B", pairIndex: 40)
+        ) != nil)
+        #expect(RenderedMessageStore.shared.totalPairs == 500)
+    }
+
     @Test("reset полностью очищает кэш и счётчики")
     func resetClearsEverything() {
         _ = row("s1", 0, "m1", 1)

@@ -192,6 +192,7 @@ extension ChatPanelView {
                 m.pendingApprovalID = nil
                 m.pendingApprovalTool = nil
                 m.pendingApprovalMessage = nil
+                m.pendingApprovalIsDestructive = false
             }
         }
     }

@@ -12,8 +12,9 @@ import SwiftUI
 /// Dependencies: `WebBrowserCastLogic` for tab/PiP rules.
 struct ChromecastSection: View {
     @EnvironmentObject var appState: AppState
-    /// Spoiler starts collapsed: the right panel stays compact until asked.
-    @State private var isExpanded = false
+    /// Свёрнутость секции и клик по её заголовку (общая с остальными
+    /// секциями панели, состояние — на чат).
+    let spoiler: RightPanelSpoilerBinding
 
     private var config: WebBrowserPanelConfig? {
         WebBrowserCastLogic.displayConfig(
@@ -26,7 +27,7 @@ struct ChromecastSection: View {
         if let config {
             VStack(alignment: .leading, spacing: 8) {
                 header(config)
-                if isExpanded {
+                RightPanelSpoilerBody(isCollapsed: spoiler.isCollapsed(.chromecast)) {
                     ChromecastThumbnail(store: appState.webBrowserCast,
                                         config: config) {
                         appState.openWebBrowserPanel(config)
@@ -42,37 +43,26 @@ struct ChromecastSection: View {
         }
     }
 
-    /// Spoiler header: one click expands/collapses the live image.
+    /// Заголовок-спойлер: клик скрывает или показывает живую картинку.
     ///
-    /// - Parameter config: tab currently cast.
+    /// - Parameter config: вкладка, которая транслируется сейчас (её имя
+    ///   показывается рядом с названием секции).
+    /// - Returns: строка заголовка с шевроном и названием провайдера.
     private func header(_ config: WebBrowserPanelConfig) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.15)) {
-                isExpanded.toggle()
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.cyan)
-                Text(L.t(AppLocalizationKey.locChromecast))
-                    .interfaceFont(size: 12, weight: .semibold)
-                    .foregroundColor(Color.mimo.textPrimary)
-                Text(config.providerName)
-                    .interfaceFont(size: 10)
-                    .foregroundColor(Color.mimo.textMuted)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .interfaceFont(size: 9, weight: .semibold)
-                    .foregroundColor(Color.mimo.textMuted)
-            }
-            .contentShape(Rectangle())
+        RightPanelSpoilerHeader(
+            section: .chromecast,
+            title: L.t(AppLocalizationKey.locChromecast),
+            icon: "dot.radiowaves.left.and.right",
+            tint: Color.mimo.cyan,
+            isCollapsed: spoiler.isCollapsed(.chromecast),
+            titleSize: 12,
+            onToggle: { spoiler.toggle(.chromecast) }
+        ) {
+            Text(config.providerName)
+                .interfaceFont(size: 10)
+                .foregroundColor(Color.mimo.textMuted)
+                .lineLimit(1)
         }
-        .buttonStyle(HandCursorButtonStyle())
-        .help(L.t(AppLocalizationKey.locChromecastHint))
-        .accessibilityLabel(L.t(AppLocalizationKey.locChromecast))
-        .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     }
 }
 

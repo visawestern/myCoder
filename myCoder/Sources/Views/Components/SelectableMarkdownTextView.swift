@@ -37,8 +37,24 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
         isLightInterface ?? (colorScheme == .light)
     }
 
+    /// Полный профиль рендера — ключ пула готовых view и кэша attributed.
+    private var renderKey: MarkdownAttributedStringBuilder.RenderKey {
+        MarkdownAttributedStringBuilder.key(
+            text: text,
+            fontSize: scaledFontSize,
+            textColor: resolvedTextColor,
+            projectRoot: projectRoot,
+            codeSettings: codeSettings,
+            isLightInterface: resolvedIsLight
+        )
+    }
+
     func makeNSView(context: Context) -> NSTextView {
-        let textView = PathClickTextView()
+        // Переиспользуем готовый view с сохранённой TextKit-раскладкой
+        // (пул). Если свободного нет — создаём новый.
+        let textView = RenderedTextViewPool.shared.dequeue(key: renderKey)
+            ?? PathClickTextView()
+        textView.renderPoolKey = renderKey
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = true
@@ -101,10 +117,23 @@ struct SelectableMarkdownTextView: NSViewRepresentable {
     func makeCoordinator() -> FileOpenMenuCoordinator {
         FileOpenMenuCoordinator()
     }
+
+    /// Строка покидает дерево (LazyVStack уничтожил её): возвращаем view
+    /// в пул для повторного использования. Сначала отцепляем, чтобы пул
+    /// гарантированно принял его (защита от повторного родительства).
+    static func dismantleNSView(_ nsView: NSTextView, coordinator: FileOpenMenuCoordinator) {
+        guard let textView = nsView as? PathClickTextView,
+              let key = textView.renderPoolKey else { return }
+        textView.removeFromSuperview()
+        RenderedTextViewPool.shared.enqueue(textView, key: key)
+    }
 }
 
 final class PathClickTextView: NSTextView {
     weak var menuCoordinator: FileOpenMenuCoordinator?
+    /// Ключ пула рендера (профиль attributed-строки): нужен, чтобы вернуть
+    /// view в `RenderedTextViewPool` из статического `dismantleNSView`.
+    var renderPoolKey: MarkdownAttributedStringBuilder.RenderKey?
     private var mouseDownLocation: NSPoint = .zero
 
     override func mouseDown(with event: NSEvent) {
@@ -119,7 +148,7 @@ final class PathClickTextView: NSTextView {
         guard abs(upLocation.x - mouseDownLocation.x) < 4, abs(upLocation.y - mouseDownLocation.y) < 4 else { return }
         guard selectedRange().length == 0 else { return }
         guard let path = filePath(at: upLocation) else { return }
-        menuCoordinator?.presentOpenWithMenu(for: path, at: event.locationInWindow)
+        presentOpenWithMenu(for: path, at: event)
     }
 
     /// Правый клик по пути показывает то же меню «Открыть с помощью / Finder».
@@ -127,7 +156,24 @@ final class PathClickTextView: NSTextView {
         super.rightMouseUp(with: event)
         let point = convert(event.locationInWindow, from: nil)
         guard let path = filePath(at: point) else { return }
-        menuCoordinator?.presentOpenWithMenu(for: path, at: event.locationInWindow)
+        presentOpenWithMenu(for: path, at: event)
+    }
+
+    /// Показать меню пути в экранных координатах: `NSMenu.popUp` при
+    /// `in: nil` ждёт координаты экрана, а `event.locationInWindow` — это
+    /// координаты окна. Раньше меню открывалось за пределами видимой
+    /// области, поэтому клик «ничего не делал».
+    ///
+    /// - Parameters:
+    ///   - path: абсолютный путь файла или папки.
+    ///   - event: событие мыши (для координат и окна).
+    private func presentOpenWithMenu(for path: String, at event: NSEvent) {
+        guard let window else { return }
+        let screen = ChatFileLinkLogic.screenPoint(
+            windowOrigin: window.frame.origin,
+            inWindow: convert(event.locationInWindow, from: nil)
+        )
+        menuCoordinator?.presentOpenWithMenu(for: path, at: screen)
     }
 
     private func filePath(at point: NSPoint) -> String? {
@@ -139,11 +185,52 @@ final class PathClickTextView: NSTextView {
         )
         guard let storage = textStorage, storage.length > 0 else { return nil }
         let clamped = min(index, storage.length - 1)
-        return storage.attribute(
-            .chatFilePath,
-            at: clamped,
-            effectiveRange: nil
-        ) as? String
+        // Прямой путь: атрибут `.chatFilePath`. Запасной вариант — ссылка
+        // своей схемы `mycoder-file` (если атрибут по какой-то причине не
+        // доехал, но ссылка есть).
+        if let path = storage.attribute(.chatFilePath, at: clamped, effectiveRange: nil) as? String {
+            return path
+        }
+        let link = storage.attribute(.link, at: clamped, effectiveRange: nil)
+        return ChatFileLinkLogic.path(fromLink: link)
+    }
+
+    /// Курсор-палец над кликабельными путями, как над ссылками. Стандартный
+    /// `NSTextView` уже показывает его при наличии `.link`, но явный курсор
+    /// защищает от тем, где AppKit не успел обновить cursor rect (например,
+    /// сразу после обновления текста из кэша). Учитываются и `.chatFilePath`,
+    /// и `.link` своей схемы `mycoder-file` (если chatFilePath отсутствует).
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard let storage = textStorage, storage.length > 0 else { return }
+        storage.enumerateAttribute(.chatFilePath, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard value as? String != nil else { return }
+            addPointingHandRects(for: range)
+        }
+        storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard ChatFileLinkLogic.path(fromLink: value) != nil else { return }
+            addPointingHandRects(for: range)
+        }
+    }
+
+    /// Добавить cursor-прямоугольники «пальца» для диапазона символов.
+    ///
+    /// Вход: `range` — диапазон кликабельного пути.
+    /// Выход: нет (side effect: `addCursorRect`).
+    /// Зависимости: `layoutManager`, `textContainer`.
+    private func addPointingHandRects(for range: NSRange) {
+        guard let layoutManager, let container = textContainer else { return }
+        var rects: [NSRect] = []
+        layoutManager.enumerateEnclosingRects(
+            forGlyphRange: range,
+            withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+            in: container
+        ) { rect, _ in
+            rects.append(rect)
+        }
+        for rect in rects {
+            addCursorRect(rect, cursor: .pointingHand)
+        }
     }
 }
 

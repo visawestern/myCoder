@@ -56,6 +56,8 @@ enum WebEmulatedTool: String, CaseIterable {
     // Advanced browser fetch: full DOM access (script), selector reads, link
     // clicks and screenshots through the AntiBrowser REST engine.
     case browserFetch = "browser_fetch"
+    // Интернет-поиск: HTML-выдача DuckDuckGo без API-ключа (WebSearchLogic).
+    case webSearch = "web_search"
     // Installed skill lookup (Claude Code Skill parity)
     case skill = "skill"
     // Granular task tools (Claude Code TaskCreate/List/Update parity),
@@ -89,6 +91,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .task: return #"{"description": "<task description>", "prompt": "<detailed prompt>", "subagentType": "<general|code|debug|review>"}"#
         case .webFetch: return #"{"url": "<http(s) URL>", "limit": "<optional max chars>"}"#
         case .browserFetch: return #"{"url": "<http(s) URL>", "selector": "<CSS>", "script": "<JS>", "click": "<CSS>", "screenshot": "<1/true>", "limit": "<max chars>"}"#
+        case .webSearch: return #"{"query": "<search text>"}"#
         case .skill: return #"{"name": "<installed skill id> (omit to list installed skills)"}"#
         case .taskCreate: return #"{"content": "<task text>", "status": "<optional pending|in_progress|completed>"}"#
         case .taskList: return #"{}"#
@@ -121,6 +124,7 @@ enum WebEmulatedTool: String, CaseIterable {
         case .task: return "Launch a sub-agent for a complex task (runs in background, returns result)."
         case .webFetch: return "Fetch a web page as text (http/https only, bounded)."
         case .browserFetch: return "Fetch a web page through the browser engine: navigate, optionally click a selector, then return page text (or a CSS selector's text, or a JS expression result) and optionally a screenshot. Full DOM access via 'script'."
+        case .webSearch: return "Search the internet and return a list of result titles, URLs and snippets."
         case .skill: return "Show an installed skill's instructions (omit name to list skills)."
         case .taskCreate: return "Add one task to the checklist."
         case .taskList: return "List checklist tasks."
@@ -239,7 +243,7 @@ enum WebToolProtocolEmulator {
             // first-turn preamble over the vendor paste budget (Kimi ~4000B)
             // and split the tool contract into continuation parts (user
             // report 2026-10-30 — prompt chunked at 4047B).
-            lines.append("You are Claude Code, the agentic coding assistant, running in the user's project through a tool bridge. The host runs every tool block you emit locally and returns the result — you are NOT sandboxed, never claim missing file access (verify with one list_dir block instead of refusing). Never claim a tool ran before you see its result.")
+            lines.append("You are Claude Code, the agentic coding assistant, running in the user's project through a tool bridge. The host runs every tool block you emit locally and returns the result. You are NOT sandboxed, never claim missing file access (verify with one list_dir block instead of refusing), never claim a tool ran before you see its result.")
         } else {
             // Harness-tax C4: compact identity for slim profiles. Keeps every
             // live-proven refusal guard (role, bridge, not-sandboxed,
@@ -250,7 +254,7 @@ enum WebToolProtocolEmulator {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         lines.append("cwd: \(dir) · git: \(isGitRepo ? "yes" : "no") · date: \(fmt.string(from: date))")
-        lines.append("Invoke a tool by replying with ONE form, then WAIT for the ```tool_result:")
+        lines.append("Invoke a tool by replying with ONE form, then WAIT for the result:")
         lines.append("```tool")
         lines.append(#"{"name": "<tool_name>", "args": { ... }}"#)
         lines.append("```")
@@ -264,8 +268,8 @@ enum WebToolProtocolEmulator {
         lines.append("```tool")
         lines.append(#"{"name": "list_dir", "args": {"path": "."}}"#)
         lines.append("```")
-        lines.append("Rules: every listed tool above IS available — never say a tool is missing or unavailable, never refuse as a sandboxed model, never narrate tool use, never invent results. Emit a tool block when a task needs one, then wait for its result.")
-        lines.append("Paths outside the project are not yours to judge: emit the tool call with the absolute path and let the host decide. It asks the user for access and then runs the call, or returns a validation error — never refuse a task because a path is outside the working directory.")
+        lines.append("Rules: every listed tool IS available — never say a tool is missing, never refuse as a sandboxed model, never narrate tool use, never invent results. Emit a tool block when needed, then wait for its result.")
+        lines.append("Paths outside the project are not yours to judge — emit the tool call with the absolute path and let the host decide: it asks the user or returns a validation error. Never refuse a task because a path is outside the working directory.")
         let listedNames2 = Set(listed.map(\.rawValue))
         let inspectors = ["read_file", "list_dir", "grep", "glob"].filter { listedNames2.contains($0) }
         var policy = "Policy: inspect first (\(inspectors.joined(separator: "/")))"

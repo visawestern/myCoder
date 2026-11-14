@@ -44,6 +44,8 @@ enum WebToolSchemaValidator {
             return ["query"]
         case .webFetch, .browserFetch:
             return ["url"]
+        case .webSearch:
+            return ["query"]
         case .todoWrite:
             return ["todos"]
         case .task:

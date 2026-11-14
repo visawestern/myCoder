@@ -50,7 +50,7 @@ enum WebToolAccessGate {
         switch tool {
         // Read-only tools — always allowed inside the project.
         case .readFile, .listDir, .grep, .gitStatus, .gitDiff, .gitLog, .glob, .todoRead,
-             .webFetch, .browserFetch, .skill, .taskList, .codeSearch, .readSymbol, .lsp:
+             .webFetch, .browserFetch, .webSearch, .skill, .taskList, .codeSearch, .readSymbol, .lsp:
             return .allow
         // File-modifying tools — ask before mutating; higher edit levels allow
         // execution after the user has chosen the corresponding global policy.
@@ -68,8 +68,15 @@ enum WebToolAccessGate {
         // and always run; anything that can mutate the machine still requires
         // fullAccess (or an explicit approval at lower levels).
         case .runCommand:
-            if isReadOnlyCommand(args["command"] ?? "") {
+            let command = args["command"] ?? ""
+            if isReadOnlyCommand(command) {
                 return .allow
+            }
+            // Destructive commands always ask — even at Full access (incident
+            // 2026-11-14: `rsync --delete` wiped a production database and
+            // `migrate --force` recreated it empty without a question).
+            if DestructiveCommandGuard.risk(for: command).isDestructive {
+                return .requireApproval
             }
             return accessLevel == .fullAccess ? .allow : .requireApproval
         // Sub-agent task tool
@@ -127,8 +134,17 @@ enum WebToolAccessGate {
     /// the machine (no file writes, package installs, git mutations, process
     /// kills, network changes, etc.). Used so read-only commands like
     /// `pwd && whoami && uname -a` run at any access level, while anything
-    /// that can change state still requires fullAccess. Arguments are scanned
-    /// respecting quotes; only each sub-command's first word matters.
+    /// that can change state still requires fullAccess.
+    ///
+    /// The line is split by `ShellCommandScanner` (quote-aware). A command is
+    /// read-only only when EVERY subcommand is read-only after transparent
+    /// wrappers (`sudo`, `env FOO=1`, `time`, `nice -n 10`, `xargs`, `npx`)
+    /// are skipped — so `xargs rm -rf` and `env rm -rf` can never smuggle a
+    /// mutation through the allowlist.
+    ///
+    /// Вход: полная shell-команда.
+    /// Выход: true, если команда ничего не меняет.
+    /// Зависимости: `ShellCommandScanner`.
     static func isReadOnlyCommand(_ command: String) -> Bool {
         let safe: Set<String> = [
             "pwd", "whoami", "uname", "echo", "printf", "ls", "dir", "cat",
@@ -150,61 +166,52 @@ enum WebToolAccessGate {
         // invocations run without approval.
         let mutatingSedFlags: Set<String> = ["-i", "--in-place", "-i.bak"]
 
-        var inQuote: Character?
-        var current = ""
-        var words: [String] = []
-        var subcommands: [[String]] = []
-
-        func flushWord() {
-            let trimmed = current.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty { words.append(trimmed) }
-            current = ""
-        }
-        func flushSub() {
-            flushWord()
-            if !words.isEmpty {
-                subcommands.append(words)
-                words = []
-            }
-        }
-
-        for ch in command {
-            if let quote = inQuote {
-                if ch == quote { inQuote = nil }
-                current.append(ch)
-            } else if ch == "\"" || ch == "'" || ch == "`" {
-                inQuote = ch
-            } else if ch == ">" {
-                // Output redirection (>, >>, 2> …) writes to the filesystem —
-                // never read-only.
-                return false
-            } else if ch == "&" || ch == ";" || ch == "|" || ch == "\n" {
-                flushSub()
-            } else if ch == " " || ch == "\t" {
-                flushWord()
-            } else {
-                current.append(ch)
-            }
-        }
-        flushSub()
-
-        guard !subcommands.isEmpty else { return true }
-        for sub in subcommands where !sub.isEmpty {
-            let cmd = sub[0].lowercased()
+        let scan = ShellCommandScanner.scan(command)
+        // Output redirection (>, >>, 2> …) writes to the filesystem — never
+        // read-only.
+        if scan.hasOutputRedirection { return false }
+        // Command substitution ($(…), backticks) runs another command before
+        // this one; its side effects are unknown here, so it is never
+        // read-only.
+        if !scan.substitutions.isEmpty { return false }
+        guard !scan.subcommands.isEmpty else { return true }
+        for sub in scan.subcommands where !sub.isEmpty {
+            guard let index = ShellCommandScanner.effectiveCommandIndex(in: sub) else { continue }
+            let cmd = sub[index].lowercased()
             if cmd.hasPrefix("-") { continue }          // flag-only invocation (e.g. `-x e`)
             if safe.contains(cmd) {
                 // sed is read-only ONLY in print form: `sed -i` rewrites the
                 // file in place. Any in-place flag falls through to approval.
-                if cmd == "sed", sub.dropFirst().contains(where: { mutatingSedFlags.contains($0) || $0.hasPrefix("-i") }) {
+                if cmd == "sed",
+                   sub[index...].contains(where: { mutatingSedFlags.contains($0) || $0.hasPrefix("-i") }) {
+                    return false
+                }
+                // awk can execute shell commands through system(...).
+                if cmd == "awk", sub[index...].contains(where: { $0.contains("system(") }) {
                     return false
                 }
                 continue
             }
-            if cmd == "git", sub.count > 1, readOnlyGit.contains(sub[1].lowercased()) {
+            if cmd == "git", index + 1 < sub.count,
+               readOnlyGit.contains(sub[index + 1].lowercased()) {
                 continue
             }
             return false
         }
         return true
+    }
+
+    /// The destructive reason for a `run_command` call, or nil when the call
+    /// is not a destructive shell command. The approval card uses it to
+    /// explain WHY the red confirmation appeared.
+    ///
+    /// Вход: сырой вызов модели (алиасы и варианты аргументов допустимы).
+    /// Выход: причина деструктивности или nil.
+    /// Зависимости: `DestructiveCommandGuard.risk`.
+    static func destructiveReason(for call: WebToolCall) -> String? {
+        let call = WebToolProtocolEmulator.canonicalized(call)
+        guard let tool = WebEmulatedTool(rawValue: call.name), tool == .runCommand else { return nil }
+        let args = WebToolProtocolEmulator.normalizedArguments(for: tool, from: call.arguments)
+        return DestructiveCommandGuard.risk(for: args["command"] ?? "").reason
     }
 }

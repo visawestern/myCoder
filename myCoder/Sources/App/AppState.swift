@@ -297,6 +297,9 @@ class AppState: ObservableObject {
             // switch so no row can reuse the previous palette (white text on
             // a white bubble after Dark → Light).
             MarkdownAttributedStringBuilder.clearCaches()
+            // То же для подсветки кода: старые записи с прежней палитрой
+            // больше недостижимы, их нужно освободить.
+            CodeSyntaxHighlighter.resetHighlightCache()
         }
     }
     

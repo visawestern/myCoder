@@ -32,6 +32,12 @@ enum TurnDelivery {
                 + "\n\n" + HarnessPromptQuality.compactConductLine
                 // The 0.1 uncertainty contract must reach web routes too.
                 + "\n\n" + HarnessPromptQuality.compactUncertaintyLine
+                // Safety guardrail (restores/rollbacks/DB/GitHub/irreversible
+                // deletions) reaches every route — compact form for web.
+                + "\n\n" + HarnessPromptQuality.compactSafetyGuardrail
+                // Media creation rule (2D/3D objects and games) — compact form
+                // for web, matching the native block.
+                + "\n\n" + HarnessPromptQuality.compactMediaReferenceGuardrail
         default:
             // Blended: OpenCode-style collaboration core + Claude Code evidence
             // discipline, on top of the native tool contract.
@@ -39,6 +45,8 @@ enum TurnDelivery {
             \(HarnessPromptQuality.collaborationCore)
 
             \(HarnessPromptQuality.humanProblemSolvingGuidance)
+
+            \(HarnessPromptQuality.mediaReferenceGuardrail)
 
             The runtime provides native tools and their argument schemas. Use the
             native tool interface; textual tool fences are not executed by this transport.

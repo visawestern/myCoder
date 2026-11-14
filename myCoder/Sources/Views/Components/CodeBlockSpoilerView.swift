@@ -58,7 +58,7 @@ struct CodeBlockSpoilerView: View {
     }
 
     private var highlighted: AttributedString {
-        CodeSyntaxHighlighter.attributed(code, language: language, palette: palette)
+        CodeSyntaxHighlighter.cachedAttributed(code, language: language, palette: palette)
     }
 
     private var lineCount: Int {
