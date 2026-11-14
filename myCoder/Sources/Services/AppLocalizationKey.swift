@@ -163,7 +163,7 @@ enum AppLocalizationKey: String, CaseIterable {
     case locPickerText, locUseAsModelSelector, locTosViolation, locModelsCount
     case locActiveCount, locArchivedCount, locMessageCount, locWebNoModels
     case locGenerationStopped, locTaskCompletedMessage, locResult, locArguments
-    case locCompleted, locRunning, locResend, locCopied
+    case locCompleted, locRunning, locResend, locCopied, locLoadingResult, locResultUnavailable
     case locLines, locNewTaskSidebar, locMarkAllRead, locSelectFolder
     case locConfigured, locLogin, locConnecting, locChooseFolder
     case locMyProject, locShortSummary, locWhatChanged, locBranchName

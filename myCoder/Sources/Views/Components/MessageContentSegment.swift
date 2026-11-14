@@ -25,7 +25,8 @@ enum MessageContentSegment: Identifiable {
 
     static func build(
         from parts: [MessagePartContent],
-        approvals: [PendingToolApproval] = []
+        approvals: [PendingToolApproval] = [],
+        toolResultMeta: [String: ToolResultMeta] = [:]
     ) -> [MessageContentSegment] {
         var segments: [MessageContentSegment] = []
         var calls: [ToolCallInspectorStep] = []
@@ -56,11 +57,17 @@ enum MessageContentSegment: Identifiable {
             }
             if case .toolCall(let name, let args, let result, let callID) = part {
                 flushReasoning()
+                // При lite-загрузке истории результат ещё не прочитан:
+                // флаг hasStoredResult говорит, что он существует в
+                // хранилище, и спойлер подгрузит его лениво.
+                let storedMeta = callID.flatMap { toolResultMeta[$0] }
                 let step = ToolCallInspectorStep(
                     id: part.id,
                     name: name,
                     args: args,
-                    result: result
+                    result: result,
+                    callID: callID,
+                    hasStoredResult: storedMeta?.hasStoredResult ?? false
                 )
                 if let callID,
                    let approvalIndex = remainingApprovals.firstIndex(where: { $0.callID == callID }) {

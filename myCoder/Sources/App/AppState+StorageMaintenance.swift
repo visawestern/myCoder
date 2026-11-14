@@ -295,10 +295,11 @@ extension AppState {
     }
 
     /// Full transcript (Markdown) for Share/Export, read from the store that
-    /// owns the session.
+    /// owns the session. Uses the FULL message load (with tool results), so
+    /// exported transcripts contain complete tool outputs.
     func sessionTranscriptMarkdown(sessionId: String) -> String? {
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return nil }
-        let messages = DatabaseBridge.shared.loadMessageTail(sessionId: sessionId, take: nil)
+        let messages = DatabaseBridge.shared.loadMessageTailFull(sessionId: sessionId, take: nil)
         return SessionTranscriptLogic.markdown(title: session.title, messages: messages)
     }
 

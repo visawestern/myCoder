@@ -57,6 +57,66 @@ struct ToolCallPresentationLogicTests {
         #expect(!ToolCallInspectorLogic.isComplete(steps))
     }
 
+    @Test("Step with a stored but not-yet-loaded result counts as complete")
+    func storedResultCountsAsComplete() {
+        let steps = [
+            ToolCallInspectorStep(
+                id: "1",
+                name: "write",
+                args: "{}",
+                result: nil,
+                hasStoredResult: true
+            ),
+        ]
+        #expect(ToolCallInspectorLogic.isComplete(steps))
+    }
+
+    @Test("Step with no result and no stored result stays incomplete")
+    func noResultStaysIncomplete() {
+        let steps = [
+            ToolCallInspectorStep(
+                id: "1",
+                name: "write",
+                args: "{}",
+                result: nil,
+                hasStoredResult: false
+            ),
+        ]
+        #expect(!ToolCallInspectorLogic.isComplete(steps))
+    }
+
+    @Test("copyText skips results that are not loaded yet")
+    func copyTextSkipsUnloadedResults() {
+        let steps = [
+            ToolCallInspectorStep(
+                id: "1",
+                name: "write",
+                args: #"{"path":"src/a.ts"}"#,
+                result: "done",
+                hasStoredResult: true
+            ),
+            ToolCallInspectorStep(
+                id: "2",
+                name: "read",
+                args: #"{"path":"src/b.ts"}"#,
+                result: nil,
+                hasStoredResult: true
+            ),
+            ToolCallInspectorStep(
+                id: "3",
+                name: "read",
+                args: #"{"path":"src/c.ts"}"#,
+                result: nil,
+                hasStoredResult: false
+            ),
+        ]
+        let text = ToolCallInspectorLogic.copyText(for: steps)
+        #expect(text.contains("done"))
+        #expect(!text.contains("Result:done"))
+        // Блоки Result для незагруженных шагов отсутствуют.
+        #expect(text.components(separatedBy: "Result:").count == 2)
+    }
+
     @Test("Single tool call keeps the compact mockup title")
     func splitInspectorSingleStepTitle() {
         let steps = [

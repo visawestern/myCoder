@@ -31,6 +31,55 @@ struct ContextUsageLogicTests {
         #expect(ContextUsageLogic.tokens(for: withTool) > ContextUsageLogic.tokens(for: plain))
     }
 
+    @Test func estimateTokensByCharacterCountMatchesLengthBudget() {
+        #expect(ContextUsageLogic.estimateTokens(characters: 0) == 0)
+        #expect(ContextUsageLogic.estimateTokens(characters: 4) == 1)
+        #expect(ContextUsageLogic.estimateTokens(characters: 100) == 25)
+    }
+
+    @Test func unloadedToolResultCountsByKnownLength() {
+        // lite-история: текст результата не загружен, но длина известна.
+        let message = Message(
+            role: .assistant,
+            content: "abcd",
+            parts: [.toolCall(name: "read_file", args: "{\"path\":\"a\"}", result: nil, callID: "c1")],
+            isFinished: true,
+            toolResultMeta: ["c1": ToolResultMeta(callID: "c1", hasStoredResult: true, length: 40)]
+        )
+        let loaded = Message(
+            role: .assistant,
+            content: "abcd",
+            parts: [.toolCall(name: "read_file", args: "{\"path\":\"a\"}", result: String(repeating: "x", count: 40), callID: "c1")],
+            isFinished: true
+        )
+        // Оценка по длине совпадает с оценкой по самому тексту (ASCII-
+        // приближение одинаковое), а значит контекст-бюджет стабилен
+        // независимо от того, загружен ли результат.
+        let unloaded = ContextUsageLogic.tokens(for: message)
+        let fullyLoaded = ContextUsageLogic.tokens(for: loaded)
+        #expect(unloaded == fullyLoaded)
+    }
+
+    @Test func unloadedResultWithoutStoredMetaAddsNoTokens() {
+        // Meta с hasStoredResult=false не должна добавлять токены — тот же
+        // бюджет, что у сообщения с тулом, но без результата вовсе.
+        let withMeta = Message(
+            role: .assistant,
+            content: "abcd",
+            parts: [.toolCall(name: "read_file", args: "{}", result: nil, callID: "c1")],
+            isFinished: true,
+            toolResultMeta: ["c1": ToolResultMeta(callID: "c1", hasStoredResult: false, length: 0)]
+        )
+        let withoutMeta = Message(
+            role: .assistant,
+            content: "abcd",
+            parts: [.toolCall(name: "read_file", args: "{}", result: nil, callID: "c1")],
+            isFinished: true
+        )
+        #expect(ContextUsageLogic.tokens(for: withMeta) == ContextUsageLogic.tokens(for: withoutMeta))
+        #expect(ContextUsageLogic.tokens(for: withMeta) == 9)
+    }
+
     @Test func usageRatioClampsAtOne() {
         let usage = ContextUsage(usedTokens: 300, limitTokens: 100)
         #expect(usage.ratio == 1)

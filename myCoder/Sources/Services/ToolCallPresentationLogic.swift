@@ -12,6 +12,31 @@ struct ToolCallInspectorStep: Identifiable {
     let name: String
     let args: String
     let result: String?
+    /// Идентификатор вызова (callID) — ключ, по которому результат хранится
+    /// в `ToolResultStore` и БД. `nil` допустим для шагов без callID
+    /// (тогда ключом хранилища служит `id`).
+    let callID: String?
+    /// True, когда результат вызова существует в хранилище (БД или
+    /// `ToolResultStore`), но ещё не загружен в `result`. Позволяет
+    /// отличать «ещё не загружен» от «результата нет вовсе» — например,
+    /// при ленивой загрузке истории без текстов результатов тулов.
+    let hasStoredResult: Bool
+
+    init(
+        id: String,
+        name: String,
+        args: String,
+        result: String?,
+        callID: String? = nil,
+        hasStoredResult: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.args = args
+        self.result = result
+        self.callID = callID
+        self.hasStoredResult = hasStoredResult
+    }
 }
 
 enum ToolCallInspectorLogic {
@@ -22,8 +47,12 @@ enum ToolCallInspectorLogic {
         return "\(title) · \(steps.count) steps"
     }
 
+    /// Завершён ли набор шагов: у каждого шага либо уже загружен текст
+    /// результата (`result != nil`), либо результат существует в хранилище
+    /// (`hasStoredResult`) — незагруженный, но существующий результат не
+    /// делает шаг «активным».
     static func isComplete(_ steps: [ToolCallInspectorStep]) -> Bool {
-        !steps.isEmpty && steps.allSatisfy { $0.result != nil }
+        !steps.isEmpty && steps.allSatisfy { $0.result != nil || $0.hasStoredResult }
     }
 
     static func copyText(for steps: [ToolCallInspectorStep]) -> String {

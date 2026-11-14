@@ -544,7 +544,8 @@ struct MessageRow: View {
                 ),
                 content: message.content
             ),
-            approvals: message.pendingApprovals
+            approvals: message.pendingApprovals,
+            toolResultMeta: message.toolResultMeta
         )
     }
 

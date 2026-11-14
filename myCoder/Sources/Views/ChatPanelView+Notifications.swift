@@ -218,9 +218,12 @@ extension ChatPanelView {
     @MainActor
     func exportChat(variant: ChatExportVariant) {
         let title = appState.selectedSession?.title ?? L.t("Chat")
+        // Экспорт должен содержать полные результаты тулов: история могла
+        // грузиться в lite-режиме, поэтому сначала дозагружаем.
+        let hydratedMessages = DatabaseBridge.shared.hydrateToolResults(messageStore.messages)
         guard let content = ChatExportLogic.content(
             for: variant,
-            messages: messageStore.messages,
+            messages: hydratedMessages,
             title: title
         ) else {
             NotificationCenter.default.post(name: .copyEntireChatUnavailable, object: nil)

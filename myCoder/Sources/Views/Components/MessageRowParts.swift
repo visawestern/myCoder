@@ -156,6 +156,11 @@ struct SplitToolInspectorView: View {
     let isMessageStreaming: Bool
     @State private var isExpanded: Bool
     @State private var selectedStepID: String?
+    /// Подгруженные результаты тулов (память → БД). Шаги, у которых
+    /// `result == nil`, но `hasStoredResult`, подгружаются лениво при
+    /// первом раскрытии спойлера.
+    @State private var loadedResults: [String: String] = [:]
+    @State private var isLoadingResults = false
     @AppStorage("com.mycoder.toolInspector.sidebarWidth") private var inspectorSidebarWidth: Double = 120
 
     init(
@@ -170,12 +175,30 @@ struct SplitToolInspectorView: View {
         _isExpanded = State(initialValue: initiallyExpanded)
     }
 
+    /// Шаги с подмешанными подгруженными результатами.
+    private var displayedSteps: [ToolCallInspectorStep] {
+        ToolCallRequestLogic.merge(results: loadedResults, into: steps)
+    }
+
     private var selectedStep: ToolCallInspectorStep? {
-        steps.first(where: { $0.id == selectedStepID }) ?? steps.first
+        displayedSteps.first(where: { $0.id == selectedStepID }) ?? displayedSteps.first
     }
 
     private var isComplete: Bool {
         ToolCallInspectorLogic.isComplete(steps)
+    }
+
+    /// Ленивая дозагрузка результатов: только недостающие ключи, один
+    /// пакетный запрос, результат сохраняется в `ToolResultStore`, чтобы
+    /// повторные открытия не лезли в базу.
+    private func loadMissingResults() {
+        let keys = ToolCallRequestLogic.keysToLoad(steps)
+        guard !keys.isEmpty, !isLoadingResults else { return }
+        isLoadingResults = true
+        Task { @MainActor in
+            loadedResults = ToolResultLoader.load(for: steps)
+            isLoadingResults = false
+        }
     }
 
     var body: some View {
@@ -286,12 +309,35 @@ struct SplitToolInspectorView: View {
                                 value: argumentsText(for: selectedStep)
                             )
 
-                            if let result = selectedStep.result, !result.isEmpty {
+                            // Результат: уже загруженный или подгруженный
+                            // лениво; в ожидании — честный индикатор, при
+                            // отсутствии — сообщение о недоступности.
+                            if let result = ToolCallRequestLogic.displayResult(
+                                for: selectedStep,
+                                results: loadedResults
+                            ), !result.isEmpty {
                                 Divider()
                                 detailBlock(
                                     label: L.t(AppLocalizationKey.locResult),
                                     value: ToolCallPresentationLogic.formattedResult(result)
                                 )
+                            } else if ToolCallRequestLogic.isPending(selectedStep, results: loadedResults) {
+                                Divider()
+                                HStack(spacing: 6) {
+                                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                                    Text(L.t(AppLocalizationKey.locLoadingResult))
+                                        .interfaceFont(size: 11)
+                                        .foregroundColor(Color.mimo.textMuted)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                            } else if ToolCallRequestLogic.isUnavailable(selectedStep, results: loadedResults) {
+                                Divider()
+                                Text(L.t(AppLocalizationKey.locResultUnavailable))
+                                    .interfaceFont(size: 11)
+                                    .foregroundColor(Color.mimo.textMuted)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(12)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,7 +363,7 @@ struct SplitToolInspectorView: View {
                     inspectorAction(icon: "doc.on.doc", title: L.t(AppLocalizationKey.locCopyAll)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
-                            ToolCallInspectorLogic.copyText(for: steps),
+                            ToolCallInspectorLogic.copyText(for: displayedSteps),
                             forType: .string
                         )
                     }
@@ -354,6 +400,9 @@ struct SplitToolInspectorView: View {
                 selectedStepID = steps.first?.id
             }
         }
+        .onChange(of: isExpanded) { expanded in
+            if expanded { loadMissingResults() }
+        }
     }
 
     private func argumentsText(for step: ToolCallInspectorStep) -> String {
@@ -375,14 +424,14 @@ struct SplitToolInspectorView: View {
                 .interfaceFont(size: 11, weight: .medium)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            if step.result == nil {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.55)
-            } else {
+            if ToolCallInspectorLogic.isComplete([step]) {
                 Image(systemName: "checkmark.circle.fill")
                     .interfaceFont(size: 9)
                     .foregroundColor(Color.mimo.success)
+            } else {
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.55)
             }
         }
         .foregroundColor(Color.mimo.textSecondary)

@@ -143,6 +143,10 @@ struct Message: Identifiable {
     var reasoningEndedAt: Date?
     var attachedImages: [ClipboardImage]?
     var usage: UsageCapture?
+    /// Метаданные результатов тулов при lite-загрузке истории: callID →
+    /// факт наличия и длина результата в хранилище. Тексты самих
+    /// результатов не грузятся, пока спойлер не открыт.
+    var toolResultMeta: [String: ToolResultMeta]
     // Pending tool-approval card (web agent): the driver is blocked waiting
     // for the user to Allow/Deny this request.
     var pendingApprovalID: String?
@@ -185,7 +189,7 @@ struct Message: Identifiable {
         return end.timeIntervalSince(startedAt)
     }
 
-    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil, rawResponses: [String]? = nil, contextSummary: String? = nil) {
+    init(id: String = UUID().uuidString, serverID: String? = nil, role: MessageRole, content: String, agentName: String? = nil, toolCalls: [ToolCall]? = nil, isStreaming: Bool = false, action: MessageAction? = nil, files: [FileInfo]? = nil, command: String? = nil, tokensAdded: Int? = nil, tokensRemoved: Int? = nil, parts: [MessagePartContent] = [], reasoning: String = "", reasoningSegments: [String] = [], isFinished: Bool = false, reasoningStartedAt: Date? = nil, reasoningEndedAt: Date? = nil, attachedImages: [ClipboardImage]? = nil, usage: UsageCapture? = nil, pendingApprovalID: String? = nil, pendingApprovalTool: String? = nil, pendingApprovalMessage: String? = nil, pendingApprovals: [PendingToolApproval] = [], sendInfo: MessageSendInfo? = nil, rawResponses: [String]? = nil, contextSummary: String? = nil, toolResultMeta: [String: ToolResultMeta] = [:]) {
         self.id = id
         self.serverID = serverID
         self.role = role
@@ -214,6 +218,7 @@ struct Message: Identifiable {
         self.sendInfo = sendInfo
         self.rawResponses = rawResponses
         self.contextSummary = contextSummary
+        self.toolResultMeta = toolResultMeta
     }
 }
 

@@ -44,6 +44,13 @@ enum ContextUsageLogic {
         return wide + (narrow + 3) / 4
     }
 
+    /// Оценка токенов по длине текста (символы), когда сам текст ещё не
+    /// загружен (lite-история): та же ставка ~4 символа на токен, что для
+    /// узких (латиница/код/JSON) символов в `estimateTokens(_:)`.
+    static func estimateTokens(characters: Int) -> Int {
+        (characters + 3) / 4
+    }
+
     static func tokens(for message: Message) -> Int {
         var total = tokensPerMessage
         total += estimateTokens(message.content)
@@ -54,9 +61,15 @@ enum ContextUsageLogic {
                 total += estimateTokens(t)
             case .reasoning(let r):
                 total += estimateTokens(r)
-            case .toolCall(let name, let args, let result, _):
+            case .toolCall(let name, let args, let result, let callID):
                 total += estimateTokens(name) + estimateTokens(args)
-                if let result { total += estimateTokens(result) }
+                if let result {
+                    total += estimateTokens(result)
+                } else if let callID, let meta = message.toolResultMeta[callID], meta.hasStoredResult {
+                    // Результат не загружен (lite-история), но мы знаем его
+                    // длину — оцениваем токены по ней, не читая текст.
+                    total += estimateTokens(characters: meta.length)
+                }
             case .image:
                 total += tokensPerImage
             case .compiledContext(let text):

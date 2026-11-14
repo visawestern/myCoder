@@ -100,4 +100,38 @@ struct MessageContentSegmentTests {
         #expect(kinds(MessageContentSegment.build(from: parts, approvals: [approval]))
                 == ["reasoning(1)", "tools(1)", "tools(1)", "approval", "tools(1)"])
     }
+
+    // MARK: - Ленивые результаты тулов (lite-история)
+
+    @Test("Шаг с результатом в хранилище получает hasStoredResult из meta")
+    func stepReceivesStoredMeta() {
+        let parts: [MessagePartContent] = [
+            .toolCall(name: "read", args: "{}", result: nil, callID: "c1"),
+        ]
+        let meta: [String: ToolResultMeta] = [
+            "c1": ToolResultMeta(callID: "c1", hasStoredResult: true, length: 42)
+        ]
+        let segments = MessageContentSegment.build(from: parts, toolResultMeta: meta)
+        guard case .toolCalls(let calls) = segments[0] else {
+            Issue.record("ожидался tools-сегмент")
+            return
+        }
+        #expect(calls[0].callID == "c1")
+        #expect(calls[0].hasStoredResult)
+        #expect(calls[0].result == nil)
+    }
+
+    @Test("Без meta шаг не получает hasStoredResult")
+    func stepWithoutMetaNoFlag() {
+        let parts: [MessagePartContent] = [
+            .toolCall(name: "read", args: "{}", result: nil, callID: "c1"),
+        ]
+        let segments = MessageContentSegment.build(from: parts)
+        guard case .toolCalls(let calls) = segments[0] else {
+            Issue.record("ожидался tools-сегмент")
+            return
+        }
+        #expect(!calls[0].hasStoredResult)
+        #expect(calls[0].callID == "c1")
+    }
 }

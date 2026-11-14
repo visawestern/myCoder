@@ -79,7 +79,52 @@ extension DatabaseBridge {
     /// `offset` counts from the oldest row (ASC). The initial history load uses
     /// `loadMessageTail` — oldest-first + limit hides new messages as soon as a
     /// session outgrows the page size.
+    ///
+    /// Эта версия загружает «lite»-части: тексты результатов тулов НЕ
+    /// читаются из БД (вместо них — метаданные `toolResultMeta`), чтобы
+    /// открытие чата не тащило тяжёлые выды. Результаты подгружаются
+    /// лениво через `hydrateToolResults`.
     func loadMessages(sessionId: String, limit: Int? = nil, offset: Int = 0) -> [Message] {
+        do {
+            let records = try db.getMessagesBySession(sessionId: sessionId, limit: limit, offset: offset)
+            return records.map { record in
+                let liteParts = (try? db.getMessagePartsLite(messageId: record.id)) ?? []
+                let metadata = MessageMetadataCodec.decode(record.metadata)
+                var parts: [MessagePartContent] = []
+                var toolResultMeta: [String: ToolResultMeta] = [:]
+                for lite in liteParts {
+                    if lite.type == "tool_call", let callID = lite.toolCallId, !callID.isEmpty {
+                        toolResultMeta[callID] = ToolResultMeta(
+                            callID: callID,
+                            hasStoredResult: lite.hasToolResult,
+                            length: lite.toolResultLength
+                        )
+                    }
+                    parts.append(convertLitePartFields(lite))
+                }
+                return Message(
+                    id: record.id,
+                    role: stringToRole(record.role),
+                    content: record.content,
+                    isStreaming: false,
+                    parts: parts,
+                    reasoning: record.reasoning ?? "",
+                    isFinished: record.isFinished,
+                    sendInfo: metadata.sendInfo,
+                    contextSummary: metadata.contextSummary,
+                    toolResultMeta: toolResultMeta
+                )
+            }
+        } catch {
+            print("❌ Failed to load messages: \(error)")
+            return []
+        }
+    }
+
+    /// Полная загрузка сообщений со всеми текстами результатов тулов.
+    /// Используется там, где нужен именно полный контент (экспорт,
+    /// транскрипт), а не ленивый рендер чата.
+    func loadMessagesFull(sessionId: String, limit: Int? = nil, offset: Int = 0) -> [Message] {
         do {
             let records = try db.getMessagesBySession(sessionId: sessionId, limit: limit, offset: offset)
             return records.map { record in
@@ -103,6 +148,29 @@ extension DatabaseBridge {
         }
     }
 
+    /// Гидрация сообщений результатами тулов: сначала из RAM-хранилища
+    /// `ToolResultStore`, затем (для недостающих) одним пакетным запросом
+    /// из БД. Результаты сохраняются в store, чтобы повторные обращения
+    /// не лезли в базу.
+    ///
+    /// Вход: `messages` — lite-загруженные сообщения.
+    /// Выход: сообщения с заполненными результатами там, где они есть.
+    /// Зависимости: `ToolResultHydrationLogic`, `ToolResultStore`,
+    /// `DatabaseManager.getToolResults`.
+    @MainActor
+    func hydrateToolResults(_ messages: [Message]) -> [Message] {
+        let keys = ToolResultHydrationLogic.keysNeeded(messages: messages)
+        guard !keys.isEmpty else { return messages }
+        let split = ToolResultHydrationLogic.splitKeys(keys, memory: ToolResultStore.shared.results)
+        var available = split.fromMemory
+        if !split.missing.isEmpty {
+            let fromDB = (try? db.getToolResults(callIDs: split.missing)) ?? [:]
+            available.merge(fromDB) { _, new in new }
+            ToolResultStore.shared.insert(fromDB)
+        }
+        return ToolResultHydrationLogic.apply(results: available, to: messages)
+    }
+
     /// Total persisted messages of a session.
     func messageCount(sessionId: String) -> Int {
         (try? db.countMessages(sessionId: sessionId)) ?? 0
@@ -124,6 +192,16 @@ extension DatabaseBridge {
         let bounded = min(max(take, 0), total)
         guard bounded > 0 else { return [] }
         return loadMessages(sessionId: sessionId, limit: bounded, offset: total - bounded)
+    }
+
+    /// Полный хвост истории (со всеми результатами тулов) — для экспорта
+    /// и транскриптов, где нужен весь контент.
+    func loadMessageTailFull(sessionId: String, take: Int?) -> [Message] {
+        guard let take else { return loadMessagesFull(sessionId: sessionId, limit: nil) }
+        let total = messageCount(sessionId: sessionId)
+        let bounded = min(max(take, 0), total)
+        guard bounded > 0 else { return [] }
+        return loadMessagesFull(sessionId: sessionId, limit: bounded, offset: total - bounded)
     }
 
     /// One older page preceding the currently displayed tail. `loadedCount` is
@@ -195,6 +273,48 @@ extension DatabaseBridge {
                           toolArgs: record.toolArgs,
                           toolResult: record.toolResult,
                           toolCallId: record.toolCallId)
+    }
+
+    /// Конвертировать lite-запись части в MessagePartContent. Результат
+    /// тула всегда приходит как nil (текст подгружается лениво), флаг
+    /// наличия уходит в `Message.toolResultMeta`.
+    private func convertLitePartFields(_ lite: MessagePartRecordLite) -> MessagePartContent {
+        switch lite.type {
+        case "text":
+            return .text(lite.content ?? "")
+        case "reasoning":
+            return .reasoning(lite.content ?? "")
+        case "tool_call":
+            return .toolCall(
+                name: lite.toolName ?? "",
+                args: lite.toolArgs ?? "{}",
+                result: nil,
+                callID: lite.toolCallId
+            )
+        case "step_start":
+            return .stepStart
+        case "step_finish":
+            return .stepFinish
+        case "image":
+            if let content = lite.content {
+                let parts = content.split(separator: "|", maxSplits: 1)
+                let mimeType = parts.count > 0 ? String(parts[0]) : "image/png"
+                let base64 = parts.count > 1 ? String(parts[1]) : ""
+                return .image(base64: base64, mimeType: mimeType)
+            }
+            return .text("")
+        case "route_info":
+            if let content = lite.content,
+               let data = content.data(using: .utf8),
+               let chips = try? JSONSerialization.jsonObject(with: data) as? [String] {
+                return .routeInfo(chips: chips)
+            }
+            return .routeInfo(chips: [])
+        case "compiled_context":
+            return .compiledContext(lite.content ?? "")
+        default:
+            return .text("")
+        }
     }
 
     /// Конвертировать ProjectMessagePartRecord (per-project БД) в MessagePartContent

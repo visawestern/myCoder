@@ -88,3 +88,21 @@ struct MessagePartRecord {
     let toolCallId: String?
     let sequenceOrder: Int
 }
+
+/// «Lite»-вариант записи части: все колонки, КРОМЕ текста результата
+/// тула. Вместо текста — флаг наличия и длина, чтобы история чата
+/// грузилась без тяжёлых результатов, а спойлеры подгружали их лениво.
+struct MessagePartRecordLite {
+    let id: String
+    let messageId: String
+    let type: String
+    let content: String?
+    let toolName: String?
+    let toolArgs: String?
+    let toolCallId: String?
+    let sequenceOrder: Int
+    /// True, когда в хранилище есть непустой текст результата.
+    let hasToolResult: Bool
+    /// Длина хранимого текста результата (символы), 0 — когда результата нет.
+    let toolResultLength: Int
+}
