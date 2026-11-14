@@ -116,26 +116,9 @@ extension ModelSettingsProviderColumns {
                 commitCustomProviderDraft(custom.id)
             }
 
-            // Основной ключ всегда отражает первую строку списка пула:
-            // единый источник истины — список, поле сверху лишь его отображение.
-            let primaryFromList = apiKeysPoolRows.first ?? ""
-            InlineEditableField(
-                title: L.t(AppLocalizationKey.locApiKey),
-                value: primaryFromList.isEmpty ? "" : "••••••••••••",
-                placeholder: custom.type == .openModel ? "om-..." : "sk-...",
-                isSecure: true,
-                editValue: primaryFromList
-            ) { value in
-                // Запись изменения в первую строку списка.
-                customAPIKeyDraft = value
-                if apiKeysPoolRows.isEmpty {
-                    apiKeysPoolRows = [value]
-                } else {
-                    apiKeysPoolRows[0] = value
-                }
-                commitCustomProviderDraft(custom.id)
-            }
-
+            // Основной ключ — первая строка пула (единый источник истины).
+            // Отдельного поля «API-ключ» нет: ключи редактируются ТОЛЬКО
+            // списком `APIKeyListEditorView` ниже (директива 2026-11-14).
             Toggle(L.t(AppLocalizationKey.locEnableToolCalling), isOn: Binding(
                 get: { custom.supportsTools },
                 set: { newValue in
@@ -289,7 +272,6 @@ extension ModelSettingsProviderColumns {
         localRefreshMessage = nil
         if let custom = customProvider(for: option.id) {
             customBaseURLDraft = custom.baseURL
-            customAPIKeyDraft = custom.getSecureAPIKey() ?? ""
             customRequestLimitDraft = custom.requestLimitPerMinute > 0 ? String(custom.requestLimitPerMinute) : ""
             customTokenQuotaDraft = custom.tokenQuotaPerMinute > 0 ? String(custom.tokenQuotaPerMinute) : ""
             customPerKeyLimitDraft = custom.apiKeyLimitPerMinute > 0 ? String(custom.apiKeyLimitPerMinute) : ""

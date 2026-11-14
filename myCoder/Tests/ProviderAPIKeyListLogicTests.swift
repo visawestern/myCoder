@@ -84,4 +84,21 @@ struct ProviderAPIKeyListLogicTests {
         #expect(split.primary == "sk-a")
         #expect(split.pool == ["sk-b"])
     }
+
+    // MARK: - primary(from:) — единый источник основного ключа
+
+    @Test("Основной ключ — первая непустая строка списка")
+    func primaryIsFirstNonEmptyRow() {
+        #expect(ProviderAPIKeyListLogic.primary(from: [" sk-a ", "sk-b"]) == "sk-a")
+        #expect(ProviderAPIKeyListLogic.primary(from: ["", "sk-b", "sk-c"]) == "sk-b")
+        #expect(ProviderAPIKeyListLogic.primary(from: ["  ", "\t"]) == "")
+        #expect(ProviderAPIKeyListLogic.primary(from: []) == "")
+    }
+
+    @Test("primary(from:) согласован с split(list:).primary")
+    func primaryMatchesSplitPrimary() {
+        let list = ["", " sk-b ", "sk-c"]
+        #expect(ProviderAPIKeyListLogic.primary(from: list)
+                == ProviderAPIKeyListLogic.split(list: list).primary)
+    }
 }

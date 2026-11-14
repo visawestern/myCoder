@@ -61,7 +61,6 @@ struct ModelSettingsProviderColumns: View {
     @Binding var showAddProvider: Bool
     let availableWidth: CGFloat
     @State var detailProviderID: String = ""
-    @State var customAPIKeyDraft: String = ""
     @State var customBaseURLDraft: String = ""
     @State var parameterModelID: String = ""
     @State var parameterProviderID: String = ""

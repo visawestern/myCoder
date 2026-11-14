@@ -64,11 +64,13 @@ extension ModelSettingsProviderColumns {
         guard let index = appState.customProviders.firstIndex(where: { $0.id == providerID }) else { return }
         var updated = appState.customProviders[index]
         let url = customBaseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = customAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let requestLimit = Int(customRequestLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         let tokenQuota = Int(customTokenQuotaDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         let perKeyLimit = Int(customPerKeyLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         let poolSplit = ProviderAPIKeyListLogic.split(list: apiKeysPoolRows)
+        // Единый источник основного ключа — первая строка пула; отдельного
+        // поля «API-ключ» нет (директива 2026-11-14).
+        let key = poolSplit.primary
         let poolChanged = poolSplit.pool != ProviderAPIKeyPoolStore.load(providerID: providerID)
             || poolSplit.primary != key
         let fieldsChanged = url != updated.baseURL

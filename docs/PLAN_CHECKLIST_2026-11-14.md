@@ -148,7 +148,12 @@ API-ключа, без заглушки), принимает алиасы имё
   `locAPIKeyPlaceholder`.
 
 **Проверка адвоката дьявола:**
-- [x] Тесты `ProviderAPIKeyListLogicTests` (10) — зелёные.
+- [x] Тесты `ProviderAPIKeyListLogicTests` (12) — зелёные.
+- [x] Директива 2026-11-14: «API-ключ» и «Пул API-ключей» — одно и то же.
+      Удалено дублирующее поле `InlineEditableField(locApiKey)`; основной ключ
+      теперь берётся ТОЛЬКО из первой строки пула
+      (`ProviderAPIKeyListLogic.primary(from:)` — единый источник, покрыт
+      тестами); `@State customAPIKeyDraft` удалён.
 - [x] `AppLocalizationTests` — все ключи для всех языков.
 - [x] Полный прогон зелёный.
 - [x] Живой прогон UI через REST: вкладка Providers открыта
