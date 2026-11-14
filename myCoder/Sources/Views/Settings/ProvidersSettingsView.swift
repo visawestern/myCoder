@@ -25,7 +25,7 @@ struct ProvidersSettingsView: View {
     @State private var newProviderName = ""
     @State private var newProviderType: ProviderType = .openAI
     @State private var newProviderURL = ""
-    @State private var newProviderKey = ""
+    @State private var newProviderKeysPool: [String] = []
     
     private var filteredProviders: [ProviderOption] {
         if providerFilter.isEmpty {
@@ -74,7 +74,7 @@ struct ProvidersSettingsView: View {
                     name: $newProviderName,
                     type: $newProviderType,
                     url: $newProviderURL,
-                    apiKey: $newProviderKey
+                    keys: $newProviderKeysPool
                 )
                 .environmentObject(appState)
             }

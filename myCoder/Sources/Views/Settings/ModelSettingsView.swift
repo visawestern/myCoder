@@ -25,7 +25,7 @@ struct ModelSettingsView: View {
     @State var newProviderName = ""
     @State var newProviderType: ProviderType = .openAI
     @State var newProviderURL = ""
-    @State var newProviderKey = ""
+    @State var newProviderKeysPool: [String] = []
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -48,7 +48,7 @@ struct ModelSettingsView: View {
                 name: $newProviderName,
                 type: $newProviderType,
                 url: $newProviderURL,
-                apiKey: $newProviderKey
+                keys: $newProviderKeysPool
             )
             .environmentObject(appState)
         }
@@ -257,7 +257,9 @@ struct AddProviderSheet: View {
     @Binding var name: String
     @Binding var type: ProviderType
     @Binding var url: String
-    @Binding var apiKey: String
+    /// Единый список API-ключей: первая строка — основной ключ, остальные —
+    /// пул. Отдельного поля «API-ключ» нет (директива 2026-11-14).
+    @Binding var keys: [String]
     @EnvironmentObject var appState: AppState
     @State var isTesting = false
     @State var testResult: String?
@@ -337,11 +339,10 @@ struct AddProviderSheet: View {
                     
                     if type != .ollama && type != .acp && (requiresAPIKey || type == .openCodeZen) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(type == .openCodeZen ? L.t(AppLocalizationKey.locOpenCodeZenApiKeyOptional) : L.t(AppLocalizationKey.locApiKey))
+                            Text(type == .openCodeZen ? L.t(AppLocalizationKey.locOpenCodeZenApiKeyOptional) : L.t(AppLocalizationKey.locAPIKeyPool))
                                 .interfaceFont(size: 13, weight: .medium)
                                 .foregroundColor(Color.mimo.textPrimary)
-                            SecureField(type == .openModel ? "om-..." : L.t(AppLocalizationKey.locSecretKeyPlaceholder), text: $apiKey)
-                                .zcodeTextFieldStyle()
+                            APIKeyListEditorView(keys: $keys)
                             if type == .openCodeZen {
                                 Text(L.t(AppLocalizationKey.locNoZenKeyDescription))
                                     .interfaceFont(size: 11)
@@ -391,7 +392,7 @@ struct AddProviderSheet: View {
                     Task {
                         let success = await appState.testProvider(
                             url: ProviderEndpointLogic.normalizedBaseURL(url) ?? url,
-                            apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                            apiKey: ProviderAPIKeyListLogic.primary(from: keys),
                             type: type
                         )
                         await MainActor.run {
@@ -428,12 +429,13 @@ struct AddProviderSheet: View {
                         fallback: type.rawValue,
                         existing: appState.manageableProviderOptions.map(\.name)
                     )
+                    let pool = ProviderAPIKeyListLogic.split(list: keys)
                     let provider = CustomProvider(
                         id: UUID().uuidString,
                         name: resolvedName,
                         type: type,
                         baseURL: normalizedURL,
-                        apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                        apiKey: pool.primary,
                         isEnabled: true,
                         models: [],
                         supportsTools: supportsTools,
@@ -441,10 +443,15 @@ struct AddProviderSheet: View {
                         requiresAPIKey: requiresAPIKey
                     )
                     appState.addCustomProvider(provider)
+                    // Резервные ключи пула сохраняются сразу; первый ключ уже
+                    // записан в `apiKey`.
+                    if !pool.pool.isEmpty {
+                        ProviderAPIKeyPoolStore.save(providerID: provider.id, pool: pool.pool)
+                    }
                     isPresented = false
                     name = ""
                     url = ""
-                    apiKey = ""
+                    keys = []
                     requiresAPIKey = true
                 }) {
                     Text(L.t(AppLocalizationKey.locAddProvider))
