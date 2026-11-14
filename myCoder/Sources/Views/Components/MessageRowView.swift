@@ -558,42 +558,19 @@ struct MessageRow: View {
         }.first
     }
 
-    @ViewBuilder
+    /// Markdown-пузырь текстовой части сообщения (вынесен в отдельный
+    /// компонент `MessageRowMarkdownView` — см. его документацию).
+    ///
+    /// Вход: `text` — очищенная проза.
+    /// Выход: пузырь с прозой, кодом и инлайн-картинками.
+    /// Зависимости: `MessageRowMarkdownView`.
     private func markdownBubble(_ text: String) -> some View {
-        // Проза сохраняет единую selectable поверхность, фенс-код становится
-        // своим спойлером, инлайн-картинки — своими вью с действиями (см.
-        // MarkdownMediaSegmentLogic; запрос 2026-11-13). Копирование уровня
-        // сообщения по-прежнему копирует весь ответ целиком, включая фенсы.
-        let segments = MarkdownMediaSegmentLogic.segments(from: text)
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                switch segment {
-                case .prose(let prose):
-                    SelectableMarkdownTextView(
-                        text: prose,
-                        fontSize: 14,
-                        projectRoot: projectRoot,
-                        isLightInterface: colorScheme == .light
-                    )
-                case .code(let language, let code):
-                    CodeBlockSpoilerView(language: language, code: code)
-                case .image(let alt, let source):
-                    MarkdownImageMessageView(
-                        source: source,
-                        alt: alt,
-                        projectRoot: projectRoot
-                    )
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            message.role == .user
-                ? Color.mimo.brand.opacity(0.2)
-                : Color.mimo.surface
+        MessageRowMarkdownView(
+            text: text,
+            isUser: message.role == .user,
+            projectRoot: projectRoot.isEmpty ? nil : projectRoot,
+            isLightInterface: colorScheme == .light
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
