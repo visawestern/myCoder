@@ -89,6 +89,51 @@ enum UserMessageNavigatorLogic {
     static func verticalPadding(itemCount: Int) -> CGFloat {
         itemCount >= centeringPaddingThreshold ? centeringPadding : 0
     }
+
+    // MARK: - U8: оконный список навигатора
+
+    /// Высота одной записи списка (кнопка 18pt + spacing 5pt).
+    static let navItemHeight: CGFloat = 23
+
+    /// Радиус окна вокруг активного индекса: сколько записей рендерится
+    /// по обе стороны. Окно ограничено (типично 2×30+1), поэтому активная
+    /// запись СУЩЕСТВУЕТ в дереве всегда — и `ScrollViewReader.scrollTo`
+    /// гарантированно срабатывает. LazyVStack же не материализует далёкие
+    /// id, и центрирование молча не работало.
+    static let windowRadius = 30
+
+    /// Диапазон видимых записей вокруг активного индекса.
+    ///
+    /// Вход: `currentIndex` — активный индекс (может выходить за границы);
+    /// `total` — число записей; `radius` — половина окна.
+    /// Выход: диапазон индексов `start..<end`, сжатый к краям списка.
+    /// Зависимости: нет (чистая функция).
+    static func windowRange(currentIndex: Int, total: Int, radius: Int = windowRadius) -> Range<Int> {
+        guard total > 0 else { return 0..<0 }
+        let clamped = min(max(0, currentIndex), total - 1)
+        let start = max(0, clamped - radius)
+        let end = min(total, clamped + radius + 1)
+        return start..<end
+    }
+
+    /// Высота прозрачной вставки над окном: пропущенные записи сверху.
+    ///
+    /// Вход: `windowStart` — первый видимый индекс; `itemHeight` — высота записи.
+    /// Выход: высота вставки в точках.
+    /// Зависимости: нет (чистая функция).
+    static func topInsetHeight(windowStart: Int, itemHeight: CGFloat = navItemHeight) -> CGFloat {
+        CGFloat(windowStart) * itemHeight
+    }
+
+    /// Высота прозрачной вставки под окном: пропущенные записи снизу.
+    ///
+    /// Вход: `windowEnd` — индекс за последним видимым; `total` — общее число;
+    /// `itemHeight` — высота записи.
+    /// Выход: высота вставки в точках.
+    /// Зависимости: нет (чистая функция).
+    static func bottomInsetHeight(windowEnd: Int, total: Int, itemHeight: CGFloat = navItemHeight) -> CGFloat {
+        CGFloat(max(0, total - windowEnd)) * itemHeight
+    }
 }
 
 extension UserMessageNavigatorLogic {

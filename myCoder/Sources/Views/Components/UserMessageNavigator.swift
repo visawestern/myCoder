@@ -41,16 +41,28 @@ struct UserMessageNavigator: View {
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        // Lazy: only the visible numbers are built. A 10k
-                        // message chat must not create 10k buttons on open.
-                        LazyVStack(spacing: 5) {
-                            ForEach(entries) { entry in
+                        // Оконный список: рендерим только записи вокруг активной
+                        // (см. UserMessageNavigatorLogic.windowRange). Активная
+                        // запись СУЩЕСТВУЕТ в дереве всегда, поэтому
+                        // `scrollTo(id, anchor: .center)` центрирует её
+                        // гарантированно — в отличие от LazyVStack, где
+                        // далёкие id не материализуются и следование молча
+                        // не работало. Пропущенные записи заменяются
+                        // прозрачными вставками нужной высоты.
+                        VStack(spacing: 5) {
+                            Color.clear
+                                .frame(height: UserMessageNavigatorLogic.topInsetHeight(
+                                    windowStart: window.lowerBound
+                                ))
+                            ForEach(windowEntries) { entry in
                                 navigatorButton(entry: entry)
                             }
+                            Color.clear
+                                .frame(height: UserMessageNavigatorLogic.bottomInsetHeight(
+                                    windowEnd: window.upperBound,
+                                    total: entries.count
+                                ))
                         }
-                        .padding(.vertical, 6 + UserMessageNavigatorLogic.verticalPadding(
-                            itemCount: entries.count
-                        ))
                         .frame(maxWidth: .infinity)
                     }
                     .onHover { hovering in
@@ -59,9 +71,8 @@ struct UserMessageNavigator: View {
                             scheduleCenter(using: scrollProxy)
                         }
                     }
-                    // Держим текущий номер в поле зрения навигатора, но без
-                    // анимации и с задержкой: иначе каждый тик скролла чата
-                    // перезапускал анимированную прокрутку списка.
+                    // Держим текущий номер по центру списка навигатора:
+                    // активная запись всегда в окне, поэтому scrollTo находит её.
                     .onChange(of: currentMessageID) { _ in
                         scheduleCenter(using: scrollProxy)
                     }
@@ -107,6 +118,19 @@ struct UserMessageNavigator: View {
         }
     }
 
+    /// Записи, которые реально рендерится: окно вокруг активного индекса.
+    private var window: Range<Int> {
+        UserMessageNavigatorLogic.windowRange(
+            currentIndex: currentIndex ?? 0,
+            total: entries.count
+        )
+    }
+
+    private var windowEntries: [UserMessageIndexEntry] {
+        guard !window.isEmpty else { return [] }
+        return Array(entries[window])
+    }
+
     /// Debounced, non-animated centering of the active number.
     ///
     /// - Parameter proxy: navigator list scroll proxy.
@@ -114,10 +138,10 @@ struct UserMessageNavigator: View {
         centerTask?.cancel()
         guard let id = currentMessageID, !isHoveringList else { return }
         centerTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            try? await Task.sleep(nanoseconds: 100_000_000)
             guard !Task.isCancelled, !isHoveringList else { return }
-            // `scrollTo` before the first layout pass is ignored; the next
-            // runloop tick is when the lazy list has real rows.
+            // The window rebuild happens on the next layout pass; scrollTo on
+            // the next runloop tick sees the active entry in the tree.
             DispatchQueue.main.async {
                 proxy.scrollTo(id, anchor: .center)
             }

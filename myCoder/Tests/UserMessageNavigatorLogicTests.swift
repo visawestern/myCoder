@@ -120,4 +120,47 @@ struct UserMessageNavigatorLogicTests {
         #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 1) == 0)
         #expect(UserMessageNavigatorLogic.verticalPadding(itemCount: 0) == 0)
     }
+
+    // MARK: - U8: оконный список навигатора (гарантированное центрирование)
+
+    @Test("Окно вокруг текущего индекса, сжатое к краям")
+    func windowRangeClampsToEdges() {
+        // Всего 100 записей, радиус 30.
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 50, total: 100, radius: 30) == 20..<81)
+        // У начала — окно начинается с 0, активная не в точном центре.
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 1, total: 100, radius: 30) == 0..<32)
+        // У конца — окно заканчивается на total.
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 98, total: 100, radius: 30) == 68..<100)
+    }
+
+    @Test("Короткий список не режется окном")
+    func windowRangeShortList() {
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 2, total: 5, radius: 30) == 0..<5)
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 0, total: 1, radius: 30) == 0..<1)
+    }
+
+    @Test("Пустой список даёт пустое окно")
+    func windowRangeEmpty() {
+        #expect(UserMessageNavigatorLogic.windowRange(currentIndex: 0, total: 0, radius: 30).isEmpty)
+    }
+
+    @Test("Активный индекс всегда внутри окна")
+    func windowAlwaysContainsCurrent() {
+        for current in [0, 1, 25, 49, 50, 99, 100] {
+            let window = UserMessageNavigatorLogic.windowRange(currentIndex: current, total: 101, radius: 30)
+            #expect(window.contains(current), "window \(window) must contain \(current)")
+        }
+    }
+
+    @Test("Верхняя вставка = число пропущенных записей × высота")
+    func topInsetHeight() {
+        #expect(UserMessageNavigatorLogic.topInsetHeight(windowStart: 20, itemHeight: 23) == 460)
+        #expect(UserMessageNavigatorLogic.topInsetHeight(windowStart: 0, itemHeight: 23) == 0)
+    }
+
+    @Test("Нижняя вставка = число пропущенных записей × высота")
+    func bottomInsetHeight() {
+        #expect(UserMessageNavigatorLogic.bottomInsetHeight(windowEnd: 81, total: 100, itemHeight: 23) == 437)
+        #expect(UserMessageNavigatorLogic.bottomInsetHeight(windowEnd: 100, total: 100, itemHeight: 23) == 0)
+    }
 }

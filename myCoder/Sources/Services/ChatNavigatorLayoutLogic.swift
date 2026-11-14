@@ -68,10 +68,14 @@ enum ChatNavigatorLayoutLogic {
     /// Resolve the user message the reader is looking at.
     ///
     /// Rules:
-    /// 1. If the viewport's middle line is inside a user row — that row.
-    /// 2. If it sits in the gap between rows (a long assistant answer) — the
-    ///    UPPER row, i.e. the last row whose top edge is above the probe.
-    /// 3. Above all measured rows — the first row; below all — the last row.
+    /// 1. The row whose middle line is CLOSEST to the viewport's middle line
+    ///    is the active one. This holds both when the probe is inside a row
+    ///    and when it sits in a gap (a long assistant answer): the nearest
+    ///    question is the one the reader is visually next to.
+    /// 2. Ties (equal distances) resolve to the EARLIER entry, mirroring the
+    ///    reading direction.
+    /// 3. Above all measured rows — the first row; below all — the last row
+    ///    (the nearest-row rule covers these automatically).
     ///
     /// - Parameters:
     ///   - visibleRect: viewport in content coordinates.
@@ -95,16 +99,13 @@ enum ChatNavigatorLayoutLogic {
         }
         guard !measured.isEmpty else { return nil }
 
-        for row in measured where row.frame.minY <= probe && row.frame.maxY > probe {
-            return row.id
+        var best: (id: String, distance: CGFloat)? = nil
+        for row in measured {
+            let distance = abs(row.frame.midY - probe)
+            if best == nil || distance < best!.distance {
+                best = (row.id, distance)
+            }
         }
-        // Gap or below: the last row that starts above the probe is the upper
-        // neighbour. If the probe is above every measured row, the first row
-        // is the closest one.
-        var upper: String?
-        for row in measured where row.frame.minY <= probe {
-            upper = row.id
-        }
-        return upper ?? measured.first?.id
+        return best?.id
     }
 }

@@ -35,11 +35,36 @@ struct ChatNavigatorLayoutLogicTests {
         ) == "u2")
     }
 
-    @Test("Viewport in the gap between rows highlights the UPPER row")
-    func gapHighlightsUpper() {
+    @Test("Viewport in the gap between rows highlights the NEAREST row")
+    func gapHighlightsNearest() {
         // The viewport middle sits between u1 (ends at 100) and u2 (starts at
-        // 400) — the assistant answer occupies that gap.
+        // 400) — the assistant answer occupies that gap. Midpoints: u1 = 50,
+        // u2 = 450. Probe 300 is closer to u2's midpoint (150 away) than to
+        // u1's (250 away) → u2.
         let visible = CGRect(x: 0, y: 150, width: 600, height: 300)
+        #expect(ChatNavigatorLayoutLogic.currentUserMessageID(
+            visibleRect: visible,
+            frames: frames,
+            entries: entries
+        ) == "u2")
+    }
+
+    @Test("Gap closer to the upper row highlights the upper row")
+    func gapCloserToUpper() {
+        // Probe 180 → midpoint distance to u1 (50) is 130, to u2 (450) is 270.
+        let visible = CGRect(x: 0, y: 30, width: 600, height: 300)
+        #expect(ChatNavigatorLayoutLogic.currentUserMessageID(
+            visibleRect: visible,
+            frames: frames,
+            entries: entries
+        ) == "u1")
+    }
+
+    @Test("Equal midpoint distances prefer the earlier entry")
+    func midpointTiePrefersEarlier() {
+        // Probe 250 is exactly between u1 (mid 50) and u2 (mid 450). Tie →
+        // the earlier entry (u1) wins.
+        let visible = CGRect(x: 0, y: 100, width: 600, height: 300)
         #expect(ChatNavigatorLayoutLogic.currentUserMessageID(
             visibleRect: visible,
             frames: frames,
@@ -70,7 +95,7 @@ struct ChatNavigatorLayoutLogicTests {
         ) == "u3")
     }
 
-    @Test("Entry order, not dictionary order, decides the upper row")
+    @Test("Entry order, not dictionary order, decides the nearest row")
     func entryOrderWins() {
         let visible = CGRect(x: 0, y: 250, width: 600, height: 100)
         let shuffled = [
@@ -78,11 +103,13 @@ struct ChatNavigatorLayoutLogicTests {
             "u1": CGRect(x: 0, y: 0, width: 600, height: 100),
             "u2": CGRect(x: 0, y: 400, width: 600, height: 100),
         ]
+        // Midpoints: u1 = 50, u2 = 450, u3 = 850. Probe 300 → distances 250
+        // and 150 → u2.
         #expect(ChatNavigatorLayoutLogic.currentUserMessageID(
             visibleRect: visible,
             frames: shuffled,
             entries: entries
-        ) == "u1")
+        ) == "u2")
     }
 
     @Test("No measured rows means no highlight")
